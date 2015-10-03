@@ -4,6 +4,8 @@ Require Import Coq.Setoids.Setoid.
 Require Import Coq.Classes.Morphisms.
 Require Import Coq.Arith.Arith_base.
 
+Load CPO.
+
 
 (***
  *** The monad typeclass (unbundled approach)
@@ -116,16 +118,16 @@ Qed.
 (* StateT itself *)
 Definition StateT (S:Type) (M: Type -> Type) (X:Type) := S -> M (prod S X).
 
-Instance StateT_returnM {S} `{Monad} : MonadRet (StateT S M) :=
+Instance StateT_returnM {S} `{MonadRet} : MonadRet (StateT S M) :=
   fun A x => fun s => returnM (s, x).
-Instance StateT_bindM {S} `{Monad} : MonadBind (StateT S M) :=
+Instance StateT_bindM {S} `{MonadBind} : MonadBind (StateT S M) :=
   fun A B m f =>
     fun s => bindM (m s) (fun (sx:S * A) => let (s',x) := sx in f x s').
-Instance StateT_leqM {S} `{Monad} : MonadOrder (StateT S M) :=
+Instance StateT_leqM {S} `{MonadOrder} : MonadOrder (StateT S M) :=
   fun {A} m1 m2 => forall s, leqM (m1 s) (m2 s).
 
 (* Extensionality law for == on StateT *)
-Lemma StateT_eqM_ext {S} `{Monad} A (m1 m2: StateT S M A) :
+Lemma StateT_eqM_ext {S} `{MonadOrder} A (m1 m2: StateT S M A) :
   (forall s, m1 s == m2 s) -> m1 == m2.
   unfold eqM, leqM, StateT_leqM; intro e; split; intros;
     destruct (e s); assumption.
@@ -178,9 +180,9 @@ Class MonadState S M {MonadRet:MonadRet M} {MonadBind:MonadBind M}
 
 (* The MonadState instance for StateT *)
 
-Instance StateT_getM {S} `{Monad} : MonadGet S (StateT S M) :=
+Instance StateT_getM {S} `{MonadRet} : MonadGet S (StateT S M) :=
   fun s => returnM (s, s).
-Instance StateT_putM {S} `{Monad} : MonadPut S (StateT S M) :=
+Instance StateT_putM {S} `{MonadRet} : MonadPut S (StateT S M) :=
   fun s_new s => returnM (s_new, tt).
 
 Instance StateT_MonadState S `{Monad} : MonadState S (StateT S M).
@@ -189,9 +191,65 @@ Instance StateT_MonadState S `{Monad} : MonadState S (StateT S M).
            getM, StateT_getM, putM, StateT_putM; intros;
     try (apply StateT_eqM_ext; intros;
          repeat (rewrite monad_return_bind); reflexivity).
+  assumption.
   intros s1 s2 e s; rewrite e; reflexivity.
 Qed.
 
+
+(***
+ *** The Least Fixed-Point / Non-Termination Monad Transformer
+ ***)
+
+Definition FixT (M:Type -> Type) (X:Type) := nat -> M (option X).
+
+Instance FixT_returnM `{MonadRet} : MonadRet (FixT M) :=
+  fun {A} x => fun _ => returnM (Some x).
+
+Definition FixT_bottomM `{MonadRet} {A} : FixT M A :=
+  fun _ => returnM None.
+
+(* Iterate m until either it returns a Some value or n runs out *)
+Fixpoint normalize_below {M} {MonadRet:MonadRet M}
+         {MonadBind:MonadBind M} {A} (m: FixT M A) n : M (option A) :=
+  match n with
+    | 0 => m 0
+    | S n' => bindM (normalize_below m n')
+                    (fun opt_x =>
+                       match opt_x with
+                         | Some x => returnM (Some x)
+                         | None => m (S n')
+                       end)
+  end.
+
+(* For bind, we must be sure we always use the value of m for the least n that
+it accepts, even if (f x) takes a much greater value of n, and vice-versa *)
+Instance FixT_bindM {M} {_:MonadRet M}
+         {_:MonadBind M} : MonadBind (FixT M) :=
+  fun {A B} m f =>
+    fun n => bindM (normalize_below m n)
+                   (fun opt_x =>
+                      match opt_x with
+                        | Some x => normalize_below (f x) n
+                        | None => returnM None
+                      end).
+
+(* FIXME HERE: This is not right! it should say something about the traces!
+Also, the formulation of the case where m1 is "less terminating" than m2 seems
+incorrect... *)
+
+(* The order on fixed-point computations: either m1 and m2 are equivalent, or m1
+returns a None (so m1 is equivalent to (m2 >> return None)) *)
+Instance FixT_leqM {M} {_:MonadRet M} {_:MonadBind M} {_:MonadOrder M} :
+  MonadOrder (FixT M) :=
+  fun {A} m1 m2 =>
+    exists n,
+      leqM (normalize_below m1 n) (normalize_below m2 n)
+      \/
+      leqM (normalize_below m1 n)
+           (bindM (normalize_below m2 n) (fun _ => returnM None)).
+
+
+(*** FIXME: old stuff below! ***)
 
 (***
  *** The Least Fixed-Point / Non-Termination Monad
@@ -295,12 +353,6 @@ Definition FixM_Bottom {A} : FixM A :=
   exist (fun P => forall x y, P x /\ P y -> x = y)
         (fun x => False)
         (fun x y (H: False /\ False) => match proj1 H with end).
-
-Fixpoint iterate_f {A} n (f: A -> A) :=
-  match n with
-    | 0 => fun x => x
-    | S n' => fun x => f (iterate_f n' f x)
-  end.
 
 Program Instance FixM_fixM : MonadFixM FixM :=
   fun {A B} f x =>
