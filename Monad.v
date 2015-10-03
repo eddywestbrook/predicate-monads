@@ -45,8 +45,7 @@ Class Monad M {MonadRet:MonadRet M} {MonadBind:MonadBind M}
     monad_proper_return : forall A, Proper (@eq A ==> leqM (A:=A)) returnM;
     monad_proper_bind :
       forall A B,
-        Proper (leqM (A:=A) ==>
-                     respectful (@eq A) (leqM (A:=B)) ==> leqM (A:=B)) bindM
+        Proper (leqM (A:=A) ==> ((@eq A) ==> (leqM (A:=B))) ==> leqM (A:=B)) bindM
   }.
 
 
@@ -84,7 +83,7 @@ Instance monad_proper_return_eqM `{Monad} A :
 Qed.
 
 Instance monad_proper_bind_eqM `{Monad} A B :
-  Proper (eqM (A:=A) ==> respectful (@eq A) (eqM (A:=B)) ==> eqM (A:=B)) bindM.
+  Proper (eqM (A:=A) ==> ((@eq A) ==> (eqM (A:=B))) ==> eqM (A:=B)) bindM.
   intros m1 m2 eqm f1 f2 eqf. destruct eqm.
   split; (apply monad_proper_bind; [ assumption | ]; intros x1 x2 e;
           destruct (eqf x1 x2 e)).
@@ -285,7 +284,7 @@ Class MonadFix M {MonadRet:MonadRet M} {MonadBind:MonadBind M}
     monad_fix_monad : @Monad M MonadRet MonadBind MonadOrder;
     monad_fix_fixm :
       forall A B f x,
-        Proper (respectful (@eq A) (leqM (A:=B)) ==> @eq A ==> leqM (A:=B)) f ->
+        Proper (((@eq A) ==> (leqM (A:=B))) ==> @eq A ==> leqM (A:=B)) f ->
         fixM (A:=A) (B:=B) f x == f (fixM f) x
   }.
 
@@ -336,115 +335,197 @@ apply FixM_eqM_ext; intros; unfold proj1_sig.
 this way, we don't have any proofs in computations. *)
 Definition FixM2 A := nat -> option A.
 
+(* Whether the first non-None value of a FixM2 computation is x *)
+Inductive IsValueBelow {A} (m:FixM2 A) (x:A) : nat -> Prop :=
+| IsVB_Base n (e: m n = Some x) :
+    (forall n', n' < n -> m n' = None) ->
+    IsValueBelow m x n
+| IsVB_Cons n : IsValueBelow m x n -> IsValueBelow m x (S n)
+.
+
+(* The proposition that a FixM2 computation has value x for some n *)
+Definition IsValue {A} (m:FixM2 A) (x:A) : Prop :=
+  exists n, IsValueBelow m x n.
+
+(* The proposition that there are no values of m at or below n *)
+Definition NoValueBelow {A} (m:FixM2 A) n : Prop :=
+  forall n', n' <= n -> m n' = None.
+
+(* IsValueBelow and NoValueBelow are mutually contradictor *)
+Lemma IsValueBelow_NoValueBelow_false {A} (m:FixM2 A) n x :
+  IsValueBelow m x n -> NoValueBelow m n -> False.
+  unfold NoValueBelow; intro isvb; induction isvb; intro novb.
+  rewrite novb in e; [ discriminate | apply le_n ].
+  apply IHisvb. intros. apply novb.
+  transitivity n; [ assumption | apply le_S; apply le_n ].
+Qed.
+
+(* IsValueBelow is a functor from <= *)
+Lemma IsValueBelow_leq {A} (m:FixM2 A) x n n' :
+  n <= n' -> IsValueBelow m x n -> IsValueBelow m x n'.
+  intro leq; induction leq; intro H.
+  assumption.
+  apply IsVB_Cons; apply IHleq; assumption.
+Qed.
+
+Lemma IsValueBelow_inversion {A} (m:FixM2 A) x n :
+  IsValueBelow m x n ->
+  exists n', n' <= n /\ m n' = Some x /\ (forall n'', n'' < n' -> m n'' = None).
+  intro isvb; induction isvb.
+  exists n; split; [ apply le_n | split; [ assumption | ] ].
+  intros n' l; apply H; assumption.
+  destruct IHisvb as [ n' H ]; destruct H; destruct H0.
+  exists n'; split; [ apply le_S; assumption | split; [ assumption | ]].
+  intros; apply H1; assumption.
+Qed.
+
+(* A computation can only have one value below n *)
+Lemma IsValueBelow_functional {A} (m:FixM2 A) n x1 x2 :
+  IsValueBelow m x1 n -> IsValueBelow m x2 n -> x1 = x2.
+  intro isvb1; induction isvb1; intro isvb2; inversion isvb2.
+  assert (Some x1 = Some x2) as e_some;
+    [ rewrite <- e; rewrite <- e0; reflexivity
+    | injection e_some; intros; assumption ].
+  destruct (IsValueBelow_inversion _ _ _ H0) as [ n' H2 ];
+    destruct H2; destruct H3.
+  rewrite H in H3; [ discriminate | ].
+  apply (le_lt_trans _ n0); [ assumption | rewrite <- H1; apply le_n ].
+  destruct (IsValueBelow_inversion _ _ _ isvb1) as [ n' H2 ];
+    destruct H2; destruct H2.
+  rewrite H in H2; [ discriminate | ].
+  apply le_n_S; assumption.
+  apply IHisvb1; assumption.
+Qed.
+
+(* IsValueBelow is decidable *)
+Program Fixpoint IsValueBelow_dec {A} m n :
+  {x:A | IsValueBelow m x n} + {NoValueBelow m n} :=
+  match n with
+    | 0 =>
+      match m 0 with
+        | Some x => inleft x
+        | None => inright _
+      end
+    | S n' =>
+      match IsValueBelow_dec m n' with
+        | inleft x => inleft x
+        | inright _ =>
+          match m (S n') with
+            | Some x => inleft x
+            | None => inright _
+          end
+      end
+  end.
+Next Obligation.
+apply IsVB_Base.
+symmetry; assumption.
+intros n' H; inversion H.
+Qed.
+Next Obligation.
+intros n l; inversion l; symmetry; assumption.
+Qed.
+Next Obligation.
+apply IsVB_Cons; assumption.
+Defined.
+Next Obligation.
+apply IsVB_Base; [ symmetry; assumption | ].
+intros n l; apply (n0 n).
+apply le_S_n; assumption.
+Defined.
+Next Obligation.
+intros n l; inversion l.
+symmetry; assumption.
+apply (n0 n); assumption.
+Defined.
+
+Lemma IsValueBelow_smaller {A} (m:FixM2 A) n n' x :
+  n' <= n -> IsValueBelow m x n ->
+  IsValueBelow m x n' \/ NoValueBelow m n'.
+  intro l; induction l; intros.
+  left; assumption.
+  destruct (IsValueBelow_dec m m0). destruct s.
+  assert (x0 = x).
+  apply (IsValueBelow_functional m (S m0)); [ | assumption ].
+  apply (IsValueBelow_leq _ _ m0); [ repeat constructor | assumption ].
+  rewrite H0 in i; apply IHl; assumption.
+  right. intros n'' l'; apply n; transitivity n'; assumption.
+Qed.
+
 (* Get the first value of m at or below n *)
-Fixpoint first_value_below {A} (m:FixM2 A) n : option A :=
+Definition first_value_below {A} (m:FixM2 A) n : option A :=
+  match IsValueBelow_dec m n with
+    | inleft (exist _ x _) => Some x
+    | inright _ => None
+  end.
+
+Lemma first_value_below_Some {A} (m:FixM2 A) n x :
+  IsValueBelow m x n <-> first_value_below m n = Some x.
+  split.
+  intro isvb; unfold first_value_below; destruct (IsValueBelow_dec m n).
+  destruct s as [ y H ]; unfold proj1_sig.
+  f_equal; apply (IsValueBelow_functional _ _ _ _ H isvb).
+  elimtype False;
+    apply (IsValueBelow_NoValueBelow_false _ _ _ isvb n0).
+  unfold first_value_below; destruct (IsValueBelow_dec m n).
+  destruct s as [ y H ]; unfold proj1_sig; intro e;
+    injection e; intro e2; rewrite <- e2; assumption.
+  intro; discriminate.
+Qed.
+
+Lemma first_value_below_None {A} (m:FixM2 A) n :
+  NoValueBelow m n <-> first_value_below m n = None.
+  split.
+  intro novb; unfold first_value_below; destruct (IsValueBelow_dec m n).
+  destruct s as [ x H ]; elimtype False;
+    apply (IsValueBelow_NoValueBelow_false _ _ _ H novb).
+  reflexivity.
+  unfold first_value_below; destruct (IsValueBelow_dec m n).
+  destruct s as [ x H ]; intro; discriminate.
+  intros; assumption.
+Qed.
+
+(* An alternate definition of first_value_below *)
+Fixpoint first_value_below_alt {A} (m:FixM2 A) n : option A :=
   match n with
     | 0 => m 0
     | S n' =>
-      match first_value_below m n' with
+      match first_value_below_alt m n' with
         | Some x => Some x
-        | None => m n
+        | None => m (S n')
       end
   end.
 
-Lemma first_value_below_correct_None {A} m n :
-  @first_value_below A m n = None ->
-  (forall n', n' <= n -> m n' = None).
-  induction n; intros.
-  inversion H0. apply H.
-  unfold first_value_below in H; fold (@first_value_below A) in H.
-  destruct (first_value_below m n); [ discriminate | ].
-  inversion H0.
-  assumption.
-  apply IHn; [ reflexivity | assumption ].
-Qed.
-
-Lemma first_value_below_complete_None {A} m n :
-  (forall n', n' <= n -> m n' = None) ->
-  @first_value_below A m n = None.
-  induction n; intros.
-  apply H; apply le_n.
-  unfold first_value_below; fold (@first_value_below A).
-  rewrite IHn.
-  apply H; apply le_n.
-  intros; apply H; apply le_S; assumption.
-Qed.
-
-Lemma first_value_below_correct_Some {A} m n (x:A) :
-  first_value_below m n = Some x ->
-  exists n', n' <= n /\ m n' = Some x /\ (forall n'', n'' < n' -> m n'' = None).
-  induction n; unfold first_value_below; fold (@first_value_below A); intro H.
-  exists 0; split; [ constructor | split; [ assumption | ] ].
-  intros; inversion H0.
-  case_eq (first_value_below m n); intros; rewrite H0 in * |- *.
-  destruct (IHn H) as [ n' H1 ]; destruct H1; destruct H2.
-  exists n'. split; [ apply le_S; assumption | split; assumption ].
-  exists (S n). split; [ apply le_n | split; [ assumption | ] ].
-  intros. apply (first_value_below_correct_None _ n).
-  assumption.
-  apply le_S_n; assumption.
-Qed.
-
-Lemma first_value_below_complete_Some {A} m n n' (x:A) :
-  n' <= n -> m n' = Some x -> (forall n'', n'' < n' -> m n'' = None) ->
-  first_value_below m n = Some x.
-  intro leq; induction leq; intros.
-  destruct n'.
-  assumption.
-  unfold first_value_below; fold (@first_value_below A).
-  rewrite first_value_below_complete_None; [ assumption | ].
-  intros; apply H0; apply le_n_S; assumption.
-  unfold first_value_below; fold (@first_value_below A).
-  rewrite IHleq; [ reflexivity | assumption | assumption ].
-Qed.
-
-Lemma first_value_below_constant_fun {A} (x:option A) n :
-  first_value_below (fun _ => x) n = x.
+Lemma first_value_below_alt_correct {A} (m:FixM2 A) n :
+  first_value_below m n = first_value_below_alt m n.
   induction n.
+  unfold first_value_below, first_value_below_alt.
+  destruct (IsValueBelow_dec m 0).
+  destruct s. inversion i. symmetry; assumption.
+  symmetry; apply n; apply le_n.
+  unfold first_value_below_alt; fold (@first_value_below_alt A).
+  rewrite <- IHn.
+  destruct (IsValueBelow_dec m (S n)).
+  destruct s.
+  rewrite (proj1 (first_value_below_Some _ _ _) i).
+  inversion i.
+  rewrite (proj1 (first_value_below_None m n)).
+  symmetry; assumption.
+  intros n' l; apply H; apply le_n_S; assumption.
+  rewrite (proj1 (first_value_below_Some _ _ _) H0).
   reflexivity.
-  unfold first_value_below; fold (@first_value_below A).
-  rewrite IHn; destruct x; reflexivity.
+  rewrite (proj1 (first_value_below_None _ _) n0).
+  rewrite (proj1 (first_value_below_None m n)).
+  symmetry; apply n0; reflexivity.
+  intros n' l; apply n0; apply le_S; assumption.
 Qed.
 
-Lemma first_value_below_stable {A} (m:FixM2 A) n n' x :
-  n <= n' -> first_value_below m n = Some x ->
-  first_value_below m n' = Some x.
-  intro l; induction l.
-  unfold first_value_below; fold (@first_value_below A).
-  intro e; rewrite e; reflexivity.
-  unfold first_value_below; fold (@first_value_below A).
-  intro. rewrite (IHl H). reflexivity.
-Qed.
 
-Lemma first_value_below_idempotent {A} (m:FixM2 A) n :
-  first_value_below (fun n' => first_value_below m n') n =
-  first_value_below m n.
-  induction n.
-  reflexivity.
-  unfold first_value_below; repeat (fold (@first_value_below A)).
-  rewrite IHn.
-  destruct (first_value_below m n); reflexivity.
-Qed.
-
-(* True iff the "true" value of m is x *)
-Definition value_is {A} (m:FixM2 A) (x:A) : Prop :=
-  exists n, first_value_below m n = Some x.
-
-Lemma value_is_functional {A} m (x1 x2:A) :
-  value_is m x1 -> value_is m x2 -> x1 = x2.
-  intros vis1 vis2; destruct vis1; destruct vis2.
-  destruct (lt_eq_lt_dec x x0); [ destruct s | ];
-  (assert (Some x1 = Some x2) as helper; [ | injection helper; intros; assumption ]).
-  assert (x <= x0); [ apply le_S_n; apply le_S; assumption | ].
-  rewrite <- H0. rewrite <- (first_value_below_stable _ _ _ _ H1 H). reflexivity.
-  rewrite e in H; rewrite <- H; rewrite <- H0; reflexivity.
-  assert (x0 <= x); [ apply le_S_n; apply le_S; assumption | ].
-  rewrite <- H. rewrite <- (first_value_below_stable _ _ _ _ H1 H0). reflexivity.
-Qed.
-
+(* The return for FixM2: just return x, ignoring n *)
 Instance FixM2_returnM : MonadRet FixM2 :=
   fun {A} x => fun n => Some x.
 
+(* For bind, we must be sure we always use the value of m for the least n that
+it accepts, even if (f x) takes a much greater value of n, and vice-versa *)
 Instance FixM2_bindM : MonadBind FixM2 :=
   fun {A B} m f =>
     fun n =>
@@ -454,139 +535,101 @@ Instance FixM2_bindM : MonadBind FixM2 :=
       end.
 
 Instance FixM2_leqM : MonadOrder FixM2 :=
-  fun {A} m1 m2 => forall x, value_is m1 x -> value_is m2 x.
+  fun {A} m1 m2 => forall x, IsValue m1 x -> IsValue m2 x.
 
-Instance value_is_proper {A} :
-  Proper (eqM (A:=A) ==> @eq A ==> iff) value_is.
-intros m1 m2 em x1 x2 ex. rewrite ex. destruct em as [ em1 em2 ].
-split; intro H.
-apply (em1 x2 H).
-apply (em2 x2 H).
+Lemma first_value_below_bindM {A B} m f n :
+  first_value_below (@FixM2_bindM A B m f) n =
+  (match first_value_below m n with
+     | Some x => first_value_below (f x) n
+     | None => None
+   end).
+  (* unfold first_value_below, FixM2_bindM. *)
+  destruct (IsValueBelow_dec m n).
+  destruct s.
+  rewrite (proj1 (first_value_below_Some _ _ _) i).
+  destruct (IsValueBelow_dec (f x) n).
+  destruct s.
+  rewrite (proj1 (first_value_below_Some _ _ _) i0).
+  unfold FixM2_bindM.
+  apply first_value_below_Some.
+  destruct (IsValueBelow_inversion _ _ _ i) as [ n1 ];
+    destruct H; destruct H0.
+  destruct (IsValueBelow_inversion _ _ _ i0) as [ n2 ];
+    destruct H2; destruct H3.
+  apply (IsValueBelow_leq _ _ (max n1 n2)); [ apply Nat.max_case; assumption | ].
+  apply IsVB_Base.
+  rewrite (proj1 (first_value_below_Some m _ x)).
+  apply first_value_below_Some.
+  apply (IsValueBelow_leq _ _ n2); [ apply Nat.le_max_r | ].
+  apply IsVB_Base; assumption.
+  apply (IsValueBelow_leq _ _ n1); [ apply Nat.le_max_l | ].
+  apply IsVB_Base; assumption.
+  intros.
+  destruct (Nat.max_dec n1 n2); rewrite e in H5.
+  rewrite (proj1 (first_value_below_None _ _)); [ reflexivity | ].
+  intros n'' l; apply H1. apply (le_lt_trans _ _ _ l H5).
+  destruct (IsValueBelow_dec m n').
+  destruct s.
+  rewrite (proj1 (first_value_below_Some _ _ _) i1).
+  apply first_value_below_None.
+  rewrite (IsValueBelow_functional m n x1 x); [ | | assumption ].
+  intros n'' l; apply H4. apply (le_lt_trans _ _ _ l H5).
+  apply (IsValueBelow_leq _ _ n'); [ | assumption ].
+  apply le_S_n. apply le_S. transitivity n2; assumption.
+  rewrite (proj1 (first_value_below_None m n') n0); reflexivity.
+  unfold FixM2_bindM.
+  rewrite (proj1 (first_value_below_None _ _) n0).
+  apply first_value_below_None.
+  intros n' l.
+  destruct (IsValueBelow_smaller _ _ _ _ l i).
+  rewrite (proj1 (first_value_below_Some _ _ _) H).
+  apply first_value_below_None.
+  intros n'' l'; apply n0; transitivity n'; assumption.
+  rewrite (proj1 (first_value_below_None _ _) H); reflexivity.
+  rewrite (proj1 (first_value_below_None _ _) n0).
+  unfold FixM2_bindM.
+  apply first_value_below_None.
+  intros n' l.
+  rewrite (proj1 (first_value_below_None m n')); [ reflexivity | ].
+  intros n'' l''; apply n0; transitivity n'; assumption.
 Qed.
 
-Instance first_value_below_is_proper {A} :
-  Proper (respectful (@eq nat) (@eq (option A)) ==> @eq nat ==> @eq (option A)) first_value_below.
-intros m1 m2 em x1 x2 ex; rewrite ex.
-clear ex; clear x1.
-induction x2; unfold first_value_below; fold (@first_value_below A).
-apply em; reflexivity.
-rewrite IHx2; destruct (first_value_below m2 x2).
-reflexivity.
-apply em; reflexivity.
-Qed.
 
-
-Lemma first_value_below_commute_constant {A B} x (f:A -> nat -> option B) n :
-  first_value_below
-    (fun n =>
-       match first_value_below (fun _ => Some x) n with
-         | Some y => f y n
-         | None => None
-       end) n
-  = first_value_below (f x) n.
-  induction n.
-  reflexivity.
-  unfold first_value_below; fold (@first_value_below A); fold (@first_value_below B).
-  rewrite IHn.
-  rewrite first_value_below_constant_fun.
-  reflexivity.
-Qed.
-
-Lemma first_value_below_bind_None {A B} m f n :
-  first_value_below m n = None ->
-  first_value_below (@FixM2_bindM A B m f) n = None.
-  induction n; intros.
-  unfold first_value_below, FixM2_bindM; rewrite H; reflexivity.
-  unfold first_value_below, FixM2_bindM; fold (@first_value_below B).
-  rewrite H.
-  unfold FixM2_bindM in IHn. rewrite IHn. reflexivity.
-  unfold first_value_below in H; fold (@first_value_below A) in H.
-  destruct (first_value_below m n); [ discriminate | reflexivity ].
-Qed.
-
-Lemma first_value_below_bind_Some {A B} x m f n :
-  first_value_below m n = Some x ->
-  first_value_below (@FixM2_bindM A B m f) n = first_value_below (f x) n.
-  induction n; intros.
-  unfold first_value_below, FixM2_bindM; rewrite H; reflexivity.
-  unfold first_value_below, FixM2_bindM.
-  fold (@first_value_below B).
-  case_eq (first_value_below m n); intros.
-  unfold FixM2_bindM in IHn.
-  rewrite IHn. rewrite H.
-  case_eq (first_value_below (f x) n); intros; [ reflexivity | ].
-  unfold first_value_below; fold (@first_value_below B). rewrite H1. reflexivity.
-  unfold first_value_below in H; fold (@first_value_below A) in H.
-  rewrite H0 in H. rewrite H0. assumption.
-  replace (first_value_below
-             (fun n0 : nat =>
-                match first_value_below m n0 with
-                  | Some x0 => first_value_below (f x0) n0
-                  | None => None
-                end) n) with (@None B).
-  rewrite H. reflexivity.
-  fold (@FixM2_bindM A B m f); symmetry; apply first_value_below_bind_None; assumption.
-Qed.
-
-(* Extensionality law for == on FixM2 *)
-Lemma FixM2_eqM_ext A (m1 m2: FixM2 A) :
-  (forall x, value_is m1 x <-> value_is m2 x) -> m1 == m2.
-  unfold eqM, leqM, FixM2_leqM, value_is; intro e; split; intros; destruct (e x).
-  apply (H0 H).
-  apply (H1 H).
-Qed.
-
-Lemma FixM2_eqM_ext2 A (m1 m2: FixM2 A) :
+(* Helper for proving FixM2_eqM *)
+Lemma FixM2_eqM_helper A (m1 m2: FixM2 A) :
   (forall n, first_value_below m1 n = first_value_below m2 n) -> m1 == m2.
-  unfold eqM, leqM, FixM2_leqM, value_is; intro e; split; intros;
-  destruct H as [ n H ]; exists n.
-  rewrite <- e; assumption.
-  rewrite e; assumption.
+  unfold eqM, leqM, FixM2_leqM, IsValue; intro e; split;
+    intros; destruct H as [ n H ]; exists n.
+  rewrite first_value_below_Some; rewrite <- e;
+    apply first_value_below_Some; assumption.
+  rewrite first_value_below_Some; rewrite e;
+    apply first_value_below_Some; assumption.
 Qed.
 
-(*
-Lemma FixM2_eqM_ext2 A (m1 m2: FixM2 A) :
-  (forall x1 x2 n1 n2,
-     first_value_below m1 n1 = Some x1 ->
-     first_value_below m2 n2 = Some x2 -> x1 = x2) -> m1 == m2.
-  unfold eqM, leqM, FixM2_leqM, value_is; intro H; split; intros x H0;
-    destruct H0 as [ n H0 ].
-
-intro e; split; intros; destruct (e x).
-  apply (H0 H).
-  apply (H1 H).
-Qed.
-*)
 
 (* The Monad instance for FixM2 *)
 Instance FixM2_Monad : Monad FixM2.
   constructor;
     unfold returnM, FixM2_returnM, bindM; intros;
-  try (apply FixM2_eqM_ext2; intros).
-  unfold FixM2_bindM; rewrite first_value_below_commute_constant;
-  apply first_value_below_idempotent.
-  unfold FixM2_bindM; rewrite <- (first_value_below_idempotent m).
-  apply first_value_below_is_proper; [ | reflexivity ]; intros n1 n2 e; rewrite e.
-  case_eq (first_value_below m n2); intros; [ | reflexivity ].
-  apply first_value_below_constant_fun.
+  try (apply FixM2_eqM_helper; intros).
 
-  case_eq (first_value_below m n); intros.
-  rewrite (first_value_below_bind_Some _ _ _ _ H).
-  case_eq (first_value_below (f a) n); intros.
-  assert (first_value_below (FixM2_bindM A B m f) n = Some b).
-  rewrite (first_value_below_bind_Some _ _ _ _ H); assumption.
-  rewrite (first_value_below_bind_Some _ _ _ _ H0).
-  rewrite (first_value_below_bind_Some _ _ _ _ H1).
-  reflexivity.
-  assert (first_value_below (FixM2_bindM A B m f) n = None).
-  rewrite (first_value_below_bind_Some _ _ _ _ H); assumption.
-  rewrite (first_value_below_bind_None _ _ _ H0).
-  rewrite (first_value_below_bind_None _ _ _ H1).
-  reflexivity.
-  rewrite (first_value_below_bind_None _ _ _ H).
-  assert (first_value_below (FixM2_bindM A B m f) n = None).
-  apply (first_value_below_bind_None _ _ _ H).
-  rewrite (first_value_below_bind_None _ _ _ H0).
+  rewrite first_value_below_bindM.
+  rewrite (proj1 (first_value_below_Some (fun _ : nat => Some x) n x));
+    [ reflexivity | ].
+  apply (IsValueBelow_leq _ _ 0); [ apply le_0_n | ].
+  apply IsVB_Base; [ reflexivity | ].
+  intros n' l; inversion l.
+
+  rewrite first_value_below_bindM.
+  destruct (first_value_below m n); [ | reflexivity ].
+  apply first_value_below_Some.
+  apply (IsValueBelow_leq _ _ 0); [ apply le_0_n | ].
+  apply IsVB_Base; [ reflexivity | ].
+  intros n' l; inversion l.
+
+  repeat (rewrite first_value_below_bindM).
+  destruct (first_value_below m n); [ | reflexivity ].
+  rewrite first_value_below_bindM.
   reflexivity.
 
   constructor.
@@ -595,17 +638,50 @@ Instance FixM2_Monad : Monad FixM2.
   intros x y e z vis. rewrite <- e; assumption.
 
   intros m1 m2 leqm f1 f2 leqf y vis.
+  unfold IsValue.
   destruct vis as [ n ].
-  assert (exists x, first_value_below m1 n = Some x).
-  case_eq (first_value_below m1 n); intros.
-  exists a; reflexivity.
-  rewrite (first_value_below_bind_None _ _ _ H0) in H; discriminate.
-  destruct H0.
-  destruct (leqm x (ex_intro _ n H0)) as [ n1 ].
-  rewrite (first_value_below_bind_Some _ _ _ _ H0) in H.
-  destruct (leqf x x eq_refl y (ex_intro _ n H)) as [ n2 ].
-  exists (max n1 n2).
-  rewrite (first_value_below_bind_Some x m2 f2).
-  apply (first_value_below_stable _ n2); [ apply Nat.le_max_r | assumption ].
-  apply (first_value_below_stable _ n1); [ apply Nat.le_max_l | assumption ].
+  assert (first_value_below (FixM2_bindM A B m1 f1) n = Some y).
+  apply first_value_below_Some; assumption.
+  rewrite first_value_below_bindM in H0.
+  case_eq (first_value_below m1 n);
+    intros; rewrite H1 in H0; [ | discriminate ].
+  rewrite <- first_value_below_Some in H1.
+  destruct (leqm _ (ex_intro _ n H1)) as [ nm ].
+  rewrite <- first_value_below_Some in H0.
+  destruct (leqf a a eq_refl y (ex_intro _ n H0)) as [ nf ].
+  exists (max nm nf).
+  rewrite first_value_below_Some.
+  rewrite first_value_below_bindM.
+  rewrite (proj1 (first_value_below_Some m2 _ a)).
+  apply first_value_below_Some.
+  apply (IsValueBelow_leq _ _ nf); [ apply Nat.le_max_r | assumption ].
+  apply (IsValueBelow_leq _ _ nm); [ apply Nat.le_max_l | assumption ].
 Qed.
+
+
+(*** The MonadFix instance for FixM2 ***)
+
+(* The least element of FixM2 w.r.t. leqM *)
+Definition FixM2_Bottom {A} : FixM2 A :=
+  fun n => None.
+
+(* Bottom is in fact least *)
+Lemma FixM2_Bottom_least {A} (m:FixM2 A) :
+  leqM FixM2_Bottom m.
+  intros x isv; destruct isv. rewrite first_value_below_Some in H.
+  rewrite (proj1 (first_value_below_None _ _)) in H; [ discriminate | ].
+  intros n l. reflexivity.
+Qed.
+
+(* For fixM, we must use the value of the fixed-point of f for the least n, even
+if it takes some n' <> n steps of iteration of f to reach that fixed-point. *)
+Instance FixM2_fixM : MonadFixM FixM2 :=
+  fun {A B} f =>
+    fun a n => first_value_below (iterate_f n f (fun _ => FixM2_Bottom) a) n.
+
+Instance FixM2_MonadFix : MonadFix FixM2.
+  constructor.
+  auto with typeclass_instances.
+  intros.
+  unfold fixM; unfold FixM2_fixM.
+  apply FixM2_eqM_helper; intros.
