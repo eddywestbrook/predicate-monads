@@ -200,7 +200,22 @@ Qed.
  *** The Least Fixed-Point / Non-Termination Monad Transformer
  ***)
 
-Definition FixT (M:Type -> Type) (X:Type) := nat -> M (option X).
+(* A FixT M computation is a chain of M computations where each M computation in
+the chain might do more work than the previous one, if the previous one has not
+yet terminated, where non-termination is represented by returning None. *)
+Definition FixT (M:Type -> Type) {_:MonadRet M} {_:MonadBind M} {_:MonadOrder M}
+           (X:Type) :=
+  {m:nat -> M (option X) |
+   forall n,
+     exists m', eqM (m (S n))
+                    (bindM (m n)
+                           (fun opt =>
+                              match opt with
+                                | Some x => returnM (Some x)
+                                | None => m'
+                              end))}.
+
+(* FIXME HERE *)
 
 Instance FixT_returnM `{MonadRet} : MonadRet (FixT M) :=
   fun {A} x => fun _ => returnM (Some x).
