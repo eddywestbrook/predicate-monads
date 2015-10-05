@@ -18,79 +18,59 @@ Class MonadBind (M:Type -> Type) : Type :=
   bindM : forall {A B:Type}, M A -> (A -> M B) -> M B.
 
 Class MonadOrder (M:Type -> Type) : Type :=
-  leqM : forall {A:Type}, M A -> M A -> Prop.
+  approxM : forall {A} {_:DomainOrder A}, DomainOrder (M A).
 
-Notation "m1 '<<<' m2" := (leqM m1 m2) (at level 80, no associativity).
-
-Definition eqM `{MonadOrder} {A} : M A -> M A -> Prop :=
-  fun m1 m2 => m1 <<< m2 /\ m2 <<< m1.
-
-Notation "m1 '==' m2" := (eqM m1 m2) (at level 80, no associativity).
-
-Instance equiv_leqM_equiv_eqM `{MonadOrder} A {E:Equivalence (leqM (A:=A))} : Equivalence (eqM (A:=A)).
-  unfold eqM; constructor.
-  intro m; split; reflexivity.
-  intros m1 m2 H0; destruct H0; split; assumption.
-  intros m1 m2 m3 H1 H2; destruct H1; destruct H2;
-    split; transitivity m2; assumption.
-Qed.
+Instance MonadOrder_DomainOrder `{MonadOrder} `{DomainOrder} : DomainOrder (M A) :=
+  approxM.
 
 Class Monad M {MonadRet:MonadRet M} {MonadBind:MonadBind M}
       {MonadOrder:MonadOrder M} : Prop :=
   {
+    monad_domain :> forall `{Domain}, @Domain (M A) approxM;
     monad_return_bind :
-      forall A B x (f:A -> M B), bindM (returnM x) f == f x;
-    monad_bind_return : forall A (m:M A), bindM m returnM == m;
-    monad_assoc : forall A B C (m:M A) (f: A -> M B) (g: B -> M C),
-                    bindM m (fun x => bindM (f x) g) == bindM (bindM m f) g;
-    monad_leq_preorder :> forall A, PreOrder (leqM (A:=A));
-    monad_proper_return : forall A, Proper (@eq A ==> leqM (A:=A)) returnM;
-    monad_proper_bind :
-      forall A B,
-        Proper (leqM (A:=A) ==> ((@eq A) ==> (leqM (A:=B))) ==> leqM (A:=B)) bindM
+      forall {A B} `{_:Domain A} `{_:Domain B} x (f:A -> M B),
+        bindM (returnM x) f == f x;
+    monad_bind_return :
+      forall {A} `{_:Domain A} (m:M A), bindM m returnM == m;
+    monad_assoc :
+      forall {A B C} `{_:Domain A} `{_:Domain B} `{_:Domain C}
+             (m:M A) (f: A -> M B) (g: B -> M C),
+        bindM m (fun x => bindM (f x) g) == bindM (bindM m f) g;
+    monad_proper_return :> forall `{Domain}, Proper (approx ==> approx) returnM;
+    monad_proper_bind :>
+      forall {A B} `{_:Domain A} `{_:Domain B},
+        Proper (approx (A:=M A) ==> (approx (A:=A) ==> approx (A:=M B)) ==> approx (A:=M B)) bindM
   }.
 
 
 (***
- *** Stuff Needed for Rewriting w.r.t. eqM and leqM
+ *** Stuff needed for rewriting computations w.r.t. approx and approxEq
  ***)
 
-Add Parametric Relation `{Monad} A : (M A) (leqM (A:=A))
-  reflexivity proved by PreOrder_Reflexive
-  transitivity proved by PreOrder_Transitive
-as leqM_morphism.
-
-Instance eqM_Equivalence `{Monad} A : Equivalence (eqM (A:=A)).
-  constructor.
-  intro m; split; reflexivity.
-  intros m1 m2 H1; destruct H1; split; assumption.
-  intros m1 m2 m3 H1 H2; destruct H1; destruct H2; split; transitivity m2; assumption.
-Qed.
-
-Add Parametric Relation `{Monad} A : (M A) (eqM (A:=A))
-  reflexivity proved by Equivalence_Reflexive
-  symmetry proved by Equivalence_Symmetric
-  transitivity proved by Equivalence_Transitive
-as eqM_morphism.
-
-Instance proper_eqM_leqM `{Monad} A : Proper (eqM (A:=A) ==> eqM (A:=A) ==> iff) (leqM (A:=A)).
+Instance proper_approx_approxM `{Monad} `{Domain} :
+  Proper (approxEq (A:=M A) ==> approxEq (A:=M A) ==> iff) (approx (A:=M A)).
   intros x1 y1 eq1 x2 y2 eq2; destruct eq1; destruct eq2; split; intro.
   transitivity x1; [ assumption | ]; transitivity x2; assumption.
   transitivity y1; [ assumption | ]; transitivity y2; assumption.
 Qed.
 
-Instance monad_proper_return_eqM `{Monad} A :
-  Proper (@eq A ==> eqM (A:=A)) returnM.
-  intros x y e. rewrite e. reflexivity.
+Instance monad_proper_return_approxEq `{Monad} `{Domain} :
+  Proper (approxEq ==> approxEq) returnM.
+  intros x y e; destruct e; split; apply monad_proper_return; assumption.
 Qed.
 
-Instance monad_proper_bind_eqM `{Monad} A B :
-  Proper (eqM (A:=A) ==> ((@eq A) ==> (eqM (A:=B))) ==> eqM (A:=B)) bindM.
+(* Approximate equality for functions *)
+Definition approxEqFun {A} {DomainOrderA:DomainOrder A}
+           {B} {DomainOrderB:DomainOrder B} (f1 f2 : A -> B) :=
+  forall x y (leq:approx x y),
+    approx (f1 x) (f2 y) /\ approx (f2 x) (f1 y).
+
+Instance monad_proper_bind_eqM `{Monad} `{Domain} {B} `{Domain B} :
+  Proper (approxEq (A:=M A) ==> approxEqFun ==> approxEq (A:=M B)) bindM.
   intros m1 m2 eqm f1 f2 eqf. destruct eqm.
-  split; (apply monad_proper_bind; [ assumption | ]; intros x1 x2 e;
-          destruct (eqf x1 x2 e)).
-  assumption.
-  rewrite e; replace (f1 x2) with (f1 x1); [ assumption | rewrite e; reflexivity ].
+  split;
+    (apply monad_proper_bind; [ assumption | ]; intros x1 x2 e;
+     destruct (eqf x1 x2 e); assumption).
 Qed.
 
 
@@ -101,13 +81,14 @@ Qed.
 Definition Identity (X:Type) := X.
 Instance IdMonad_returnM : MonadRet Identity := fun A x => x.
 Instance IdMonad_bindM : MonadBind Identity := fun A B m f => f m.
-Instance IdMonad_leqM : MonadOrder Identity := @eq.
+Instance IdMonad_approxM : MonadOrder Identity :=
+  fun {A} {ord:DomainOrder A} => ord.
 Instance IdMonad : Monad Identity.
   constructor; intros; try reflexivity.
   split; auto with typeclass_instances.
-  intros x y e; rewrite e; reflexivity.
+  intros x y leq; assumption.
   intros m1 m2 leqm f1 f2 leqf.
-  rewrite leqm. apply leqf. reflexivity.
+  apply leqf. assumption.
 Qed.
 
 
@@ -115,39 +96,49 @@ Qed.
  *** The State Monad
  ***)
 
+Section StateT.
+
+Context `{Monad} {S} `{SDomain:Domain S}.
+
 (* StateT itself *)
 Definition StateT (S:Type) (M: Type -> Type) (X:Type) := S -> M (prod S X).
 
-Instance StateT_returnM {S} `{MonadRet} : MonadRet (StateT S M) :=
+Instance StateT_returnM {S} : MonadRet (StateT S M) :=
   fun A x => fun s => returnM (s, x).
-Instance StateT_bindM {S} `{MonadBind} : MonadBind (StateT S M) :=
+Instance StateT_bindM {S} : MonadBind (StateT S M) :=
   fun A B m f =>
     fun s => bindM (m s) (fun (sx:S * A) => let (s',x) := sx in f x s').
-Instance StateT_leqM {S} `{MonadOrder} : MonadOrder (StateT S M) :=
-  fun {A} m1 m2 => forall s, leqM (m1 s) (m2 s).
+Instance StateT_approxM : MonadOrder (StateT S M) :=
+  fun {A ord} m1 m2 => forall s, approx (m1 s) (m2 s).
 
 (* Extensionality law for == on StateT *)
-Lemma StateT_eqM_ext {S} `{MonadOrder} A (m1 m2: StateT S M A) :
+Lemma StateT_eqM_ext `{Domain} (m1 m2: StateT S M A) :
   (forall s, m1 s == m2 s) -> m1 == m2.
-  unfold eqM, leqM, StateT_leqM; intro e; split; intros;
+  unfold approxM, StateT_approxM; intro e; split; intros s;
     destruct (e s); assumption.
 Qed.
 
 (* The Monad instance for StateT *)
-Instance StateT_Monad S `{Monad} : Monad (StateT S M).
+Instance StateT_Monad : Monad (StateT S M).
   constructor;
     unfold returnM, StateT_returnM, bindM, StateT_bindM;
     intros; try (apply StateT_eqM_ext); intros.
+  split; split; intro; intros; intro; intros.
+  reflexivity.
+  transitivity (y s); [ apply H1 | apply H2 ].
   rewrite monad_return_bind; reflexivity.
   transitivity (bindM (m s) returnM); [ | apply monad_bind_return ].
   apply monad_proper_bind_eqM; [ reflexivity | ].
-  intros sx sy e; rewrite e; destruct sy; reflexivity.
+  intros sx sy e; destruct sx; destruct sy; split; rewrite e; reflexivity.
   rewrite <- monad_assoc.
+
+(* FIXME HERE NOW: Cannot prove associativity, because we do not know that f
+respects either of its input domains! *)
+
   apply monad_proper_bind_eqM; [ reflexivity | ].
-  intros sx sy e; rewrite e; destruct sy; reflexivity.
-  split; intro; intros; intro; intros.
-  reflexivity.
-  transitivity (y s); [ apply H0 | apply H1 ].
+  intros sx sy e; destruct sx; destruct sy; split.
+
+ rewrite e; destruct sy; reflexivity.
   intros x y e s; rewrite e; reflexivity.
   intros m1 m2 em f1 f2 ef s.
   apply monad_proper_bind; [ apply em | ].
