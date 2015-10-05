@@ -200,11 +200,14 @@ Qed.
  *** The Least Fixed-Point / Non-Termination Monad Transformer
  ***)
 
+Section FixT.
+
+Context `{Monad}.
+
 (* A FixT M computation is a chain of M computations where each M computation in
 the chain might do more work than the previous one, if the previous one has not
 yet terminated, where non-termination is represented by returning None. *)
-Definition FixT (M:Type -> Type) {_:MonadRet M} {_:MonadBind M} {_:MonadOrder M}
-           (X:Type) :=
+Definition FixT (X:Type) :=
   {m:nat -> M (option X) |
    forall n,
      exists m', eqM (m (S n))
@@ -215,10 +218,31 @@ Definition FixT (M:Type -> Type) {_:MonadRet M} {_:MonadBind M} {_:MonadOrder M}
                                 | None => m'
                               end))}.
 
-(* FIXME HERE *)
-
-Instance FixT_returnM `{MonadRet} : MonadRet (FixT M) :=
+(* For return, we build the chain of computations that always return x *)
+Program Instance FixT_returnM : MonadRet FixT :=
   fun {A} x => fun _ => returnM (Some x).
+Obligation 1.
+exists (returnM None).
+rewrite monad_return_bind.
+reflexivity.
+Qed.
+
+(* For bind, each element of the chain binds the corresponding elements of the
+chains of m and f *)
+Program Instance FixT_bindM : MonadBind FixT :=
+  fun {A B} m f =>
+    fun n => bindM (m n)
+                   (fun opt_x =>
+                      match opt_x with
+                        | Some x => f x n
+                        | None => returnM None
+                      end).
+Obligation 1.
+destruct (proj2_sig m n) as [ m' H0 ].
+(* FIXME HERE: the m' we need could depend on x, the return value for m! *)
+
+rewrite H0.
+
 
 Definition FixT_bottomM `{MonadRet} {A} : FixT M A :=
   fun _ => returnM None.
@@ -235,18 +259,6 @@ Fixpoint normalize_below {M} {MonadRet:MonadRet M}
                          | None => m (S n')
                        end)
   end.
-
-(* For bind, we must be sure we always use the value of m for the least n that
-it accepts, even if (f x) takes a much greater value of n, and vice-versa *)
-Instance FixT_bindM {M} {_:MonadRet M}
-         {_:MonadBind M} : MonadBind (FixT M) :=
-  fun {A B} m f =>
-    fun n => bindM (normalize_below m n)
-                   (fun opt_x =>
-                      match opt_x with
-                        | Some x => normalize_below (f x) n
-                        | None => returnM None
-                      end).
 
 (* FIXME HERE: This is not right! it should say something about the traces!
 Also, the formulation of the case where m1 is "less terminating" than m2 seems
