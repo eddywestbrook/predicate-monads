@@ -3,6 +3,7 @@ Require Import Coq.Program.Tactics.
 Require Import Coq.Setoids.Setoid.
 Require Import Coq.Classes.Morphisms.
 Require Import Coq.Arith.Arith_base.
+Require Import Coq.Relations.Relation_Operators.
 
 Load CPO.
 
@@ -144,7 +145,54 @@ Qed.
 
 
 (***
- *** The Least Fixed-Point / Non-Termination Monad Transformer
+ *** Non-Termination Effects
+ ***)
+
+(* approxM m1 m2 means m1 "approximates" m2, i.e., m2 is "at least as
+terminating as" m1 *)
+Class MonadApprox (M:Type -> Type) : Type :=
+  approxM : forall {A}, relation (M A).
+
+Notation "m1 '<<<' m2" := (approxM m1 m2) (at level 80, no associativity).
+
+Class MonadFixM (M:Type -> Type) : Type :=
+  fixM : forall {A B}, ((A -> M B) -> (A -> M B)) -> A -> M B.
+
+Class MonadFix M {MonadRet:MonadRet M} {MonadBind:MonadBind M}
+      {MonadEquiv:MonadEquiv M} {MonadApprox:MonadApprox M}
+      {MonadFixM:MonadFixM M}
+: Prop :=
+  {
+    monad_fix_monad : @Monad M MonadRet MonadBind MonadEquiv;
+    monad_fix_approx_preorder :> forall A, PreOrder (approxM (A:=A));
+    monad_fix_approx_antisymmetry :
+      forall A (m1 m2:M A), approxM m1 m2 -> approxM m2 m1 -> m1 == m2;
+    monad_fix_eq_and_approx :
+      forall A (m1 m2:M A), m1 == m2 -> approxM m1 m2;
+    monad_fix_approx_bind :
+      forall A B,
+        Proper
+          (approxM (A:=A) ==> (@eq A ==> approxM (A:=B)) ==> approxM (A:=B))
+          bindM;
+    monad_fix_fixm_proper :
+      forall A B,
+        Proper (((@eq A ==> eqM (A:=B)) ==> @eq A ==> eqM (A:=B))
+                  ==> @eq A ==> eqM (A:=B)) fixM;
+    monad_fix_fixm :
+      forall A B f x,
+        Proper (((@eq A) ==> (approxM (A:=B))) ==> @eq A ==> approxM (A:=B)) f ->
+        fixM (A:=A) (B:=B) f x == f (fixM f) x
+  }.
+
+Add Parametric Relation `{MonadFix} A : (M A) (approxM (A:=A))
+  reflexivity proved by PreOrder_Reflexive
+  transitivity proved by PreOrder_Transitive
+as approxM_morphism.
+
+
+
+(***
+ *** A Non-Termination Monad Transformer via Non-Determinism + Errors
  ***)
 
 Section FixT.
@@ -162,7 +210,25 @@ Lemma diagonalize_surjective x y :
   diagonalize (undiagonalize x y) = (x, y).
   unfold diagonalize, undiagonalize.
   assert (Nat.sqrt (Nat.square (x + y) + y) = x + y).
-  admit. (* FIXME: come back to this! *)
+  apply Nat.sqrt_unique; split.
+  unfold Nat.square; apply le_plus_l.
+  unfold Nat.square. unfold lt.
+  unfold mult; fold mult.
+  assert (forall n m, S (n + m) = n + S m); [ intros; apply plus_Snm_nSm | ].
+  repeat (rewrite H0).
+  repeat (first [ rewrite Nat.mul_add_distr_r | rewrite Nat.mul_add_distr_l ]).
+  repeat (rewrite Nat.mul_succ_r).
+  rewrite (plus_comm _ (S y)).
+  rewrite (plus_comm x (S y)).
+  rewrite <- (plus_assoc (S y)).
+  apply plus_le_compat_l.
+  rewrite (plus_comm x); apply le_plus_trans.
+  repeat (rewrite <- plus_assoc).
+  apply plus_le_compat_l. apply plus_le_compat_l.
+  rewrite (plus_comm x); apply le_plus_trans.
+  apply plus_le_compat_l.
+  apply le_plus_trans.
+  reflexivity.
   rewrite H0.
   rewrite minus_plus.
   rewrite plus_comm; rewrite minus_plus.
@@ -191,19 +257,65 @@ Instance FixT_bindM : MonadBind FixT :=
                         | None => returnM None
                       end).
 
+(* Approximation order: each computation in one set, other than the trivial None
+computation, also occurs in the other. Excluding the trivial computation allows
+our sets to be "empty". *)
+Instance FixT_approxM : MonadApprox FixT :=
+  fun {A} m1 m2 =>
+    forall n, m1 n == returnM None \/ exists n', m1 n == m2 n'.
+
+(* Equivlence: two computations approximate each other *)
+Instance FixT_eqM : MonadEquiv FixT :=
+  fun {A} => inter_sym approxM.
+
 Definition FixT_bottomM {A} : FixT A :=
   fun _ => returnM None.
 
-(* Equivalence: each computation in one trace also occurs in the other *)
-Instance FixT_eqM :
-  MonadEquiv FixT :=
-  fun {A} m1 m2 =>
-    (forall n, exists n', m1 n == m2 n') /\
-    (forall n, exists n', m2 n == m1 n').
+(* Building a fixed-point: consider all possible numbers of iterations of f to
+the bottom function, and all possible elements of the resulting set *)
+Instance FixT_fixM : MonadFixM FixT :=
+  fun {A B} f x n =>
+    iterate_f
+      (fst (diagonalize n)) f (fun _ => FixT_bottomM)
+      x (snd (diagonalize n)).
 
 
 (* FIXME HERE NOW *)
 
+End FixT.
+
+
+(* FIXME HERE: another idea for FixT *)
+Section FixT2.
+Context `{Monad}.
+
+(* One step of the approximation order for underlying computations: computation
+m1 approximates m2 iff m1 is the result of replacing some monadic function in m2
+with the bottom function (which represents a function that never terminates) *)
+Definition approx_under1 {A} : relation (M (option A)) :=
+  fun m1 m2 =>
+    exists B C (mf : (B -> M (option C)) -> M (option A)) f,
+      m1 == mf (fun _ => returnM None) /\ m2 == mf f.
+
+Definition approx_under {A} : relation (M (option A)) :=
+  clos_refl_trans _ (approx_under1 (A:=A)).
+
+(* NOTE: the following doesn't work, because we may need uncountably many Ms *)
+(*
+Definition approx_under' {A} : relation (M (option A)) :=
+  fun m1 m2 =>
+    exists (Ts: nat -> Type) (C: (forall n, M (option (Ts n))) -> M (option A))
+           (Ms: forall n, M (option (Ts n))),
+      m1 == C (fun n => returnM None) /\ m2 == C Ms.
+*)
+
+(* A fixed-point computation is a chain of underlying computations that get more
+and more precise *)
+Definition FixT2 (X:Type) :=
+  {f:nat -> M (option X) | forall n, approx_under (f n) (f (S n))}.
+
+
+End FixT2.
 
 
 (*** FIXME: old stuff below! ***)
@@ -287,31 +399,6 @@ Instance FixM_Monad : Monad FixM.
 Qed.
 
 
-(* The non-termination effects *)
-
-Class MonadEquiv (M:Type -> Type) : Type :=
-  leqM : forall {A}, relation A.
-
-Notation "m1 '<<<' m2" := (leqM m1 m2) (at level 80, no associativity).
-
-Class MonadFixM (M:Type -> Type) : Type :=
-  fixM : forall {A B}, ((A -> M B) -> (A -> M B)) -> A -> M B.
-
-Class MonadFix M {MonadRet:MonadRet M} {MonadBind:MonadBind M}
-      {MonadEquiv:MonadEquiv M} {MonadFixM:MonadFixM M}
-: Prop :=
-  {
-    monad_fix_monad : @Monad M MonadRet MonadBind MonadEquiv;
-    monad_fix_fixm :
-      forall A B f x,
-        Proper (((@eq A) ==> (leqM (A:=B))) ==> @eq A ==> leqM (A:=B)) f ->
-        fixM (A:=A) (B:=B) f x == f (fixM f) x
-  }.
-
-Add Parametric Relation `{Monad} A : (M A) (leqM (A:=A))
-  reflexivity proved by PreOrder_Reflexive
-  transitivity proved by PreOrder_Transitive
-as leqM_morphism.
 
 
 
