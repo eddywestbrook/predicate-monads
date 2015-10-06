@@ -17,81 +17,36 @@ Class MonadRet (M:Type -> Type) : Type :=
 Class MonadBind (M:Type -> Type) : Type :=
   bindM : forall {A B:Type}, M A -> (A -> M B) -> M B.
 
-Class MonadOrder (M:Type -> Type) : Type :=
-  leqM : forall {A:Type}, M A -> M A -> Prop.
-
-Notation "m1 '<<<' m2" := (leqM m1 m2) (at level 80, no associativity).
-
-Definition eqM `{MonadOrder} {A} : M A -> M A -> Prop :=
-  fun m1 m2 => m1 <<< m2 /\ m2 <<< m1.
+Class MonadEquiv (M:Type -> Type) : Type :=
+  eqM : forall {A:Type}, M A -> M A -> Prop.
 
 Notation "m1 '==' m2" := (eqM m1 m2) (at level 80, no associativity).
 
-Instance equiv_leqM_equiv_eqM `{MonadOrder} A {E:Equivalence (leqM (A:=A))} : Equivalence (eqM (A:=A)).
-  unfold eqM; constructor.
-  intro m; split; reflexivity.
-  intros m1 m2 H0; destruct H0; split; assumption.
-  intros m1 m2 m3 H1 H2; destruct H1; destruct H2;
-    split; transitivity m2; assumption.
-Qed.
-
 Class Monad M {MonadRet:MonadRet M} {MonadBind:MonadBind M}
-      {MonadOrder:MonadOrder M} : Prop :=
+      {MonadEquiv:MonadEquiv M} : Prop :=
   {
     monad_return_bind :
       forall A B x (f:A -> M B), bindM (returnM x) f == f x;
     monad_bind_return : forall A (m:M A), bindM m returnM == m;
     monad_assoc : forall A B C (m:M A) (f: A -> M B) (g: B -> M C),
                     bindM m (fun x => bindM (f x) g) == bindM (bindM m f) g;
-    monad_leq_preorder :> forall A, PreOrder (leqM (A:=A));
-    monad_proper_return : forall A, Proper (@eq A ==> leqM (A:=A)) returnM;
+    monad_eq_equivalence :> forall A, Equivalence (eqM (A:=A));
+    monad_proper_return : forall A, Proper (@eq A ==> eqM (A:=A)) returnM;
     monad_proper_bind :
       forall A B,
-        Proper (leqM (A:=A) ==> ((@eq A) ==> (leqM (A:=B))) ==> leqM (A:=B)) bindM
+        Proper (eqM (A:=A) ==> ((@eq A) ==> (eqM (A:=B))) ==> eqM (A:=B)) bindM
   }.
 
 
 (***
- *** Stuff Needed for Rewriting w.r.t. eqM and leqM
+ *** Stuff Needed for Rewriting w.r.t. eqM
  ***)
-
-Add Parametric Relation `{Monad} A : (M A) (leqM (A:=A))
-  reflexivity proved by PreOrder_Reflexive
-  transitivity proved by PreOrder_Transitive
-as leqM_morphism.
-
-Instance eqM_Equivalence `{Monad} A : Equivalence (eqM (A:=A)).
-  constructor.
-  intro m; split; reflexivity.
-  intros m1 m2 H1; destruct H1; split; assumption.
-  intros m1 m2 m3 H1 H2; destruct H1; destruct H2; split; transitivity m2; assumption.
-Qed.
 
 Add Parametric Relation `{Monad} A : (M A) (eqM (A:=A))
   reflexivity proved by Equivalence_Reflexive
   symmetry proved by Equivalence_Symmetric
   transitivity proved by Equivalence_Transitive
 as eqM_morphism.
-
-Instance proper_eqM_leqM `{Monad} A : Proper (eqM (A:=A) ==> eqM (A:=A) ==> iff) (leqM (A:=A)).
-  intros x1 y1 eq1 x2 y2 eq2; destruct eq1; destruct eq2; split; intro.
-  transitivity x1; [ assumption | ]; transitivity x2; assumption.
-  transitivity y1; [ assumption | ]; transitivity y2; assumption.
-Qed.
-
-Instance monad_proper_return_eqM `{Monad} A :
-  Proper (@eq A ==> eqM (A:=A)) returnM.
-  intros x y e. rewrite e. reflexivity.
-Qed.
-
-Instance monad_proper_bind_eqM `{Monad} A B :
-  Proper (eqM (A:=A) ==> ((@eq A) ==> (eqM (A:=B))) ==> eqM (A:=B)) bindM.
-  intros m1 m2 eqm f1 f2 eqf. destruct eqm.
-  split; (apply monad_proper_bind; [ assumption | ]; intros x1 x2 e;
-          destruct (eqf x1 x2 e)).
-  assumption.
-  rewrite e; replace (f1 x2) with (f1 x1); [ assumption | rewrite e; reflexivity ].
-Qed.
 
 
 (***
@@ -101,7 +56,7 @@ Qed.
 Definition Identity (X:Type) := X.
 Instance IdMonad_returnM : MonadRet Identity := fun A x => x.
 Instance IdMonad_bindM : MonadBind Identity := fun A B m f => f m.
-Instance IdMonad_leqM : MonadOrder Identity := @eq.
+Instance IdMonad_leqM : MonadEquiv Identity := @eq.
 Instance IdMonad : Monad Identity.
   constructor; intros; try reflexivity.
   split; auto with typeclass_instances.
@@ -123,30 +78,23 @@ Instance StateT_returnM {S} `{MonadRet} : MonadRet (StateT S M) :=
 Instance StateT_bindM {S} `{MonadBind} : MonadBind (StateT S M) :=
   fun A B m f =>
     fun s => bindM (m s) (fun (sx:S * A) => let (s',x) := sx in f x s').
-Instance StateT_leqM {S} `{MonadOrder} : MonadOrder (StateT S M) :=
-  fun {A} m1 m2 => forall s, leqM (m1 s) (m2 s).
-
-(* Extensionality law for == on StateT *)
-Lemma StateT_eqM_ext {S} `{MonadOrder} A (m1 m2: StateT S M A) :
-  (forall s, m1 s == m2 s) -> m1 == m2.
-  unfold eqM, leqM, StateT_leqM; intro e; split; intros;
-    destruct (e s); assumption.
-Qed.
+Instance StateT_eqM {S} `{MonadEquiv} : MonadEquiv (StateT S M) :=
+  fun {A} m1 m2 => forall s, m1 s == m2 s.
 
 (* The Monad instance for StateT *)
 Instance StateT_Monad S `{Monad} : Monad (StateT S M).
   constructor;
-    unfold returnM, StateT_returnM, bindM, StateT_bindM;
-    intros; try (apply StateT_eqM_ext); intros.
-  rewrite monad_return_bind; reflexivity.
-  transitivity (bindM (m s) returnM); [ | apply monad_bind_return ].
-  apply monad_proper_bind_eqM; [ reflexivity | ].
+    unfold returnM, StateT_returnM, bindM, StateT_bindM; intros.
+  intro; rewrite monad_return_bind; reflexivity.
+  intro; transitivity (bindM (m s) returnM); [ | apply monad_bind_return ].
+  apply monad_proper_bind; [ reflexivity | ].
   intros sx sy e; rewrite e; destruct sy; reflexivity.
-  rewrite <- monad_assoc.
-  apply monad_proper_bind_eqM; [ reflexivity | ].
+  intro; rewrite <- monad_assoc.
+  apply monad_proper_bind; [ reflexivity | ].
   intros sx sy e; rewrite e; destruct sy; reflexivity.
   split; intro; intros; intro; intros.
   reflexivity.
+  symmetry; apply H0.
   transitivity (y s); [ apply H0 | apply H1 ].
   intros x y e s; rewrite e; reflexivity.
   intros m1 m2 em f1 f2 ef s.
@@ -161,10 +109,10 @@ Class MonadGet (S:Type) (M:Type -> Type) : Type := getM : M S.
 Class MonadPut (S:Type) (M:Type -> Type) : Type := putM : S -> M unit.
 
 Class MonadState S M {MonadRet:MonadRet M} {MonadBind:MonadBind M}
-      {MonadOrder:MonadOrder M} {MonadGet:MonadGet S M} {MonadPut:MonadPut S M}
+      {MonadEquiv:MonadEquiv M} {MonadGet:MonadGet S M} {MonadPut:MonadPut S M}
 : Prop :=
   {
-    monad_state_monad : @Monad M MonadRet MonadBind MonadOrder;
+    monad_state_monad : @Monad M MonadRet MonadBind MonadEquiv;
     monad_state_get_get :
       forall A f,
         bindM getM (fun s => bindM getM (f s)) ==
@@ -175,7 +123,7 @@ Class MonadState S M {MonadRet:MonadRet M} {MonadBind:MonadBind M}
                 bindM (putM s) (fun _ => returnM s);
     monad_state_put_put :
       forall s1 s2, bindM (putM s1) (fun _ => putM s2) == putM s2;
-    monad_state_proper_put : Proper (eq ==> leqM) putM
+    monad_state_proper_put : Proper (eq ==> eqM) putM
   }.
 
 (* The MonadState instance for StateT *)
@@ -189,8 +137,7 @@ Instance StateT_MonadState S `{Monad} : MonadState S (StateT S M).
   constructor; intros; try apply StateT_Monad;
     unfold returnM, StateT_returnM, bindM, StateT_bindM,
            getM, StateT_getM, putM, StateT_putM; intros;
-    try (apply StateT_eqM_ext; intros;
-         repeat (rewrite monad_return_bind); reflexivity).
+    try (intros; intro; repeat (rewrite monad_return_bind); reflexivity).
   assumption.
   intros s1 s2 e s; rewrite e; reflexivity.
 Qed.
@@ -204,76 +151,59 @@ Section FixT.
 
 Context `{Monad}.
 
-(* A FixT M computation is a chain of M computations where each M computation in
-the chain might do more work than the previous one, if the previous one has not
-yet terminated, where non-termination is represented by returning None. *)
-Definition FixT (X:Type) :=
-  {m:nat -> M (option X) |
-   forall n,
-     exists m', eqM (m (S n))
-                    (bindM (m n)
-                           (fun opt =>
-                              match opt with
-                                | Some x => returnM (Some x)
-                                | None => m'
-                              end))}.
+Definition diagonalize n : nat * nat :=
+  (Nat.sqrt n - (n - (Nat.square (Nat.sqrt n))),
+   (n - (Nat.square (Nat.sqrt n)))).
 
-(* For return, we build the chain of computations that always return x *)
-Program Instance FixT_returnM : MonadRet FixT :=
-  fun {A} x => fun _ => returnM (Some x).
-Obligation 1.
-exists (returnM None).
-rewrite monad_return_bind.
-reflexivity.
+Definition undiagonalize x y : nat :=
+  Nat.square (x + y) + y.
+
+Lemma diagonalize_surjective x y :
+  diagonalize (undiagonalize x y) = (x, y).
+  unfold diagonalize, undiagonalize.
+  assert (Nat.sqrt (Nat.square (x + y) + y) = x + y).
+  admit. (* FIXME: come back to this! *)
+  rewrite H0.
+  rewrite minus_plus.
+  rewrite plus_comm; rewrite minus_plus.
+  reflexivity.
 Qed.
 
-(* For bind, each element of the chain binds the corresponding elements of the
-chains of m and f *)
-Program Instance FixT_bindM : MonadBind FixT :=
+
+(* We model non-termination with the more general construction of a
+non-determinism transformer + option transformer, where each computation has a
+countably infinite non-deterministic choice, and can also return no value. The
+choice is used to represent different "amounts" of computation, and returning no
+value is used to represent non-termination. *)
+Definition FixT (X:Type) := nat -> M (option X).
+
+(* For return, we build the set of computations that always return x *)
+Instance FixT_returnM : MonadRet FixT :=
+  fun {A} x => fun _ => returnM (Some x).
+
+(* For bind, we diagonalize over all possible computations for m and f *)
+Instance FixT_bindM : MonadBind FixT :=
   fun {A B} m f =>
-    fun n => bindM (m n)
+    fun n => bindM (m (fst (diagonalize n)))
                    (fun opt_x =>
                       match opt_x with
-                        | Some x => f x n
+                        | Some x => f x (snd (diagonalize n))
                         | None => returnM None
                       end).
-Obligation 1.
-destruct (proj2_sig m n) as [ m' H0 ].
-(* FIXME HERE: the m' we need could depend on x, the return value for m! *)
 
-rewrite H0.
-
-
-Definition FixT_bottomM `{MonadRet} {A} : FixT M A :=
+Definition FixT_bottomM {A} : FixT A :=
   fun _ => returnM None.
 
-(* Iterate m until either it returns a Some value or n runs out *)
-Fixpoint normalize_below {M} {MonadRet:MonadRet M}
-         {MonadBind:MonadBind M} {A} (m: FixT M A) n : M (option A) :=
-  match n with
-    | 0 => m 0
-    | S n' => bindM (normalize_below m n')
-                    (fun opt_x =>
-                       match opt_x with
-                         | Some x => returnM (Some x)
-                         | None => m (S n')
-                       end)
-  end.
-
-(* FIXME HERE: This is not right! it should say something about the traces!
-Also, the formulation of the case where m1 is "less terminating" than m2 seems
-incorrect... *)
-
-(* The order on fixed-point computations: either m1 and m2 are equivalent, or m1
-returns a None (so m1 is equivalent to (m2 >> return None)) *)
-Instance FixT_leqM {M} {_:MonadRet M} {_:MonadBind M} {_:MonadOrder M} :
-  MonadOrder (FixT M) :=
+(* Equivalence: each computation in one trace also occurs in the other *)
+Instance FixT_eqM :
+  MonadEquiv FixT :=
   fun {A} m1 m2 =>
-    exists n,
-      leqM (normalize_below m1 n) (normalize_below m2 n)
-      \/
-      leqM (normalize_below m1 n)
-           (bindM (normalize_below m2 n) (fun _ => returnM None)).
+    (forall n, exists n', m1 n == m2 n') /\
+    (forall n, exists n', m2 n == m1 n').
+
+
+(* FIXME HERE NOW *)
+
 
 
 (*** FIXME: old stuff below! ***)
@@ -307,7 +237,7 @@ Instance FixM_bindM : MonadBind FixM :=
   fun (A B:Type) m f =>
     exist _ (FixM_map m f) (FixM_map_proof m f).
 
-Instance FixM_leqM : MonadOrder FixM :=
+Instance FixM_leqM : MonadEquiv FixM :=
   fun {A} m1 m2 => forall x, proj1_sig m1 x -> proj1_sig m2 x.
 
 (* Extensionality law for <<< on FixM *)
@@ -359,19 +289,30 @@ Qed.
 
 (* The non-termination effects *)
 
-Class MonadFixM (M:Type -> Type) {MonadOrder:MonadOrder M} : Type :=
+Class MonadEquiv (M:Type -> Type) : Type :=
+  leqM : forall {A}, relation A.
+
+Notation "m1 '<<<' m2" := (leqM m1 m2) (at level 80, no associativity).
+
+Class MonadFixM (M:Type -> Type) : Type :=
   fixM : forall {A B}, ((A -> M B) -> (A -> M B)) -> A -> M B.
 
 Class MonadFix M {MonadRet:MonadRet M} {MonadBind:MonadBind M}
-      {MonadOrder:MonadOrder M} {MonadFixM:MonadFixM M}
+      {MonadEquiv:MonadEquiv M} {MonadFixM:MonadFixM M}
 : Prop :=
   {
-    monad_fix_monad : @Monad M MonadRet MonadBind MonadOrder;
+    monad_fix_monad : @Monad M MonadRet MonadBind MonadEquiv;
     monad_fix_fixm :
       forall A B f x,
         Proper (((@eq A) ==> (leqM (A:=B))) ==> @eq A ==> leqM (A:=B)) f ->
         fixM (A:=A) (B:=B) f x == f (fixM f) x
   }.
+
+Add Parametric Relation `{Monad} A : (M A) (leqM (A:=A))
+  reflexivity proved by PreOrder_Reflexive
+  transitivity proved by PreOrder_Transitive
+as leqM_morphism.
+
 
 
 (* The MonadFix instances for FixM *)
@@ -613,7 +554,7 @@ Instance FixM2_bindM : MonadBind FixM2 :=
         | Some x => first_value_below (f x) n
       end.
 
-Instance FixM2_leqM : MonadOrder FixM2 :=
+Instance FixM2_leqM : MonadEquiv FixM2 :=
   fun {A} m1 m2 => forall x, IsValue m1 x -> IsValue m2 x.
 
 Lemma first_value_below_bindM {A B} m f n :
