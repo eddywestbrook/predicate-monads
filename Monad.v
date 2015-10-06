@@ -318,6 +318,25 @@ Definition FixT2 (X:Type) :=
 End FixT2.
 
 
+
+(* FIXME HERE: yet another idea for FixT, using the resumption transformer *)
+Section FixT3.
+Context `{Monad}.
+
+Inductive Ord : Type :=
+| Ord0 : Ord
+| OrdS (o:Ord) : Ord
+| OrdLimit (f:nat -> Ord) : Ord
+.
+
+Inductive Resumption (F: Ord -> Type) A : Ord -> Type :=
+| Res_Done ord (a:A) : Resumption F A ord
+| Res_NonTerm : Resumption F A Ord0
+| Res_Step ords (m:M {n:nat & F (ords n)}) : Resumption F A (OrdLimit ords).
+
+End FixT3.
+
+
 (*** FIXME: old stuff below! ***)
 
 (***
