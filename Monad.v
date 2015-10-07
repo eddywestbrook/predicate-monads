@@ -55,13 +55,13 @@ as eqM_morphism.
 Definition Identity (X:Type) := X.
 Instance IdMonad_returnM : MonadRet Identity := fun A x => x.
 Instance IdMonad_bindM : MonadBind Identity := fun A B m f => f m.
-Instance IdMonad_leqM : MonadEquiv Identity := @eq.
+Instance IdMonad_eqM : MonadEquiv Identity := @eq.
 Instance IdMonad : Monad Identity.
   constructor; intros; try reflexivity.
   split; auto with typeclass_instances.
   intros x y e; rewrite e; reflexivity.
-  intros m1 m2 leqm f1 f2 leqf.
-  rewrite leqm. apply leqf. reflexivity.
+  intros m1 m2 eqm f1 f2 eqf.
+  rewrite eqm. apply eqf. reflexivity.
 Qed.
 
 
@@ -165,14 +165,14 @@ Class MonadFix M {MonadRet:MonadRet M} {MonadBind:MonadBind M}
     monad_fix_approx_preorder :> forall A, PreOrder (approxM (A:=A));
     monad_fix_approx_antisymmetry :
       forall A (m1 m2:M A), approxM m1 m2 -> approxM m2 m1 -> m1 == m2;
-    monad_fix_eq_and_approx :
-      forall A (m1 m2:M A), m1 == m2 -> approxM m1 m2;
     monad_fix_approx_bind :
       forall A B,
         Proper
           (approxM (A:=A) ==> (@eq A ==> approxM (A:=B)) ==> approxM (A:=B))
           bindM;
-    monad_fix_fixm_proper :
+    monad_fix_approx_proper :
+      forall A, Proper (eqM (A:=A) ==> eqM (A:=A) ==> iff) approxM;
+    monad_fix_fix_proper :
       forall A B,
         Proper (((@eq A ==> eqM (A:=B)) ==> @eq A ==> eqM (A:=B))
                   ==> @eq A ==> eqM (A:=B)) fixM;
