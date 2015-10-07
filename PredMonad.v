@@ -5,18 +5,12 @@ Load Monad.
 
 
 (***
- *** The Predicate Monad Typeclass
+ *** The Predicate Monad Operations
  ***)
 
 Section PredMonad.
 
-Context (M: Type -> Type) (PM : Type -> Type).
-
-(* The satisfiability order on monadic predicates, where leqM P1 P2 means that
-anything satisfying P1 satisfies P2; we will require this to be a complete
-lattice (meets and joins over arbitrary sets) below *)
-Class PredMonadOrder : Type :=
-  leqP : forall {A}, relation (PM A).
+Context {M: Type -> Type} {PM : Type -> Type}.
 
 (* The satisfaction relation between computations and monadic predicates *)
 Class PredMonadSatisfaction : Type :=
@@ -35,13 +29,18 @@ Class PredMonadExists : Type :=
 Class PredMonadImplication : Type :=
   impliesP : forall {A}, PM A -> PM A -> PM A.
 
+
+(***
+ *** Defined Operations in a Predicate Monad
+ ***)
+
 Context
-  (PredMonadRet:MonadRet PM) (PredMonadBind:MonadBind PM)
-  (PredMonadEquiv:MonadEquiv PM)
-  (MonadRet:MonadRet M) (MonadBind:MonadBind M) (MonadEquiv:MonadEquiv M)
-  (PredMonadOrder:PredMonadOrder) (PredMonadSatisfaction:PredMonadSatisfaction)
-  (PredMonadForall:PredMonadForall)
-  (PredMonadExists:PredMonadExists) (PredMonadImplication:PredMonadImplication).
+  {PredMonadRet:MonadRet PM} {PredMonadBind:MonadBind PM}
+  {PredMonadEquiv:MonadEquiv PM}
+  {MonadRet:MonadRet M} {MonadBind:MonadBind M} {MonadEquiv:MonadEquiv M}
+  {PredMonadSatisfaction:PredMonadSatisfaction}
+  {PredMonadForall:PredMonadForall}
+  {PredMonadExists:PredMonadExists} {PredMonadImplication:PredMonadImplication}.
 
 (* Defined logical operators, which correspond to binary meet and join *)
 Definition andP {A} (P1 P2: PM A) : PM A :=
@@ -60,59 +59,153 @@ Definition notP {A} (P: PM A) : PM A := impliesP P falseP.
 Definition liftProp {A} (P: Prop) : PM A :=
   existsP (fun (pf:P) => trueP).
 
-(* The predicate monad typeclass itself *)
+
+(***
+ *** Predicate Monad Axioms (as a Typeclass)
+ ***)
+
 Class PredMonad : Prop :=
   {
     (* Both M and PM must be monads *)
-    predmonad_monad_M : Monad M;
-    predmonad_monad_PM : Monad PM;
+    predmonad_monad_M :> Monad M;
+    predmonad_monad_PM :> Monad PM;
 
-    (* The satisfiability order is a partial order w.r.t. eqM *)
-    predmonad_leqP_preorder : forall {A}, PreOrder (leqP (A:=A));
-    predmonad_leqP_antisymmetric :
-      forall {A}, Antisymmetric (eqM (A:=A)) leqP;
-    predmonad_leqP_proper :
-      forall {A}, Proper (eqM (A:=A) ==> eqM (A:=A) ==> impl) leqP;
-
-    (* Satisfaction is monotone with respect to the satisfiability order *)
-    predmonad_satisfiesP_monotone :
-      forall {A}, Proper (@eq (M A) ==> leqP ==> impl) satisfiesP;
-
-    (* Forall and exists are complete meet and join operators, respectively *)
-    predmonad_forallP_lower_bound :
-      forall {A B} (f: A -> PM B) a, leqP (forallP f) (f a);
-    predmonad_forallP_greatest_lower_bound :
-      forall {A B} (f: A -> PM B) P,
-        (forall a, leqP P (f a)) -> leqP P (forallP f);
-    predmonad_existsP_upper_bound :
-      forall {A B} (f: A -> PM B) a, leqP (f a) (existsP f);
-    predmonad_existsP_least_upper_bound :
-      forall {A B} (f: A -> PM B) P,
-        (forall a, leqP (f a) P) ->  leqP (existsP f) P;
-
-    (* The fact that true always holds and false never does is equivalent to the
-    existence, for each m, of predicates that m does and does not satisfy,
-    respectively. We state the latter property as an axiom, and the former
-    properties follow from them. *)
-    predmonad_separation :
-      forall {A} (m:M A), exists P1 P2, m |= P1 /\ ~(m |= P2);
-
-    (* Implication makes a predicate monad into a complete Heyting algebra,
-    which means there is a Galois connection between implication and the andP
-    operation.  Note that this is weaker than making PM a Boolean algebra,
-    which would be inherently non-constructive. *)
-    predmonad_heyting_algegbra :
-      forall {A} (P1 P2 P3: PM A),
-        leqP (andP P1 P2) P3 <-> leqP P1 (impliesP P2 P3);
+    (* Forall, exists, and implies behave as expected *)
+    predmonad_forallP_forall :
+      forall {A B} m (P: A -> PM B),
+        m |= forallP P <-> forall x, m |= P x;
+    predmonad_existsP_exists :
+      forall {A B} m (P: A -> PM B),
+        m |= existsP P <-> exists x, m |= P x;
+    predmonad_impliesP_implies :
+      forall {A} m (P1 P2: PM A),
+        m |= impliesP P1 P2 <-> m |= P1 -> m |= P2;
 
     (* Return in the predicate monad precisely characterizes return in M *)
     predmonad_return_return :
-      forall {A} (x:A) m, m |= returnM x <-> m == returnM x
+      forall {A} (x:A) m, m |= returnM x <-> m == returnM x;
 
-    (* FIXME: characterize bind!! *)
+    (* Bind in the predicate monad characterizes bind in M, where the function
+    argument f of the bind in M only needs to satisfy Q for arguments that could
+    be returned by the first argument m' of bind *)
+    predmonad_bind_bind :
+      forall {A B} (m:M B) (P: PM A) (Q: A -> PM B),
+        m |= bindM P Q <->
+        (exists (phi:A -> Prop) (m': M {x:A | phi x}) (f : A -> M B),
+           (bindM m' (fun x => returnM (proj1_sig x))) |= P /\
+           (forall x, phi x -> f x |= Q x) /\
+           eqM m (bindM m' (fun x => f (proj1_sig x))));
+
+    (* Equality is equivalent to equi-satisfaction *)
+    predmonad_equivalent_equal :
+      forall {A} (P1 P2: PM A),
+        P1 == P2 <-> forall m, m |= P1 <-> m |= P2;
+
+    (* Proper-ness of all operations *)
+    predmonad_satisfiesP_proper :>
+      forall {A}, Proper (eqM (A:=A) ==> eqM ==> iff) satisfiesP;
+    predmonad_forallP_proper :>
+      forall {A B}, Proper ((@eq A ==> eqM (A:=B)) ==> eqM (A:=B)) forallP;
+    predmonad_existsP_proper :>
+      forall {A B}, Proper ((@eq A ==> eqM (A:=B)) ==> eqM (A:=B)) existsP;
+    predmonad_impliesP_proper :>
+      forall {A}, Proper (eqM (A:=A) ==> eqM ==> eqM) impliesP
 
     (* FIXME: need to commute return and bind with logical operators! *)
   }.
 
-
 End PredMonad.
+
+(* Re-declaring notation outside the section *)
+Infix "|=" := satisfiesP (at level 80).
+
+
+(***
+ *** Theorems about Predicate Monads
+ ***)
+
+Section PredMonad_thms.
+
+Context `{PredMonad}.
+
+Theorem andP_and {A} m (P1 P2: PM A) :
+  m |= andP P1 P2 <-> m |= P1 /\ m |= P2.
+  unfold andP.
+  rewrite predmonad_forallP_forall.
+  split; intro H0.
+  split; [ apply (H0 true) | apply (H0 false) ].
+  destruct H0; intro x; destruct x; assumption.
+Qed.
+
+Theorem orP_or {A} m (P1 P2: PM A) :
+  m |= orP P1 P2 <-> m |= P1 \/ m |= P2.
+  unfold orP.
+  rewrite predmonad_existsP_exists.
+  split; intro H0.
+  destruct H0 as [ b H0 ]; destruct b.
+  left; assumption.
+  right; assumption.
+  destruct H0.
+  exists true; assumption.
+  exists false; assumption.
+Qed.
+
+(* FIXME HERE: can we prove that bind commutes with forall? *)
+
+End PredMonad_thms.
+
+
+(***
+ *** The Set monad as a predicate monad for the Identity monad
+ ***)
+
+Section IdentityPredMonad.
+
+Definition SetM (X:Type) : Type := X -> Prop.
+
+Instance SetM_returnM : MonadRet SetM := fun {A} x => eq x.
+
+Instance SetM_bindM : MonadBind SetM :=
+  fun {A B} m f x => exists y, m y /\ f y x.
+
+Instance SetM_eqM : MonadEquiv SetM :=
+  fun {A} m1 m2 => forall x, m1 x <-> m2 x.
+
+Instance SetM_Monad : Monad SetM.
+  constructor; unfold returnM, SetM_returnM, bindM, SetM_bindM; intros.
+  intro b; split; intros.
+  destruct H as [ y H ]; destruct H; rewrite H; assumption.
+  exists x; split; [ reflexivity | assumption ].
+  intro x; split; intros.
+  destruct H as [ y H ]; destruct H; rewrite <- H0; assumption.
+  exists x; split; [ assumption | reflexivity ].
+  intro z; split; intros.
+  destruct H as [ x H ]; destruct H; destruct H0 as [ y H0 ]; destruct H0.
+  exists y; split; [ exists x; split; assumption | assumption ].
+  destruct H as [ x H ]; destruct H; destruct H as [ y H1 ]; destruct H1.
+  exists y; split; [ assumption | exists x; split; assumption ].
+  split; intro; intros; intro.
+  reflexivity.
+  symmetry; apply H.
+  transitivity (y x0); [ apply H | apply H0 ].
+  intros x y eqm z; rewrite eqm; reflexivity.
+  intros m1 m2 eqm f1 f2 eqf x.
+  split; intro H; destruct H as [ y H ]; destruct H; exists y; split.
+  apply eqm; assumption.
+  apply (eqf y y eq_refl); assumption.
+  apply eqm; assumption.
+  apply (eqf y y eq_refl); assumption.
+Qed.
+
+Instance SetM_PredMonadSatisfaction :
+  PredMonadSatisfaction (M:=Identity) (PM:=SetM) :=
+  fun {A} m P => P m.
+
+Instance SetM_PredMonadForall : PredMonadForall (PM:=SetM) :=
+  fun {A B} f x => forall y, f y x.
+Instance SetM_PredMonadExists : PredMonadExists (PM:=SetM) :=
+  fun {A B} f x => exists y, f y x.
+Instance SetM_PredMonadImplication : PredMonadImplication (PM:=SetM) :=
+  fun {A} P1 P2 x => P1 x -> P2 x.
+
+End IdentityPredMonad.
