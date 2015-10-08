@@ -1,16 +1,16 @@
 
 (* Some attempts to build a fixed-point monad transformer *)
 
+Require Import Coq.Program.Basics.
+
 Load Monad.
 Load CPO.
 
 (***
- *** A Non-Termination Monad Transformer via Non-Determinism + Errors
+ *** A diagonalization function, to surjectively map nat -> nat*nat
  ***)
 
-Section FixT.
-
-Context `{Monad}.
+Section Diagonalization.
 
 Definition diagonalize n : nat * nat :=
   (Nat.sqrt n - (n - (Nat.square (Nat.sqrt n))),
@@ -28,7 +28,7 @@ Lemma diagonalize_surjective x y :
   unfold Nat.square. unfold lt.
   unfold mult; fold mult.
   assert (forall n m, S (n + m) = n + S m); [ intros; apply plus_Snm_nSm | ].
-  repeat (rewrite H0).
+  repeat (rewrite H).
   repeat (first [ rewrite Nat.mul_add_distr_r | rewrite Nat.mul_add_distr_l ]).
   repeat (rewrite Nat.mul_succ_r).
   rewrite (plus_comm _ (S y)).
@@ -42,26 +42,114 @@ Lemma diagonalize_surjective x y :
   apply plus_le_compat_l.
   apply le_plus_trans.
   reflexivity.
-  rewrite H0.
+  rewrite H.
   rewrite minus_plus.
   rewrite plus_comm; rewrite minus_plus.
   reflexivity.
 Qed.
 
+End Diagonalization.
+
+
+
+Section FixT2.
+Context `{Monad}.
+
+(* One step of the approximation order for underlying computations: computation
+m1 approximates m2 iff there is some way to split m2 into "now" and "later"
+parts -- returning an option A is "now" and returning an M (option A) is "later"
+-- such that m1 only does the "now" parts. *)
+Definition approx_under1 {A} : relation (M (option A)) :=
+  fun m1 m2 =>
+    exists (m: M (option A + M (option A))),
+      m1 == bindM m (fun sum =>
+                       match sum with
+                         | inl x => returnM x
+                         | inr m' => returnM None
+                       end) /\
+      m2 == bindM m (fun sum =>
+                       match sum with
+                         | inl x => returnM x
+                         | inr m' => m'
+                       end).
+
+(* approx_under is then the reflexive-transitive closure of approx_under1 *)
+Definition approx_under {A} : relation (M (option A)) :=
+  clos_refl_trans _ (approx_under1 (A:=A)).
+
+(* A fixed-point computation is a countable directed set of underlying
+computations, meaning that any two computations in the set have a supremum
+(w.r.t. approx_under) also in the set *)
+Definition FixT2 (X:Type) :=
+  {f:nat -> M (option X) |
+   forall n1 n2, exists n',
+     approx_under (f n1) (f n') /\ approx_under (f n2) (f n')}.
+
+Definition bindM_opt {A B} (m:M (option A)) (f:A -> M (option B)) : M (option B) :=
+  bindM m (fun o => match o with
+                      | Some x => f x
+                      | None => returnM None
+                    end).
+
+(* In order for this to work, we need to know that the underlying bind is
+monotonic w.r.t. approx_under *)
+Lemma bindM_proper_approx_under1 {A B} m1 m2 (f: A -> M (option B)) :
+  approx_under1 m1 m2 -> approx_under1 (bindM_opt m1 f) (bindM_opt m2 f).
+  intro appr; destruct appr as [ m' ]; destruct H0.
+  exists (bindM m' (fun sum =>
+                      match sum with
+                        | inl None => returnM (inl _ None)
+                        | inl (Some x) =>
+                          bindM (f x) (fun b => returnM (inl _ b))
+                        | inr m' =>
+                          returnM (inr _ (bindM_opt m' f))
+                      end)).
+  unfold bindM_opt; rewrite H0; rewrite H1.
+  repeat (rewrite <- monad_assoc).
+  split.
+  apply bind_fun_eqM; intro sum; destruct sum; rewrite monad_return_bind.
+  destruct o.
+  rewrite <- monad_assoc.
+  rewrite bind_fun_eqM.
+  rewrite monad_bind_return; reflexivity.
+  intro optB; repeat (rewrite monad_return_bind); reflexivity.
+  rewrite monad_return_bind; reflexivity.
+  rewrite monad_return_bind; reflexivity.
+  apply bind_fun_eqM; intro sum; destruct sum.
+  rewrite monad_return_bind; destruct o.
+  rewrite <- monad_assoc.
+  rewrite bind_fun_eqM; [ rewrite monad_bind_return; reflexivity | ].
+  intro optB; destruct optB; rewrite monad_return_bind; reflexivity.
+  rewrite monad_return_bind; reflexivity.
+  rewrite monad_return_bind; reflexivity.
+Qed.
+
+
+(* FIXME HERE NOW: finish FixT and its operations! *)
+
+End FixT.
+
+
+
+(***
+ *** A Non-Termination Monad Transformer via Non-Determinism + Errors
+ ***)
+
+Section FixT2.
 
 (* We model non-termination with the more general construction of a
 non-determinism transformer + option transformer, where each computation has a
 countably infinite non-deterministic choice, and can also return no value. The
 choice is used to represent different "amounts" of computation, and returning no
 value is used to represent non-termination. *)
-Definition FixT (X:Type) := nat -> M (option X).
+Definition FixT2 (X:Type) := nat -> M (option X).
 
 (* For return, we build the set of computations that always return x *)
-Instance FixT_returnM : MonadRet FixT :=
+Instance FixT2_returnM : MonadRet FixT2 :=
   fun {A} x => fun _ => returnM (Some x).
 
 (* For bind, we diagonalize over all possible computations for m and f *)
-Instance FixT_bindM : MonadBind FixT :=
+Instance FixT2_bindM : MonadBind FixT2 :=
   fun {A B} m f =>
     fun n => bindM (m (fst (diagonalize n)))
                    (fun opt_x =>
@@ -73,60 +161,27 @@ Instance FixT_bindM : MonadBind FixT :=
 (* Approximation order: each computation in one set, other than the trivial None
 computation, also occurs in the other. Excluding the trivial computation allows
 our sets to be "empty". *)
-Instance FixT_approxM : MonadApprox FixT :=
+Instance FixT2_approxM : MonadApprox FixT2 :=
   fun {A} m1 m2 =>
     forall n, m1 n == returnM None \/ exists n', m1 n == m2 n'.
 
 (* Equivlence: two computations approximate each other *)
-Instance FixT_eqM : MonadEquiv FixT :=
+Instance FixT2_eqM : MonadEquiv FixT2 :=
   fun {A} => inter_sym approxM.
 
-Definition FixT_bottomM {A} : FixT A :=
+Definition FixT2_bottomM {A} : FixT2 A :=
   fun _ => returnM None.
 
 (* Building a fixed-point: consider all possible numbers of iterations of f to
 the bottom function, and all possible elements of the resulting set *)
-Instance FixT_fixM : MonadFixM FixT :=
+Instance FixT2_fixM : MonadFixM FixT2 :=
   fun {A B} f x n =>
     iterate_f
-      (fst (diagonalize n)) f (fun _ => FixT_bottomM)
+      (fst (diagonalize n)) f (fun _ => FixT2_bottomM)
       x (snd (diagonalize n)).
 
 
 (* FIXME HERE NOW *)
-
-End FixT.
-
-
-(* FIXME HERE: another idea for FixT *)
-Section FixT2.
-Context `{Monad}.
-
-(* One step of the approximation order for underlying computations: computation
-m1 approximates m2 iff m1 is the result of replacing some monadic function in m2
-with the bottom function (which represents a function that never terminates) *)
-Definition approx_under1 {A} : relation (M (option A)) :=
-  fun m1 m2 =>
-    exists B C (mf : (B -> M (option C)) -> M (option A)) f,
-      m1 == mf (fun _ => returnM None) /\ m2 == mf f.
-
-Definition approx_under {A} : relation (M (option A)) :=
-  clos_refl_trans _ (approx_under1 (A:=A)).
-
-(* NOTE: the following doesn't work, because we may need uncountably many Ms *)
-(*
-Definition approx_under' {A} : relation (M (option A)) :=
-  fun m1 m2 =>
-    exists (Ts: nat -> Type) (C: (forall n, M (option (Ts n))) -> M (option A))
-           (Ms: forall n, M (option (Ts n))),
-      m1 == C (fun n => returnM None) /\ m2 == C Ms.
-*)
-
-(* A fixed-point computation is a chain of underlying computations that get more
-and more precise *)
-Definition FixT2 (X:Type) :=
-  {f:nat -> M (option X) | forall n, approx_under (f n) (f (S n))}.
-
 
 End FixT2.
 
