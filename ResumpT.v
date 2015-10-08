@@ -77,15 +77,15 @@ Arguments PFElem_RecVar {Ts rec_pfds X n} _.
 (* A PFD context associates an optional type with each pfd in a list of pfds *)
 Inductive PFDCtx : list PositiveFunctorDescr -> Type :=
 | PFDCtx_Nil : PFDCtx []
-| PFDCtx_Cons pfd (optT:option Type) {pfds} (ctx:PFDCtx pfds) : PFDCtx (pfd::pfds).
+| PFDCtx_Cons pfd (optF:option (Type -> Type)) {pfds} (ctx:PFDCtx pfds) : PFDCtx (pfd::pfds).
 
 (* Look up the optional type at position n in ctx *)
-Fixpoint PFDCtx_lookup {pfds} (ctx:PFDCtx pfds) (n:nat) : option Type :=
+Fixpoint PFDCtx_lookup {pfds} (ctx:PFDCtx pfds) (n:nat) : option (Type -> Type) :=
   match ctx with
-    | PFDCtx_Nil => Some (unit:Type)
-    | PFDCtx_Cons pfd optT ctx' =>
+    | PFDCtx_Nil => Some (fun _ => unit:Type)
+    | PFDCtx_Cons pfd optF ctx' =>
       match n with
-        | 0 => optT
+        | 0 => optF
         | S n' => PFDCtx_lookup ctx' n'
       end
   end.
@@ -97,18 +97,18 @@ Fixpoint PFDCtx_skipn {pfds} (ctx:PFDCtx pfds) (n:nat) {struct n} : PFDCtx (skip
     | S n' =>
       match ctx in PFDCtx pfds return PFDCtx (skipn (S n') pfds) with
         | PFDCtx_Nil => PFDCtx_Nil
-        | PFDCtx_Cons pfd optT ctx' =>
+        | PFDCtx_Cons pfd optF ctx' =>
           PFDCtx_skipn ctx' n'
       end
   end.
 
 (* Interpret an optional type for a RecVar *)
-Definition interpPFDVarType (Ts: list Type) pfds (n: nat) (X:Type)
-           (optT: option Type) : Type :=
-  match optT with
-    | Some T => T
+Definition interpPFDVarType (Ts: list Type) pfds (n: nat)
+           (optF: option (Type -> Type)) : Type -> Type :=
+  match optF with
+    | Some F => F
     | None =>
-      PositiveFunctorElem Ts (skipn n pfds) X (nth n pfds PFD_Unit)
+      fun X => PositiveFunctorElem Ts (skipn n pfds) X (nth n pfds PFD_Unit)
   end.
 
 (* Decode a PFD to a type *)
@@ -128,7 +128,7 @@ Fixpoint decodePFD (Ts: list Type) {pfds} (ctx: PFDCtx pfds)
     | PFD_Variable => X
     | PFD_Rec pfd =>
       decodePFD Ts (PFDCtx_Cons pfd None ctx) pfd X
-    | PFD_RecVar n => interpPFDVarType Ts pfds n X (PFDCtx_lookup ctx n)
+    | PFD_RecVar n => interpPFDVarType Ts pfds n (PFDCtx_lookup ctx n) X
   end.
 
 (* A context that maps each rec_pfd to a type *)
@@ -136,12 +136,12 @@ Inductive PFDecodingContext (Ts: list Type) : forall {pfds}, PFDCtx pfds -> Type
 | PFDecCtx_Nil : PFDecodingContext Ts PFDCtx_Nil
 | PFDecCtx_ConsNone pfd {pfds} ctx (dctx: @PFDecodingContext Ts pfds ctx) :
     PFDecodingContext Ts (PFDCtx_Cons pfd None ctx)
-| PFDecCtx_ConsSome pfd T {pfds} ctx
+| PFDecCtx_ConsSome pfd F {pfds} ctx
                     (decf : forall X,
-                              decodePFD Ts (PFDCtx_Cons pfd (Some T) ctx) pfd X ->
-                              T)
+                              decodePFD Ts (PFDCtx_Cons pfd (Some F) ctx) pfd X ->
+                              F X)
                     (dctx: @PFDecodingContext Ts pfds ctx) :
-    PFDecodingContext Ts (PFDCtx_Cons pfd (Some T) ctx).
+    PFDecodingContext Ts (PFDCtx_Cons pfd (Some F) ctx).
 
 (* Remove the first n elements of a PFDecodingContext *)
 Fixpoint PFDecCtx_skipn Ts {pfds} {ctx:PFDCtx pfds}
@@ -155,7 +155,7 @@ Fixpoint PFDecCtx_skipn Ts {pfds} {ctx:PFDCtx pfds}
         | PFDecCtx_Nil _ => PFDecCtx_Nil Ts
         | PFDecCtx_ConsNone _ pfd ctx' dctx' =>
           PFDecCtx_skipn Ts dctx' n'
-        | PFDecCtx_ConsSome _ pfd optT ctx' _ dctx' =>
+        | PFDecCtx_ConsSome _ pfd optF ctx' _ dctx' =>
           PFDecCtx_skipn Ts dctx' n'
       end
   end.
@@ -169,20 +169,21 @@ Definition VarElemAndDec Ts {pfds} (ctx:PFDCtx pfds) n X :=
 Fixpoint PFDecCtx_lookup Ts {pfds ctx}
          (dctx:@PFDecodingContext Ts pfds ctx) (n:nat) X :
   VarElemAndDec Ts ctx n X ->
-  interpPFDVarType Ts pfds n X (PFDCtx_lookup ctx n) :=
+  interpPFDVarType Ts pfds n (PFDCtx_lookup ctx n) X :=
   match dctx in @PFDecodingContext _ pfds ctx
         return VarElemAndDec Ts ctx n X ->
-               interpPFDVarType Ts pfds n X (PFDCtx_lookup ctx n) with
+               interpPFDVarType Ts pfds n (PFDCtx_lookup ctx n) X with
     | PFDecCtx_Nil _ =>
       match n return VarElemAndDec Ts PFDCtx_Nil n X ->
-                     interpPFDVarType Ts [] n X (PFDCtx_lookup PFDCtx_Nil n) with
+                     interpPFDVarType Ts [] n (PFDCtx_lookup PFDCtx_Nil n) X with
         | 0 => fun _ => tt
         | S _ => fun _ => tt
       end
     | @PFDecCtx_ConsNone _ pfd pfds' ctx' dctx' =>
       match n return VarElemAndDec Ts (PFDCtx_Cons pfd None ctx') n X ->
-                     interpPFDVarType Ts (pfd::pfds') n X
+                     interpPFDVarType Ts (pfd::pfds') n
                                       (PFDCtx_lookup (PFDCtx_Cons pfd None ctx') n)
+                                      X
       with
         | 0 => fun elem_and_dec => fst elem_and_dec
         | S n' => PFDecCtx_lookup Ts dctx' n' X
@@ -190,8 +191,9 @@ Fixpoint PFDecCtx_lookup Ts {pfds ctx}
     | @PFDecCtx_ConsSome _ pfd T pfds' ctx' decf dctx' =>
       match n return VarElemAndDec Ts (PFDCtx_Cons pfd (Some T) ctx') n X ->
                      interpPFDVarType
-                       Ts (pfd::pfds') n X
+                       Ts (pfd::pfds') n
                        (PFDCtx_lookup (PFDCtx_Cons pfd (Some T) ctx') n)
+                       X
       with
         | 0 => fun elem_and_dec => decf X (snd elem_and_dec)
         | S n' => PFDecCtx_lookup Ts dctx' n' X
@@ -229,16 +231,14 @@ Fixpoint decodePFElem (Ts: list Type) {pfds ctx}
 Arguments decodePFElem {Ts pfds ctx} dctx {pfd X} elem.
 
 
-(* FIXME HERE NOW: get the following to work; I think I need to replace optT in
-PFDCtx_Cons with optF... *)
-
 (* Helper function to decode an object of a recursive type *)
-Definition decodeRec Ts {pfds ctx} (dctx:@PFDecodingContext Ts pfds ctx) pfd F
+Definition decodeRec Ts {pfds ctx} (dctx:@PFDecodingContext Ts pfds ctx) pfd
+           (F: Type -> Type)
            (decf: forall X,
-                    decodePFD Ts (PFDCtx_Cons pfd (Some (F X)) ctx) pfd X -> F X)
+                    decodePFD Ts (PFDCtx_Cons pfd (Some F) ctx) pfd X -> F X)
            X (elem: PositiveFunctorElem Ts pfds X (PFD_Rec pfd)) : F X.
   inversion elem.
-  exact (decf X (decodePFElem (PFDecCtx_ConsSome Ts pfd (F X) ctx (fun _ => decf X) dctx) elem0)).
+  exact (decf X (decodePFElem (PFDecCtx_ConsSome Ts pfd F ctx decf dctx) elem0)).
 Defined.
 
 
@@ -364,9 +364,9 @@ Instance list_PositiveFunctorIsoTo : PositiveFunctorIsoTo list :=
   fun {X} l => PFElem_Rec (list_iso_to l).
 
 Definition list_iso_from (X:Type)
-           (elem: decodePFD [] (PFDCtx_Cons list_core_PFD
-                                            (Some (list X)) PFDCtx_Nil)
-                            list_core_PFD X) : list X :=
+           (elem: decodePFD
+                    [] (PFDCtx_Cons list_core_PFD (Some list) PFDCtx_Nil)
+                    list_core_PFD X) : list X :=
   match elem with
     | inl _ => nil
     | inr p => (fst p)::(snd p)
@@ -374,7 +374,7 @@ Definition list_iso_from (X:Type)
 
 Instance list_PositiveFunctorIsoFrom : PositiveFunctorIsoFrom list :=
   fun {X} =>
-    decodeRec [] (PFDecCtx_Nil []) list_core_PFD  list_iso_from.
+    decodeRec [] (PFDecCtx_Nil []) list_core_PFD list list_iso_from X.
 
 
 End PositiveFunctor_Examples.
