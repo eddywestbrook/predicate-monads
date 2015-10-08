@@ -30,7 +30,6 @@ Class Monad M {MonadRet:MonadRet M} {MonadBind:MonadBind M}
     monad_assoc : forall A B C (m:M A) (f: A -> M B) (g: B -> M C),
                     bindM m (fun x => bindM (f x) g) == bindM (bindM m f) g;
     monad_eq_equivalence :> forall A, Equivalence (eqM (A:=A));
-    monad_proper_return : forall A, Proper (@eq A ==> eqM (A:=A)) returnM;
     monad_proper_bind :
       forall A B,
         Proper (eqM (A:=A) ==> ((@eq A) ==> (eqM (A:=B))) ==> eqM (A:=B)) bindM
@@ -38,7 +37,7 @@ Class Monad M {MonadRet:MonadRet M} {MonadBind:MonadBind M}
 
 
 (***
- *** Stuff Needed for Rewriting w.r.t. eqM
+ *** Helper stuff for rewriting and proving equivalences
  ***)
 
 Add Parametric Relation `{Monad} A : (M A) (eqM (A:=A))
@@ -46,6 +45,17 @@ Add Parametric Relation `{Monad} A : (M A) (eqM (A:=A))
   symmetry proved by Equivalence_Symmetric
   transitivity proved by Equivalence_Transitive
 as eqM_morphism.
+
+Add Parametric Morphism `{Monad} A B : (@bindM M _ A B)
+with signature (eqM ==> (eq ==> eqM) ==> eqM) as bindM_morphism.
+intros; apply monad_proper_bind; assumption.
+Qed.
+
+Lemma bind_fun_eqM `{Monad} {A B} m (f1 f2:A -> M B) :
+  (forall x, f1 x == f2 x) -> bindM m f1 == bindM m f2.
+  intro e; apply monad_proper_bind; [ reflexivity | ].
+  intros x y e'; rewrite e'; apply e.
+Qed.
 
 
 (***
@@ -59,7 +69,6 @@ Instance IdMonad_eqM : MonadEquiv Identity := @eq.
 Instance IdMonad : Monad Identity.
   constructor; intros; try reflexivity.
   split; auto with typeclass_instances.
-  intros x y e; rewrite e; reflexivity.
   intros m1 m2 eqm f1 f2 eqf.
   rewrite eqm. apply eqf. reflexivity.
 Qed.
@@ -86,19 +95,19 @@ Instance StateT_Monad S `{Monad} : Monad (StateT S M).
     unfold returnM, StateT_returnM, bindM, StateT_bindM; intros.
   intro; rewrite monad_return_bind; reflexivity.
   intro; transitivity (bindM (m s) returnM); [ | apply monad_bind_return ].
-  apply monad_proper_bind; [ reflexivity | ].
-  intros sx sy e; rewrite e; destruct sy; reflexivity.
+  apply bind_fun_eqM; intro sx; destruct sx; reflexivity.
   intro; rewrite <- monad_assoc.
-  apply monad_proper_bind; [ reflexivity | ].
-  intros sx sy e; rewrite e; destruct sy; reflexivity.
+  apply bind_fun_eqM; intro sx; destruct sx.
+  apply bind_fun_eqM; intro sx; destruct sx.
+  reflexivity.
   split; intro; intros; intro; intros.
   reflexivity.
   symmetry; apply H0.
   transitivity (y s); [ apply H0 | apply H1 ].
-  intros x y e s; rewrite e; reflexivity.
   intros m1 m2 em f1 f2 ef s.
-  apply monad_proper_bind; [ apply em | ].
-  intros sx sy es; rewrite es; destruct sy. apply (ef a a eq_refl).
+  rewrite (em s).
+  apply bind_fun_eqM; intro sx; destruct sx.
+  apply ef; reflexivity.
 Qed.
 
 
