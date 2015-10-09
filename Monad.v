@@ -30,26 +30,15 @@ Class Monad M {MonadRet:MonadRet M} {MonadBind:MonadBind M}
     monad_assoc : forall A B C (m:M A) (f: A -> M B) (g: B -> M C),
                     bindM m (fun x => bindM (f x) g) == bindM (bindM m f) g;
     monad_eq_equivalence :> forall A, Equivalence (eqM (A:=A));
-    monad_proper_bind :
+    monad_proper_bind :>
       forall A B,
         Proper (eqM (A:=A) ==> ((@eq A) ==> (eqM (A:=B))) ==> eqM (A:=B)) bindM
   }.
 
 
 (***
- *** Helper stuff for rewriting and proving equivalences
+ *** Helper theorems about monads
  ***)
-
-Add Parametric Relation `{Monad} A : (M A) (eqM (A:=A))
-  reflexivity proved by Equivalence_Reflexive
-  symmetry proved by Equivalence_Symmetric
-  transitivity proved by Equivalence_Transitive
-as eqM_morphism.
-
-Add Parametric Morphism `{Monad} A B : (@bindM M _ A B)
-with signature (eqM ==> (eq ==> eqM) ==> eqM) as bindM_morphism.
-intros; apply monad_proper_bind; assumption.
-Qed.
 
 Lemma bind_fun_eqM `{Monad} {A B} m (f1 f2:A -> M B) :
   (forall x, f1 x == f2 x) -> bindM m f1 == bindM m f2.
@@ -130,8 +119,7 @@ Class MonadState S M {MonadRet:MonadRet M} {MonadBind:MonadBind M}
       forall s, bindM (putM s) (fun _ => getM) ==
                 bindM (putM s) (fun _ => returnM s);
     monad_state_put_put :
-      forall s1 s2, bindM (putM s1) (fun _ => putM s2) == putM s2;
-    monad_state_proper_put : Proper (eq ==> eqM) putM
+      forall s1 s2, bindM (putM s1) (fun _ => putM s2) == putM s2
   }.
 
 (* The MonadState instance for StateT *)
@@ -147,7 +135,6 @@ Instance StateT_MonadState S `{Monad} : MonadState S (StateT S M).
            getM, StateT_getM, putM, StateT_putM; intros;
     try (intros; intro; repeat (rewrite monad_return_bind); reflexivity).
   assumption.
-  intros s1 s2 e s; rewrite e; reflexivity.
 Qed.
 
 
@@ -170,18 +157,18 @@ Class MonadFix M {MonadRet:MonadRet M} {MonadBind:MonadBind M}
       {MonadFixM:MonadFixM M}
 : Prop :=
   {
-    monad_fix_monad : @Monad M MonadRet MonadBind MonadEquiv;
+    monad_fix_monad :> @Monad M MonadRet MonadBind MonadEquiv;
     monad_fix_approx_preorder :> forall A, PreOrder (approxM (A:=A));
     monad_fix_approx_antisymmetry :
       forall A (m1 m2:M A), approxM m1 m2 -> approxM m2 m1 -> m1 == m2;
-    monad_fix_approx_bind :
+    monad_fix_approx_bind :>
       forall A B,
         Proper
           (approxM (A:=A) ==> (@eq A ==> approxM (A:=B)) ==> approxM (A:=B))
           bindM;
-    monad_fix_approx_proper :
+    monad_fix_approx_proper :>
       forall A, Proper (eqM (A:=A) ==> eqM (A:=A) ==> iff) approxM;
-    monad_fix_fix_proper :
+    monad_fix_fix_proper :>
       forall A B,
         Proper (((@eq A ==> eqM (A:=B)) ==> @eq A ==> eqM (A:=B))
                   ==> @eq A ==> eqM (A:=B)) fixM;
