@@ -12,13 +12,16 @@ Load CPO.
 
 Section Diagonalization.
 
+(* Diagonalize surjectively maps nat onto nat*nat *)
 Definition diagonalize n : nat * nat :=
   (Nat.sqrt n - (n - (Nat.square (Nat.sqrt n))),
    (n - (Nat.square (Nat.sqrt n)))).
 
+(* For any x and y, return the n such that diagonalize n = (x,y) *)
 Definition undiagonalize x y : nat :=
   Nat.square (x + y) + y.
 
+(* Proof that diagonalize and undiagonalize are correct *)
 Lemma diagonalize_surjective x y :
   diagonalize (undiagonalize x y) = (x, y).
   unfold diagonalize, undiagonalize.
@@ -50,9 +53,162 @@ Qed.
 
 End Diagonalization.
 
+(* Keep diagonalize opaque, because all that matters is the above lemma *)
+Opaque diagonalize.
 
 
-Section FixT2.
+Section FixT.
+Context `{Monad}.
+
+(* approximation relation (FIXME: document this) *)
+(* FIXME HERE: this doesn't work; see approx_under2, below, for a newer way... *)
+Definition approx_under {A} : relation (M (option A)) :=
+  fun m1 m2 =>
+    exists (m': M (option A)),
+      m2 == bindM m1 (fun sum =>
+                        match sum with
+                          | None => m'
+                          | Some x => returnM (Some x)
+                        end).
+
+Instance approx_under_Reflexive {A} : Reflexive (approx_under (A:=A)).
+intro m; exists (returnM None).
+transitivity (bindM m returnM); [ symmetry; apply monad_bind_return | ].
+apply monad_proper_bind; [ reflexivity | ].
+intros x y xy_eq; rewrite xy_eq; destruct y; reflexivity.
+Qed.
+
+Instance approx_under_Transitive {A} : Transitive (approx_under (A:=A)).
+intros m1 m2 m3 approx12 approx23.
+destruct approx12 as [ m1' e_12 ].
+destruct approx23 as [ m2' e_23 ].
+exists (bindM m1' (fun sum => match sum with
+                                | None => m2'
+                                | Some x => returnM (Some x)
+                              end)).
+rewrite e_23; rewrite e_12.
+rewrite <- monad_assoc.
+apply bind_fun_eqM.
+intro x; destruct x.
+rewrite monad_return_bind; reflexivity.
+apply bind_fun_eqM.
+intro x; destruct x; reflexivity.
+Qed.
+
+(* Helper definition: bind on just the option part of FixT *)
+(* FIXME HERE: need something like this, but generalized to nested trees of options... *)
+Definition bindM_opt {A B} (m:M (option A)) (f:A -> M (option B)) : M (option (option B)) :=
+  bindM m (fun o => match o with
+                      | Some x =>
+                        bindM (f x)
+                              (fun o' => match o' with
+                                           | Some y => returnM (Some (Some y))
+                                           | None => returnM (Some None)
+                                         end)
+                      | None => returnM None
+                    end).
+
+(* FIXME HERE: this does not work (transitivity fails) *)
+(* approximation relation (FIXME: document this) *)
+(*
+Definition approx_under2 {A} : relation (M (option A)) :=
+  fun m1 m2 =>
+    exists (T:Type) (mT: M T) (fT: T -> M (option A)),
+      m2 == bindM mT fT
+      /\
+      m1 == bindM mT (fun _ => returnM None).
+*)
+(*
+Inductive approx_under2 {A} (m1 m2 : M (option A)) : Prop :=
+  MkApproxUnder2 (T:Type) (mT: M T) (fT: T -> M (option A)) :
+    m2 == bindM mT fT ->
+    m1 == bindM mT (fun _ => returnM None) ->
+    approx_under2 m1 m2.
+
+Instance approx_under2_Transitive {A} : Transitive (approx_under2 (A:=A)).
+  intros m1 m2 m3 ap12 ap23.
+  destruct ap12; destruct ap23.
+  eapply (MkApproxUnder2
+            _ _ ((T * M T0)%type)
+            (bindM mT (fun t => returnM (t, mT0)))
+            (fun t_mt0 =>
+               bindM (fT (fst t_mt0))
+                     (fun opt_A =>
+                        match opt_A with
+                          | 
+bindM (snd t_mt0) fT0))).
+
+  exists ((T * M T0)%type).
+*)
+
+
+(* In order for this to work, we need to know that the underlying bind is
+monotonic w.r.t. approx_under *)
+Lemma bindM_proper_approx_under {A B} :
+  Proper (approx_under (A:=A) ==>
+            ((@eq A) ==> (approx_under (A:=B))) ==>
+            approx_under (A:=B)) bindM_opt.
+  intros m1 m2 approx_m f1 f2 approx_f.
+  transitivity (bindM_opt m2 f1).
+  destruct approx_m as [m' e_m].
+  unfold bindM_opt, approx_under.
+  exists (bindM_opt m' f1).
+  rewrite e_m.
+  repeat (rewrite <- monad_assoc).
+  apply bind_fun_eqM; intro x; destruct x.
+
+  replace m2 with (bindM m1
+          (fun sum : option A =>
+           match sum with
+           | Some x => returnM (Some x)
+           | None => m'
+           end)).
+rewrite e_m.
+
+m1 m2 (f: A -> M (option B)) :
+  approx_under1 m1 m2 -> approx_under1 (bindM_opt m1 f) (bindM_opt m2 f).
+  intro appr; destruct appr as [ m' ]; destruct H0.
+  exists (bindM m' (fun sum =>
+                      match sum with
+                        | inl None => returnM (inl _ None)
+                        | inl (Some x) =>
+                          bindM (f x) (fun b => returnM (inl _ b))
+                        | inr m' =>
+                          returnM (inr _ (bindM_opt m' f))
+                      end)).
+  unfold bindM_opt; rewrite H0; rewrite H1.
+  repeat (rewrite <- monad_assoc).
+  split.
+  apply bind_fun_eqM; intro sum; destruct sum; rewrite monad_return_bind.
+  destruct o.
+  rewrite <- monad_assoc.
+  rewrite bind_fun_eqM.
+  rewrite monad_bind_return; reflexivity.
+  intro optB; repeat (rewrite monad_return_bind); reflexivity.
+  rewrite monad_return_bind; reflexivity.
+  rewrite monad_return_bind; reflexivity.
+  apply bind_fun_eqM; intro sum; destruct sum.
+  rewrite monad_return_bind; destruct o.
+  rewrite <- monad_assoc.
+  rewrite bind_fun_eqM; [ rewrite monad_bind_return; reflexivity | ].
+  intro optB; destruct optB; rewrite monad_return_bind; reflexivity.
+  rewrite monad_return_bind; reflexivity.
+  rewrite monad_return_bind; reflexivity.
+Qed.
+
+
+(* FIXME: document this *)
+Definition FixT (X:Type) :=
+  {f:nat -> M (option X) |
+   forall n1 n2, n1 < n2 -> approx_under (f n1) (f n2)}.
+
+
+End FixT.
+
+
+(* FIXME HERE NOW: old stuff below... *)
+
+Section FixT.
 Context `{Monad}.
 
 (* One step of the approximation order for underlying computations: computation
@@ -77,14 +233,23 @@ Definition approx_under1 {A} : relation (M (option A)) :=
 Definition approx_under {A} : relation (M (option A)) :=
   clos_refl_trans _ (approx_under1 (A:=A)).
 
+Global Instance approx_under_Reflexive {A} : Reflexive (approx_under (A:=A)).
+apply clos_rt_is_preorder.
+Qed.
+
+Global Instance approx_under_Transitive {A} : Transitive (approx_under (A:=A)).
+apply clos_rt_is_preorder.
+Qed.
+
 (* A fixed-point computation is a countable directed set of underlying
 computations, meaning that any two computations in the set have a supremum
 (w.r.t. approx_under) also in the set *)
-Definition FixT2 (X:Type) :=
+Definition FixT (X:Type) :=
   {f:nat -> M (option X) |
    forall n1 n2, exists n',
      approx_under (f n1) (f n') /\ approx_under (f n2) (f n')}.
 
+(* Helper definition: bind on just the option part of FixT *)
 Definition bindM_opt {A B} (m:M (option A)) (f:A -> M (option B)) : M (option B) :=
   bindM m (fun o => match o with
                       | Some x => f x
@@ -123,6 +288,35 @@ Lemma bindM_proper_approx_under1 {A B} m1 m2 (f: A -> M (option B)) :
   rewrite monad_return_bind; reflexivity.
   rewrite monad_return_bind; reflexivity.
 Qed.
+
+(* Return for FixT: build the set of computations that return x in the
+underlying monad; i.e., return (Some x) for all nat inputs *)
+Program Instance FixT_MonadRet : MonadRet FixT :=
+  fun {X} x _ => returnM (Some x).
+Next Obligation.
+  exists 0; split; reflexivity.
+Qed.
+
+(* Bind for FixT: build the set that includes bindM (m n1) (fun x => f x n2) for
+all n1 and n2, by diagonalize, above *)
+Program Instance FixT_MonadBind : MonadBind FixT :=
+  fun {A B} m f =>
+    fun n =>
+      bindM_opt
+        (m (fst (diagonalize n)))
+           (fun x => f x (snd (diagonalize n))).
+Next Obligation.
+destruct (proj2_sig m n1 n2) as [n_m H_n_m];
+  destruct H_n_m as [approx_m1 approx_m2].
+
+(* FIXME HERE NOW: the above doesn't work, because there might not be one single
+n' that works for all input values of f in the bind... *)
+
+Class MonadBind (M:Type -> Type) : Type :=
+  bindM : forall {A B:Type}, M A -> (A -> M B) -> M B.
+
+Class MonadEquiv (M:Type -> Type) : Type :=
+  eqM : forall {A:Type}, M A -> M A -> Prop.
 
 
 (* FIXME HERE NOW: finish FixT and its operations! *)

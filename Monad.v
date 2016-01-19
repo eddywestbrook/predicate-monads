@@ -3,7 +3,7 @@ Require Import Coq.Program.Tactics.
 Require Import Coq.Setoids.Setoid.
 Require Import Coq.Classes.Morphisms.
 Require Import Coq.Arith.Arith_base.
-Require Import Coq.Relations.Relation_Operators.
+Require Import Coq.Relations.Relations.
 
 
 (***
