@@ -7,32 +7,83 @@ Require Import Coq.Relations.Relations.
 
 
 (***
- *** The monad typeclass (unbundled approach)
+ *** Logical Relations
  ***)
 
-Class MonadRet (M:Type -> Type) : Type :=
-  returnM : forall {A:Type}, A -> M A.
+(* A logical relation is just an equivalence with a fancy name, so that we can
+distinguish them as "the" relations for their respective types *)
+Polymorphic Class LogRel_Rel@{c} (A : Type@{c}) : Type :=
+  equalsLR : A -> A -> Prop.
 
-Class MonadBind (M:Type -> Type) : Type :=
-  bindM : forall {A B:Type}, M A -> (A -> M B) -> M B.
+(* The propositional part of a logical relation *)
+Polymorphic Class LogRel@{c} (A : Type@{c}) {LR:LogRel_Rel A} : Prop :=
+  { logrel_equivalence :> Equivalence equalsLR }.
 
-Class MonadEquiv (M:Type -> Type) : Type :=
-  eqM : forall {A:Type}, M A -> M A -> Prop.
+Notation "x '==' y" := (equalsLR x y) (at level 80, no associativity).
 
-Notation "m1 '==' m2" := (eqM m1 m2) (at level 80, no associativity).
+(* equalsLR respects itself *)
+(* FIXME: this is probably not needed...? *)
+(*
+Polymorphic Instance equalsLR_proper `{LogRel} :
+  Proper (equalsLR ==> equalsLR ==> iff) equalsLR.
+intros x1 x2 ex y1 y2 ey. rewrite ex.
+ split; intro exy.
+rewrite <- ex; rewrite exy; rewrite ey; reflexivity.
+rewrite ex; rewrite exy; rewrite <- ey; reflexivity.
+Qed.
+*)
 
-Class Monad M {MonadRet:MonadRet M} {MonadBind:MonadBind M}
-      {MonadEquiv:MonadEquiv M} : Prop :=
+
+(* Some standard logical relations *)
+
+Polymorphic Instance Pair_LogRel_Rel (A B: Type)
+            {LRA:LogRel_Rel A} {LRB:LogRel_Rel B} : LogRel_Rel (A*B) :=
+  fun p1 p2 =>
+    equalsLR (fst p1) (fst p2) /\ equalsLR (snd p1) (snd p2).
+
+Polymorphic Instance Pair_LogRel (A B: Type)
+            `{LRA:LogRel A} `{LRB:LogRel B} : LogRel (A*B).
+  repeat constructor.
+  reflexivity.
+  reflexivity.
+  destruct H; symmetry; assumption.
+  destruct H; symmetry; assumption.
+  destruct H; destruct H0; transitivity (fst y); assumption.
+  destruct H; destruct H0; transitivity (snd y); assumption.
+Qed.
+
+
+(***
+ *** The monad typeclass
+ ***)
+
+Polymorphic Class MonadOps@{d c} (M : Type@{d} -> Type@{c}) : Type :=
+  { returnM : forall {A : Type@{d}}, A -> M A;
+    bindM : forall {A B : Type@{d}}, M A -> (A -> M B) -> M B;
+    equalsM :> forall {A : Type@{d}} {LR:LogRel_Rel A}, LogRel_Rel (M A) }.
+
+Polymorphic Class Monad@{d c} (M : Type@{d} -> Type@{c})
+            {MonadOps:MonadOps@{d c} M} : Prop :=
   {
     monad_return_bind :
-      forall A B x (f:A -> M B), bindM (returnM x) f == f x;
-    monad_bind_return : forall A (m:M A), bindM m returnM == m;
-    monad_assoc : forall A B C (m:M A) (f: A -> M B) (g: B -> M C),
-                    bindM m (fun x => bindM (f x) g) == bindM (bindM m f) g;
-    monad_eq_equivalence :> forall A, Equivalence (eqM (A:=A));
+      forall (A B:Type@{d}) `{LogRel B} x (f:A -> M B),
+        bindM (returnM x) f == f x;
+    monad_bind_return :
+      forall (A:Type@{d}) (m:M A) `{LogRel A},
+        bindM m returnM == m;
+    monad_assoc :
+      forall (A B C:Type@{d}) `{LogRel C} m (f:A -> M B) (g:B -> M C),
+        bindM (bindM m f) g == bindM m (fun x => bindM (f x) g);
+    monad_equalsM :>
+      forall (A:Type@{d}) `{LogRel A},
+        LogRel _ (LR:=equalsM);
+    monad_proper_return :>
+      forall (A:Type@{d}) `{LogRel A},
+        Proper (equalsLR ==> equalsM) returnM;
     monad_proper_bind :>
-      forall A B,
-        Proper (eqM (A:=A) ==> ((@eq A) ==> (eqM (A:=B))) ==> eqM (A:=B)) bindM
+      forall (A B:Type@{d}) `{LogRel A} `{LogRel B},
+        Proper (equalsM ==> (equalsLR ==> equalsM) ==> equalsM)
+               (bindM (A:=A) (B:=B))
   }.
 
 
@@ -40,10 +91,49 @@ Class Monad M {MonadRet:MonadRet M} {MonadBind:MonadBind M}
  *** Helper theorems about monads
  ***)
 
-Lemma bind_fun_eqM `{Monad} {A B} m (f1 f2:A -> M B) :
+(* FIXME: Equivalence and friends are not polymorphic... *)
+Instance equalsM_Equivalence `{Monad} `{LogRel} : Equivalence (equalsM (A:=A)).
+  apply monad_equalsM; assumption.
+Qed.
+
+(* FIXME: why is this not automatic in the proof of bind_fun_equalsM?!? *)
+Instance equalsM_Reflexive `{Monad} `{LogRel} : Reflexive (equalsM (A:=A)).
+  auto with typeclass_instances.
+Qed.
+
+Instance equalsM_Symmetric `{Monad} `{LogRel} : Symmetric (equalsM (A:=A)).
+  auto with typeclass_instances.
+Qed.
+
+Instance equalsM_Transitive `{Monad} `{LogRel} : Transitive (equalsM (A:=A)).
+  auto with typeclass_instances.
+Qed.
+
+Polymorphic Instance equalsM_equalsLR_iff_Proper `{Monad} `{LogRel} :
+  Proper (equalsLR ==> equalsLR ==> iff) equalsM.
+intros m11 m12 e1 m21 m22 e2; split; intros.
+transitivity m11; [ symmetry; assumption | transitivity m21; assumption ].
+transitivity m12; [ assumption |
+                    transitivity m22; try assumption; symmetry; assumption ].
+Qed.
+
+Polymorphic Instance equalsM_equalsLR_impl_Proper `{Monad} `{LogRel} :
+  Proper (equalsLR ==> equalsLR ==> Basics.flip Basics.impl) equalsM.
+intros m11 m12 e1 m21 m22 e2 e12.
+transitivity m12; [ assumption |
+                    transitivity m22; try assumption; symmetry; assumption ].
+Qed.
+
+Lemma bind_fun_equalsM `{Monad}
+            {A B:Type} `{LogRel (A:=A)} `{LogRel (A:=B)}
+            m (f1 f2:A -> M B) :
+  Proper (equalsLR ==> equalsM) f1 -> Proper (equalsLR ==> equalsM) f2 ->
   (forall x, f1 x == f2 x) -> bindM m f1 == bindM m f2.
-  intro e; apply monad_proper_bind; [ reflexivity | ].
-  intros x y e'; rewrite e'; apply e.
+intros proper1 proper2 e; apply (monad_proper_bind A B); [ reflexivity | ].
+intros x y e'.
+transitivity (f1 y).
+apply proper1; assumption.
+apply e.
 Qed.
 
 
@@ -52,133 +142,14 @@ Qed.
  ***)
 
 Definition Identity (X:Type) := X.
-Instance IdMonad_returnM : MonadRet Identity := fun A x => x.
-Instance IdMonad_bindM : MonadBind Identity := fun A B m f => f m.
-Instance IdMonad_eqM : MonadEquiv Identity := @eq.
+Instance IdMonad_MonadOps : MonadOps Identity :=
+  { returnM := fun A x => x;
+    bindM := fun A B m f => f m;
+    equalsM := fun A LR => LR }.
+
 Instance IdMonad : Monad Identity.
   constructor; intros; try reflexivity.
   split; auto with typeclass_instances.
-  intros m1 m2 eqm f1 f2 eqf.
-  rewrite eqm. apply eqf. reflexivity.
+  intros x y exy; assumption.
+  intros m1 m2 eqm f1 f2 eqf; apply eqf; assumption.
 Qed.
-
-
-(***
- *** The State Monad
- ***)
-
-(* StateT itself *)
-Definition StateT (S:Type) (M: Type -> Type) (X:Type) := S -> M (prod S X).
-
-Instance StateT_returnM {S} `{MonadRet} : MonadRet (StateT S M) :=
-  fun A x => fun s => returnM (s, x).
-Instance StateT_bindM {S} `{MonadBind} : MonadBind (StateT S M) :=
-  fun A B m f =>
-    fun s => bindM (m s) (fun (sx:S * A) => let (s',x) := sx in f x s').
-Instance StateT_eqM {S} `{MonadEquiv} : MonadEquiv (StateT S M) :=
-  fun {A} m1 m2 => forall s, m1 s == m2 s.
-
-(* The Monad instance for StateT *)
-Instance StateT_Monad S `{Monad} : Monad (StateT S M).
-  constructor;
-    unfold returnM, StateT_returnM, bindM, StateT_bindM; intros.
-  intro; rewrite monad_return_bind; reflexivity.
-  intro; transitivity (bindM (m s) returnM); [ | apply monad_bind_return ].
-  apply bind_fun_eqM; intro sx; destruct sx; reflexivity.
-  intro; rewrite <- monad_assoc.
-  apply bind_fun_eqM; intro sx; destruct sx.
-  apply bind_fun_eqM; intro sx; destruct sx.
-  reflexivity.
-  split; intro; intros; intro; intros.
-  reflexivity.
-  symmetry; apply H0.
-  transitivity (y s); [ apply H0 | apply H1 ].
-  intros m1 m2 em f1 f2 ef s.
-  rewrite (em s).
-  apply bind_fun_eqM; intro sx; destruct sx.
-  apply ef; reflexivity.
-Qed.
-
-
-(* The stateful computations class(es) *)
-
-Class MonadGet (S:Type) (M:Type -> Type) : Type := getM : M S.
-Class MonadPut (S:Type) (M:Type -> Type) : Type := putM : S -> M unit.
-
-Class MonadState S M {MonadRet:MonadRet M} {MonadBind:MonadBind M}
-      {MonadEquiv:MonadEquiv M} {MonadGet:MonadGet S M} {MonadPut:MonadPut S M}
-: Prop :=
-  {
-    monad_state_monad : @Monad M MonadRet MonadBind MonadEquiv;
-    monad_state_get_get :
-      forall A f,
-        bindM getM (fun s => bindM getM (f s)) ==
-        (bindM getM (fun s => f s s) : M A);
-    monad_state_get_put : bindM getM putM == returnM tt;
-    monad_state_put_get :
-      forall s, bindM (putM s) (fun _ => getM) ==
-                bindM (putM s) (fun _ => returnM s);
-    monad_state_put_put :
-      forall s1 s2, bindM (putM s1) (fun _ => putM s2) == putM s2
-  }.
-
-(* The MonadState instance for StateT *)
-
-Instance StateT_getM {S} `{MonadRet} : MonadGet S (StateT S M) :=
-  fun s => returnM (s, s).
-Instance StateT_putM {S} `{MonadRet} : MonadPut S (StateT S M) :=
-  fun s_new s => returnM (s_new, tt).
-
-Instance StateT_MonadState S `{Monad} : MonadState S (StateT S M).
-  constructor; intros; try apply StateT_Monad;
-    unfold returnM, StateT_returnM, bindM, StateT_bindM,
-           getM, StateT_getM, putM, StateT_putM; intros;
-    try (intros; intro; repeat (rewrite monad_return_bind); reflexivity).
-  assumption.
-Qed.
-
-
-(***
- *** Non-Termination Effects
- ***)
-
-(* approxM m1 m2 means m1 "approximates" m2, i.e., m2 is "at least as
-terminating as" m1 *)
-Class MonadApprox (M:Type -> Type) : Type :=
-  approxM : forall {A}, relation (M A).
-
-Notation "m1 '<<<' m2" := (approxM m1 m2) (at level 80, no associativity).
-
-Class MonadFixM (M:Type -> Type) : Type :=
-  fixM : forall {A B}, ((A -> M B) -> (A -> M B)) -> A -> M B.
-
-Class MonadFix M {MonadRet:MonadRet M} {MonadBind:MonadBind M}
-      {MonadEquiv:MonadEquiv M} {MonadApprox:MonadApprox M}
-      {MonadFixM:MonadFixM M}
-: Prop :=
-  {
-    monad_fix_monad :> @Monad M MonadRet MonadBind MonadEquiv;
-    monad_fix_approx_preorder :> forall A, PreOrder (approxM (A:=A));
-    monad_fix_approx_antisymmetry :
-      forall A (m1 m2:M A), approxM m1 m2 -> approxM m2 m1 -> m1 == m2;
-    monad_fix_approx_bind :>
-      forall A B,
-        Proper
-          (approxM (A:=A) ==> (@eq A ==> approxM (A:=B)) ==> approxM (A:=B))
-          bindM;
-    monad_fix_approx_proper :>
-      forall A, Proper (eqM (A:=A) ==> eqM (A:=A) ==> iff) approxM;
-    monad_fix_fix_proper :>
-      forall A B,
-        Proper (((@eq A ==> eqM (A:=B)) ==> @eq A ==> eqM (A:=B))
-                  ==> @eq A ==> eqM (A:=B)) fixM;
-    monad_fix_fixm :
-      forall A B f x,
-        Proper (((@eq A) ==> (approxM (A:=B))) ==> @eq A ==> approxM (A:=B)) f ->
-        fixM (A:=A) (B:=B) f x == f (fixM f) x
-  }.
-
-Add Parametric Relation `{MonadFix} A : (M A) (approxM (A:=A))
-  reflexivity proved by PreOrder_Reflexive
-  transitivity proved by PreOrder_Transitive
-as approxM_morphism.
