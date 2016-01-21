@@ -1,5 +1,4 @@
 
-Add LoadPath "." as PredMonad.
 Require Import PredMonad.Monad.
 
 

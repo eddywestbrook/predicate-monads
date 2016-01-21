@@ -1,5 +1,4 @@
-
-Load PredMonad.
+Require Import PredMonad.PredMonad.
 
 
 Class PredMonadState S M PM

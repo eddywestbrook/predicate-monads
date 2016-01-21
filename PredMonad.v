@@ -1,7 +1,6 @@
 
 Require Import Coq.Program.Basics.
-
-Load Monad.
+Require Import PredMonad.Monad.
 
 
 (***
