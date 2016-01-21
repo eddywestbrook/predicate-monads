@@ -7,62 +7,71 @@ Require Import PredMonad.Monad.
  *** The State Monad
  ***)
 
-(* StateT itself *)
-Definition StateT (S:Type) (M: Type -> Type) (X:Type) := S -> M (prod S X).
+Section StateT.
 
-Instance StateT_MonadOps S {EqS:EqualsOp S} `{MonadOps} : MonadOps (StateT S M) :=
+Context (S:Type).
+
+(* Helper definition for forming disginguished equalities over (S * A) *)
+Local Instance S_EqualsOp (S:Type) `{EqualsOp} : EqualsOp (prod S A) :=
+  Pair_EqualsOp S A (EqOp_A:=Eq_EqualsOp S).
+Local Instance S_Equals (S:Type) `{Equals} : Equals (prod S A) :=
+  Pair_Equals S A (Eq_A:=Eq_Equals S).
+
+(* StateT itself *)
+Definition StateT (M: Type -> Type) (X:Type) := S -> M (prod S X).
+
+Instance StateT_MonadOps `{MonadOps} : MonadOps (StateT M) :=
   {returnM :=
      fun A x => fun s => returnM (s, x);
    bindM :=
      fun A B m f =>
        fun s => bindM (m s) (fun (sx:S * A) => let (s',x) := sx in f x s');
    equalsM :=
-     fun {A} {LR} m1 m2 => forall s, equalsM (m1 s) (m2 s) }.
+     fun {A} {EqualsOp} m1 m2 =>
+       forall s, equalsM (m1 s) (m2 s) }.
 
 
 (* The Monad instance for StateT *)
-Instance StateT_Monad S `{LogRel S} `{Monad} : Monad (StateT S M).
+Instance StateT_Monad `{Monad} : Monad (StateT M).
   constructor; simpl; intros.
 
   intro; rewrite (monad_return_bind (M:=M));
-    [ reflexivity | auto with typeclass_instances ].
+  try auto with typeclass_instances; reflexivity.
 
-  intro; transitivity (bindM (m s) returnM); [ | apply monad_bind_return ].
-  apply bind_fun_equalsM; intros.
+  intro; transitivity (bindM (m s) returnM);
+  [ | apply monad_bind_return; auto with typeclass_instances ].
+  eapply monad_proper_bind;
+    try auto with typeclass_instances; [ reflexivity | ].
   intros p1 p2 ep; destruct p1; destruct p2.
   apply monad_proper_return; [ auto with typeclass_instances | assumption ].
-  auto with typeclass_instances.
-  destruct x; reflexivity.
-  auto with typeclass_instances.
 
-FIXME HERE
-
-  intro; rewrite monad_assoc.
-  eapply bind_fun_equalsM. intro sx; destruct sx.
-  apply bind_fun_eqM; intro sx; destruct sx.
+  intro; rewrite monad_assoc; try auto with typeclass_instances.
+  apply bind_fun_equalsM; intro sx; destruct sx.
+  apply bind_fun_equalsM; intro sy; destruct sy.
   reflexivity.
-  split; intro; intros; intro; intros.
-  reflexivity.
-  symmetry; apply H0.
-  transitivity (y s); [ apply H0 | apply H1 ].
-  intros m1 m2 em f1 f2 ef s.
-  rewrite (em s).
-  apply bind_fun_eqM; intro sx; destruct sx.
-  apply ef; reflexivity.
 
   constructor; constructor.
   intros m s; reflexivity.
   intros m1 m2 e s; symmetry; apply e.
   intros m1 m2 m3 e1 e2 s; transitivity (m2 s); [ apply e1 | apply e2 ].
 
-  intros x y exy s. apply monad_proper_return.
-  auto with typeclass_instances.
-  split.
-  reflexivity.
-  assumption.
+  intros x y exy s;
+    apply monad_proper_return; [ auto with typeclass_instances | ].
+  split; [ reflexivity | assumption ].
 
+  intros m1 m2 em f1 f2 ef s.
+  eapply monad_proper_bind; try auto with typeclass_instances.
+  intros sx1 sx2 esx.
+  destruct sx1; destruct sx2; destruct esx as [esx1 esx2].
+  unfold fst in esx1; rewrite esx1.
+  eapply ef.
+  assumption.
 Qed.
 
+End StateT.
+
+
+FIXME HERE
 
 (* The stateful computations class(es) *)
 

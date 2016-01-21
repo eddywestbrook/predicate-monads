@@ -15,7 +15,7 @@ Polymorphic Class EqualsOp@{c} (A : Type@{c}) : Type :=
   equals : A -> A -> Prop.
 
 (* Distinguished equalities must be equivalences *)
-Polymorphic Class Equals@{c} (A : Type@{c}) `{Eq:EqualsOp@{c} A} : Prop :=
+Polymorphic Class Equals@{c} (A : Type@{c}) `{EqOp:EqualsOp@{c} A} : Prop :=
   { equals_equivalence :> Equivalence equals }.
 
 Notation "x '==' y" := (equals x y) (at level 80, no associativity).
@@ -25,21 +25,29 @@ Notation "x '==' y" := (equals x y) (at level 80, no associativity).
  *** Equality Instances
  ***)
 
+(* Provable equality can be used as an instance of Equals, but we only give the
+definitions here, and do not declare them as instances, in case it is not *the*
+distinguished equality of a given type. *)
+Polymorphic Definition Eq_EqualsOp (A:Type) : EqualsOp A := eq.
+Polymorphic Definition Eq_Equals (A:Type) : Equals A (EqOp:=Eq_EqualsOp A).
+  repeat constructor; unfold equals, Eq_EqualsOp; auto with typeclass_instances.
+Qed.
+
 (* Equality on pairs = equality on the two components *)
 Polymorphic Instance Pair_EqualsOp (A B: Type)
-            `{EqualsOp A} `{EqualsOp B} : EqualsOp (A*B) :=
+            {EqOp_A:EqualsOp A} `{EqOp_B:EqualsOp B} : EqualsOp (A*B) :=
   fun p1 p2 => equals (fst p1) (fst p2) /\ equals (snd p1) (snd p2).
 
 (* Pair equality is a valid equality *)
 Polymorphic Instance Pair_Equals (A B: Type)
-            `{Equals A} `{Equals B} : Equals (A*B).
+            `{Eq_A:Equals A} `{Eq_B:Equals B} : Equals (A*B).
   repeat constructor.
   reflexivity.
   reflexivity.
-  destruct H1; symmetry; assumption.
-  destruct H1; symmetry; assumption.
-  destruct H1; destruct H2; transitivity (fst y); assumption.
-  destruct H1; destruct H2; transitivity (snd y); assumption.
+  destruct H; symmetry; assumption.
+  destruct H; symmetry; assumption.
+  destruct H; destruct H0; transitivity (fst y); assumption.
+  destruct H; destruct H0; transitivity (snd y); assumption.
 Qed.
 
 

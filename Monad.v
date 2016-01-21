@@ -10,23 +10,24 @@ Require Export PredMonad.LogicalRelations.
 Polymorphic Class MonadOps@{d c} (M : Type@{d} -> Type@{c}) : Type :=
   { returnM : forall {A : Type@{d}}, A -> M A;
     bindM : forall {A B : Type@{d}}, M A -> (A -> M B) -> M B;
-    equalsM :> forall {A : Type@{d}} `{EqualsOp A}, EqualsOp (M A) }.
+    equalsM :> forall {A : Type@{d}} {EqOp:EqualsOp A}, EqualsOp (M A) }.
 
 Polymorphic Class Monad@{d c} (M : Type@{d} -> Type@{c})
             {MonadOps:MonadOps@{d c} M} : Prop :=
   {
     monad_return_bind :
-      forall (A B:Type@{d}) `{Equals B} x (f:A -> M B),
+      forall (A B:Type@{d}) `{Equals A} `{Equals B} x (f:A -> M B),
         bindM (returnM x) f == f x;
     monad_bind_return :
-      forall (A:Type@{d}) (m:M A) `{Equals A},
+      forall (A:Type@{d}) `{Equals A} (m:M A),
         bindM m returnM == m;
     monad_assoc :
-      forall (A B C:Type@{d}) `{Equals C} m (f:A -> M B) (g:B -> M C),
+      forall (A B C:Type@{d}) `{Equals A} `{Equals B} `{Equals C}
+             m (f:A -> M B) (g:B -> M C),
         bindM (bindM m f) g == bindM m (fun x => bindM (f x) g);
     monad_equalsM :>
       forall (A:Type@{d}) `{Equals A},
-        Equals _ (Eq:=equalsM);
+        Equals _ (EqOp:=equalsM);
     monad_proper_return :>
       forall (A:Type@{d}) `{Equals A},
         Proper (equals ==> equalsM) returnM;
@@ -59,6 +60,14 @@ Instance equalsM_Transitive `{Monad} `{Equals} : Transitive (equalsM (A:=A)).
   auto with typeclass_instances.
 Qed.
 
+Add Parametric Relation `{Monad} `{Equals} : (M A) equalsM
+    reflexivity proved by equalsM_Reflexive
+    symmetry proved by equalsM_Symmetric
+    transitivity proved by equalsM_Transitive
+as equalsM_Equivalence2.
+
+
+
 Polymorphic Instance equalsM_equals_iff_Proper `{Monad} `{Equals} :
   Proper (equals ==> equals ==> iff) equalsM.
 intros m11 m12 e1 m21 m22 e2; split; intros.
@@ -74,16 +83,13 @@ transitivity m12; [ assumption |
                     transitivity m22; try assumption; symmetry; assumption ].
 Qed.
 
-Lemma bind_fun_equalsM `{Monad}
-            {A B:Type} `{Equals (A:=A)} `{Equals (A:=B)}
-            m (f1 f2:A -> M B) :
-  Proper (equals ==> equalsM) f1 -> Proper (equals ==> equalsM) f2 ->
+Lemma bind_fun_equalsM `{Monad} {A B:Type}
+      `{Equals A} `{Equals B} m (f1 f2:A -> M B) :
   (forall x, f1 x == f2 x) -> bindM m f1 == bindM m f2.
-intros proper1 proper2 e; apply (monad_proper_bind A B); [ reflexivity | ].
-intros x y e'.
-transitivity (f1 y).
-apply proper1; assumption.
-apply e.
+intros e; apply (monad_proper_bind A B (H:=Eq_Equals A) m m).
+(* FIXME: why does this not work? reflexivity. *)
+eapply (equalsM_Reflexive (H0:=Eq_Equals A)).
+intros x y exy. rewrite exy. apply e.
 Qed.
 
 
