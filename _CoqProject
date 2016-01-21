@@ -1,5 +1,5 @@
 -Q . PredMonad
-
+./LogicalRelations.v
 ./Monad.v
 ./MonadState.v
 ./PredMonad.v

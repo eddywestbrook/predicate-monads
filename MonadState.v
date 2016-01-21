@@ -1,4 +1,5 @@
 
+Add LoadPath "." as PredMonad.
 Require Import PredMonad.Monad.
 
 
@@ -9,7 +10,7 @@ Require Import PredMonad.Monad.
 (* StateT itself *)
 Definition StateT (S:Type) (M: Type -> Type) (X:Type) := S -> M (prod S X).
 
-Instance StateT_MonadOps S {LRS:LogRel_Rel S} `{MonadOps} : MonadOps (StateT S M) :=
+Instance StateT_MonadOps S {EqS:EqualsOp S} `{MonadOps} : MonadOps (StateT S M) :=
   {returnM :=
      fun A x => fun s => returnM (s, x);
    bindM :=

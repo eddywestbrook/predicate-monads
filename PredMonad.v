@@ -1,42 +1,29 @@
 
-Require Import Coq.Program.Basics.
-Require Import PredMonad.Monad.
+Add LoadPath "." as PredMonad.
+Require Export PredMonad.Monad.
 
 
 (***
- *** The Predicate Monad Operations
+ *** The Predicate Monad Class
  ***)
 
-Section PredMonad_ops.
-
-Context (M: Type -> Type) (PM : Type -> Type).
-
-(* The satisfaction relation between computations and monadic predicates *)
-Class PredMonadSatisfaction : Type :=
-  satisfiesP : forall {A}, M A -> PM A -> Prop.
+(* FIXME: the universe constraints on M and PM could be different...? *)
+Polymorphic Class PredMonadOps@{d c}
+            (M: Type@{d} -> Type@{c}) (PM : Type@{d} -> Type@{c}) :=
+  { forallP: forall {A B: Type@{d}}, (A -> PM B) -> PM B;
+    existsP: forall {A B: Type@{d}}, (A -> PM B) -> PM B;
+    impliesP: forall {A: Type@{d}}, PM A -> PM A -> PM A;
+    satisfiesP:
+      forall {A Ap: Type@{d}} `{LogRelOp A Ap},
+        LogRelOp (M A) (PM Ap);
+    entailsP:
+      forall {A: Type@{d}}, PM A -> PM A -> Prop
+  }.
 
 (* Notation for satisfaction *)
 Infix "|=" := satisfiesP (at level 80).
 
-(* The quantifiers, which correspond to lattice meet and join, respectively *)
-Class PredMonadForall : Type :=
-  forallP : forall {A B}, (A -> PM B) -> PM B.
-Class PredMonadExists : Type :=
-  existsP : forall {A B}, (A -> PM B) -> PM B.
-
-(* Implication, which will form a Heyting Algebra, below *)
-Class PredMonadImplication : Type :=
-  impliesP : forall {A}, PM A -> PM A -> PM A.
-
-End PredMonad_ops.
-
-Arguments satisfiesP {_ _ _ _} m P.
-Arguments impliesP {_ _ _} P1 P2.
-Arguments forallP {_ _ _ _} Q.
-Arguments existsP {_ _ _ _} Q.
-
-(* Re-declaring notation outside the section *)
-Infix "|=" := satisfiesP (at level 80).
+FIXME HERE
 
 
 (***
