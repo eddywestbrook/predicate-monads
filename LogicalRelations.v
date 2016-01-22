@@ -33,6 +33,16 @@ Polymorphic Definition Eq_Equals (A:Type) : Equals A (EqOp:=Eq_EqualsOp A).
   repeat constructor; unfold equals, Eq_EqualsOp; auto with typeclass_instances.
 Qed.
 
+(* Equality on the unit type is the only thing it could be *)
+Polymorphic Instance Unit_EqualsOp : EqualsOp unit :=
+  fun p1 p2 => True.
+
+(* Unit equality is a valid equality *)
+Polymorphic Instance Unit_Equals : Equals unit.
+  repeat constructor.
+Qed.
+
+
 (* Equality on pairs = equality on the two components *)
 Polymorphic Instance Pair_EqualsOp (A B: Type)
             {EqOp_A:EqualsOp A} `{EqOp_B:EqualsOp B} : EqualsOp (A*B) :=

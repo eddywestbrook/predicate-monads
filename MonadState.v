@@ -1,17 +1,49 @@
 
 Add LoadPath "." as PredMonad.
-Require Import PredMonad.Monad.
+Require Export PredMonad.Monad.
 
 
 (***
- *** The State Monad
+ *** Monads with State Effects
+ ***)
+
+(* State effects = get and put *)
+Polymorphic Class MonadStateOps (S:Type) (M:Type -> Type) : Type :=
+  {
+    getM : M S;
+    putM : S -> M unit
+  }.
+
+Polymorphic Class MonadState S `{Eq_S:Equals S} `{MonadOps}
+            `{MonadStateOps S M}
+            `{EqualsOp unit} (* FIXME: this should not be needed!  *)
+: Prop :=
+  {
+    monad_state_monad :> Monad M;
+    monad_state_get_get :
+      forall A `{Eq_A:Equals A} f,
+        bindM getM (fun s => bindM getM (f s)) ==
+        (bindM getM (fun s => f s s) : M A);
+    monad_state_get_put : bindM getM putM == returnM tt;
+    monad_state_put_get :
+      forall s, bindM (putM s) (fun _ => getM) ==
+                bindM (putM s) (fun _ => returnM s);
+    monad_state_put_put :
+      forall s1 s2, bindM (putM s1) (fun _ => putM s2) == putM s2
+  }.
+
+
+(***
+ *** The State Monad Transformer
  ***)
 
 Section StateT.
 
 Context (S:Type).
 
-(* Helper definition for forming disginguished equalities over (S * A) *)
+(* NOTE: StateT requires that propositional equality, eq, be used as the
+distinguished equality for the state type, S. Otherwise, we need to restrict
+StateT to only contain Proper functions from S, which seems like a pain. *)
 Local Instance S_EqualsOp (S:Type) `{EqualsOp} : EqualsOp (prod S A) :=
   Pair_EqualsOp S A (EqOp_A:=Eq_EqualsOp S).
 Local Instance S_Equals (S:Type) `{Equals} : Equals (prod S A) :=
@@ -71,29 +103,7 @@ Qed.
 End StateT.
 
 
-FIXME HERE
-
-(* The stateful computations class(es) *)
-
-Class MonadGet (S:Type) (M:Type -> Type) : Type := getM : M S.
-Class MonadPut (S:Type) (M:Type -> Type) : Type := putM : S -> M unit.
-
-Class MonadState S M {MonadRet:MonadRet M} {MonadBind:MonadBind M}
-      {MonadEquiv:MonadEquiv M} {MonadGet:MonadGet S M} {MonadPut:MonadPut S M}
-: Prop :=
-  {
-    monad_state_monad : @Monad M MonadRet MonadBind MonadEquiv;
-    monad_state_get_get :
-      forall A f,
-        bindM getM (fun s => bindM getM (f s)) ==
-        (bindM getM (fun s => f s s) : M A);
-    monad_state_get_put : bindM getM putM == returnM tt;
-    monad_state_put_get :
-      forall s, bindM (putM s) (fun _ => getM) ==
-                bindM (putM s) (fun _ => returnM s);
-    monad_state_put_put :
-      forall s1 s2, bindM (putM s1) (fun _ => putM s2) == putM s2
-  }.
+FIXME HERE: update this MonadState instance
 
 (* The MonadState instance for StateT *)
 

@@ -42,6 +42,12 @@ Polymorphic Class Monad@{d c} (M : Type@{d} -> Type@{c})
  *** Helper theorems about monads
  ***)
 
+(* If we have a monad and an Equals for A, we have an Equals for M A. *)
+Instance equalsM_EqualsOp `{MonadOps} `{EqualsOp} : EqualsOp (M A) :=
+  equalsM.
+Instance equalsM_Equals `{Monad} `{Equals} : Equals (M A) :=
+  monad_equalsM _.
+
 (* FIXME: Equivalence and friends are not polymorphic... *)
 Instance equalsM_Equivalence `{Monad} `{Equals} : Equivalence (equalsM (A:=A)).
   apply monad_equalsM; assumption.
