@@ -5,6 +5,63 @@ Require Export Coq.Classes.Morphisms.
 Require Export Coq.Arith.Arith_base.
 Require Export Coq.Relations.Relations.
 
+
+(***
+ *** Distinguished Equalities
+ ***)
+
+(* A distinguished equality for a given type is an equivalence marked as "the"
+equality for that type *)
+Polymorphic Class EqualsOp@{c} (A : Type@{c}) : Type :=
+  equals : A -> A -> Prop.
+
+(* Distinguished equalities must be equivalences *)
+Polymorphic Class Equals@{c} (A : Type@{c}) `{EqOp:EqualsOp@{c} A} : Prop :=
+  { equals_equivalence :> Equivalence equals }.
+
+Notation "x '==' y" := (equals x y) (at level 80, no associativity).
+
+
+(***
+ *** Equality Instances
+ ***)
+
+(* Provable equality can be used as an instance of Equals, but we only give the
+definitions here, and do not declare them as instances, in case it is not *the*
+distinguished equality of a given type. *)
+Polymorphic Definition Eq_EqualsOp (A:Type) : EqualsOp A := eq.
+Polymorphic Definition Eq_Equals (A:Type) : Equals A (EqOp:=Eq_EqualsOp A).
+  repeat constructor; unfold equals, Eq_EqualsOp; auto with typeclass_instances.
+Qed.
+
+(* The equality on the unit type is the only thing it could be *)
+Polymorphic Instance Unit_EqualsOp : EqualsOp unit :=
+  fun p1 p2 => True.
+
+(* The unit equality is a valid equality *)
+Polymorphic Instance Unit_Equals : Equals unit.
+  repeat constructor.
+Qed.
+
+
+(* Equality on pairs = equality on the two components *)
+Polymorphic Instance Pair_EqualsOp (A B: Type)
+            {EqOp_A:EqualsOp A} `{EqOp_B:EqualsOp B} : EqualsOp (A*B) :=
+  fun p1 p2 => equals (fst p1) (fst p2) /\ equals (snd p1) (snd p2).
+
+(* Pair equality is a valid equality *)
+Polymorphic Instance Pair_Equals (A B: Type)
+            `{Eq_A:Equals A} `{Eq_B:Equals B} : Equals (A*B).
+  repeat constructor.
+  reflexivity.
+  reflexivity.
+  symmetry; destruct H; assumption.
+  symmetry; destruct H; assumption.
+  destruct H; destruct H0; transitivity (fst y); assumption.
+  destruct H; destruct H0; transitivity (snd y); assumption.
+Qed.
+
+
 (***
  *** Distinguished Preorders
  ***)
@@ -19,12 +76,15 @@ Polymorphic Class Order@{c} (A : Type@{c}) `{OrdOp:OrderOp@{c} A} : Prop :=
 
 Notation "x '<~' y" := (order x y) (at level 80, no associativity).
 
-(* The distinguished equality for a type is defined by the equivalence relations
-of the distinguished preorder for that type *)
-Polymorphic Definition equals@{c} {A: Type@{c}} `{OrderOp A} : relation A :=
-  fun x y => order x y /\ order y x.
 
-Polymorphic Instance equals_Equivalence (A: Type) `{Order A} : Equivalence equals.
+(***
+ *** Relating Distinguished Preorders and Equalities
+ ***)
+
+(* A preorder can be used to make an equality *)
+Polymorphic Definition EqualsOp_of_OrderOp `{OrderOp} : EqualsOp A :=
+  fun x y => order x y /\ order y x.
+Polymorphic Definition Equals_of_Order `{Order} : @Equals A (EqualsOp_of_OrderOp).
 repeat constructor.
 reflexivity.
 reflexivity.
@@ -34,7 +94,11 @@ destruct H0; destruct H1; transitivity y; assumption.
 destruct H0; destruct H1; transitivity y; assumption.
 Qed.
 
-Notation "x '==' y" := (equals x y) (at level 80, no associativity).
+(* Similarly, an equality can be used as a preorder *)
+Polymorphic Definition OrderOp_of_EqualsOp `{EqualsOp} : OrderOp A := equals.
+Polymorphic Definition Order_of_Equals `{Equals} : @Order A (OrderOp_of_EqualsOp).
+repeat constructor; auto with typeclass_instances.
+Qed.
 
 
 (***
@@ -59,7 +123,7 @@ Polymorphic Instance Unit_Order : Order unit.
 Qed.
 
 
-(* Equality on pairs = equality on the two components *)
+(* The ordering on pairs = ordering on the two components *)
 Polymorphic Instance Pair_OrderOp (A B: Type)
             {OrdOp_A:OrderOp A} `{OrdOp_B:OrderOp B} : OrderOp (A*B) :=
   fun p1 p2 => order (fst p1) (fst p2) /\ order (snd p1) (snd p2).
