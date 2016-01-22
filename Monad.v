@@ -10,30 +10,30 @@ Require Export PredMonad.LogicalRelations.
 Polymorphic Class MonadOps@{d c} (M : Type@{d} -> Type@{c}) : Type :=
   { returnM : forall {A : Type@{d}}, A -> M A;
     bindM : forall {A B : Type@{d}}, M A -> (A -> M B) -> M B;
-    equalsM :> forall {A : Type@{d}} {EqOp:EqualsOp A}, EqualsOp (M A) }.
+    orderM :> forall {A : Type@{d}} {OrdOp:OrderOp A}, OrderOp (M A) }.
 
 Polymorphic Class Monad@{d c} (M : Type@{d} -> Type@{c})
             {MonadOps:MonadOps@{d c} M} : Prop :=
   {
     monad_return_bind :
-      forall (A B:Type@{d}) `{Equals A} `{Equals B} x (f:A -> M B),
+      forall (A B:Type@{d}) `{Order A} `{Order B} x (f:A -> M B),
         bindM (returnM x) f == f x;
     monad_bind_return :
-      forall (A:Type@{d}) `{Equals A} (m:M A),
+      forall (A:Type@{d}) `{Order A} (m:M A),
         bindM m returnM == m;
     monad_assoc :
-      forall (A B C:Type@{d}) `{Equals A} `{Equals B} `{Equals C}
+      forall (A B C:Type@{d}) `{Order A} `{Order B} `{Order C}
              m (f:A -> M B) (g:B -> M C),
         bindM (bindM m f) g == bindM m (fun x => bindM (f x) g);
-    monad_equalsM :>
-      forall (A:Type@{d}) `{Equals A},
-        Equals _ (EqOp:=equalsM);
+    monad_orderM :>
+      forall {A:Type@{d}} `{Order A},
+        Order _ (OrdOp:=orderM);
     monad_proper_return :>
-      forall (A:Type@{d}) `{Equals A},
-        Proper (equals ==> equalsM) returnM;
+      forall (A:Type@{d}) `{Order A},
+        Proper (order ==> orderM) returnM;
     monad_proper_bind :>
-      forall (A B:Type@{d}) `{Equals A} `{Equals B},
-        Proper (equalsM ==> (equals ==> equalsM) ==> equalsM)
+      forall (A B:Type@{d}) `{Order A} `{Order B},
+        Proper (orderM ==> (order ==> orderM) ==> orderM)
                (bindM (A:=A) (B:=B))
   }.
 
@@ -42,12 +42,21 @@ Polymorphic Class Monad@{d c} (M : Type@{d} -> Type@{c})
  *** Helper theorems about monads
  ***)
 
-(* If we have a monad and an Equals for A, we have an Equals for M A. *)
-Instance equalsM_EqualsOp `{MonadOps} `{EqualsOp} : EqualsOp (M A) :=
-  equalsM.
-Instance equalsM_Equals `{Monad} `{Equals} : Equals (M A) :=
-  monad_equalsM _.
+(* If we have a monad and an Order for A, we have an Order for M A. *)
+Instance orderM_OrderOp `{MonadOps} `{OrderOp} : OrderOp (M A) :=
+  orderM.
+Instance orderM_Order `{Monad} `{Order} : Order (M A) :=
+  monad_orderM.
 
+Instance orderM_PreOrder `{Monad} `{Order} : PreOrder (orderM (A:=A)).
+apply monad_orderM.
+Qed.
+
+Instance orderM_Reflexive `{Monad} `{Order} : Reflexive (orderM (A:=A)).
+auto with typeclass_instances.
+Qed.
+
+(*
 (* FIXME: Equivalence and friends are not polymorphic... *)
 Instance equalsM_Equivalence `{Monad} `{Equals} : Equivalence (equalsM (A:=A)).
   apply monad_equalsM; assumption.
@@ -71,9 +80,9 @@ Add Parametric Relation `{Monad} `{Equals} : (M A) equalsM
     symmetry proved by equalsM_Symmetric
     transitivity proved by equalsM_Transitive
 as equalsM_Equivalence2.
+*)
 
-
-
+(*
 Polymorphic Instance equalsM_equals_iff_Proper `{Monad} `{Equals} :
   Proper (equals ==> equals ==> iff) equalsM.
 intros m11 m12 e1 m21 m22 e2; split; intros.
@@ -88,14 +97,17 @@ intros m11 m12 e1 m21 m22 e2 e12.
 transitivity m12; [ assumption |
                     transitivity m22; try assumption; symmetry; assumption ].
 Qed.
+*)
 
 Lemma bind_fun_equalsM `{Monad} {A B:Type}
-      `{Equals A} `{Equals B} m (f1 f2:A -> M B) :
+      `{Order A} `{Order B} m (f1 f2:A -> M B) :
   (forall x, f1 x == f2 x) -> bindM m f1 == bindM m f2.
-intros e; apply (monad_proper_bind A B (H:=Eq_Equals A) m m).
-(* FIXME: why does this not work? reflexivity. *)
-eapply (equalsM_Reflexive (H0:=Eq_Equals A)).
-intros x y exy. rewrite exy. apply e.
+  intros e; split; apply (monad_proper_bind A B (H:=Eq_Order A) m m).
+  (* FIXME: why does the reflexivity tactic not work? *)
+  apply (orderM_Reflexive (H0:=Eq_Order A)).
+  intros x y exy. rewrite exy. apply e.
+  apply (orderM_Reflexive (H0:=Eq_Order A)).
+  intros x y exy. rewrite exy. apply e.
 Qed.
 
 
@@ -107,7 +119,7 @@ Definition Identity (X:Type) := X.
 Instance IdMonad_MonadOps : MonadOps Identity :=
   { returnM := fun A x => x;
     bindM := fun A B m f => f m;
-    equalsM := fun A LR => LR }.
+    orderM := fun A ord => ord }.
 
 Instance IdMonad : Monad Identity.
   constructor; intros; try reflexivity.

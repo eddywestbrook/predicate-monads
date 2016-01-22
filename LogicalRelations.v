@@ -6,56 +6,70 @@ Require Export Coq.Arith.Arith_base.
 Require Export Coq.Relations.Relations.
 
 (***
- *** Distinguished Equalities
+ *** Distinguished Preorders
  ***)
 
-(* A distinguished equality is an equality relation marked as "the" equality
-relation for a given type *)
-Polymorphic Class EqualsOp@{c} (A : Type@{c}) : Type :=
-  equals : A -> A -> Prop.
+(* A distinguished preorder is a preorder marked as "the" preorder for a type *)
+Polymorphic Class OrderOp@{c} (A : Type@{c}) : Type :=
+  order : A -> A -> Prop.
 
-(* Distinguished equalities must be equivalences *)
-Polymorphic Class Equals@{c} (A : Type@{c}) `{EqOp:EqualsOp@{c} A} : Prop :=
-  { equals_equivalence :> Equivalence equals }.
+(* Distinguished preorders must be preorders *)
+Polymorphic Class Order@{c} (A : Type@{c}) `{OrdOp:OrderOp@{c} A} : Prop :=
+  { equals_preorder :> PreOrder order }.
+
+Notation "x '<~' y" := (order x y) (at level 80, no associativity).
+
+(* The distinguished equality for a type is defined by the equivalence relations
+of the distinguished preorder for that type *)
+Polymorphic Definition equals@{c} {A: Type@{c}} `{OrderOp A} : relation A :=
+  fun x y => order x y /\ order y x.
+
+Polymorphic Instance equals_Equivalence (A: Type) `{Order A} : Equivalence equals.
+repeat constructor.
+reflexivity.
+reflexivity.
+destruct H0; assumption.
+destruct H0; assumption.
+destruct H0; destruct H1; transitivity y; assumption.
+destruct H0; destruct H1; transitivity y; assumption.
+Qed.
 
 Notation "x '==' y" := (equals x y) (at level 80, no associativity).
 
 
 (***
- *** Equality Instances
+ *** Order Instances
  ***)
 
-(* Provable equality can be used as an instance of Equals, but we only give the
+(* Provable equality can be used as an instance of Order, but we only give the
 definitions here, and do not declare them as instances, in case it is not *the*
-distinguished equality of a given type. *)
-Polymorphic Definition Eq_EqualsOp (A:Type) : EqualsOp A := eq.
-Polymorphic Definition Eq_Equals (A:Type) : Equals A (EqOp:=Eq_EqualsOp A).
-  repeat constructor; unfold equals, Eq_EqualsOp; auto with typeclass_instances.
+distinguished preorder of a given type. *)
+Polymorphic Definition Eq_OrderOp (A:Type) : OrderOp A := eq.
+Polymorphic Definition Eq_Order (A:Type) : Order A (OrdOp:=Eq_OrderOp A).
+  repeat constructor; unfold order, Eq_OrderOp; auto with typeclass_instances.
 Qed.
 
-(* Equality on the unit type is the only thing it could be *)
-Polymorphic Instance Unit_EqualsOp : EqualsOp unit :=
+(* The preorder on the unit type is the only thing it could be *)
+Polymorphic Instance Unit_OrderOp : OrderOp unit :=
   fun p1 p2 => True.
 
-(* Unit equality is a valid equality *)
-Polymorphic Instance Unit_Equals : Equals unit.
+(* The unit preorder is a valid preorder *)
+Polymorphic Instance Unit_Order : Order unit.
   repeat constructor.
 Qed.
 
 
 (* Equality on pairs = equality on the two components *)
-Polymorphic Instance Pair_EqualsOp (A B: Type)
-            {EqOp_A:EqualsOp A} `{EqOp_B:EqualsOp B} : EqualsOp (A*B) :=
-  fun p1 p2 => equals (fst p1) (fst p2) /\ equals (snd p1) (snd p2).
+Polymorphic Instance Pair_OrderOp (A B: Type)
+            {OrdOp_A:OrderOp A} `{OrdOp_B:OrderOp B} : OrderOp (A*B) :=
+  fun p1 p2 => order (fst p1) (fst p2) /\ order (snd p1) (snd p2).
 
 (* Pair equality is a valid equality *)
-Polymorphic Instance Pair_Equals (A B: Type)
-            `{Eq_A:Equals A} `{Eq_B:Equals B} : Equals (A*B).
+Polymorphic Instance Pair_Order (A B: Type)
+            `{Ord_A:Order A} `{Ord_B:Order B} : Order (A*B).
   repeat constructor.
   reflexivity.
   reflexivity.
-  destruct H; symmetry; assumption.
-  destruct H; symmetry; assumption.
   destruct H; destruct H0; transitivity (fst y); assumption.
   destruct H; destruct H0; transitivity (snd y); assumption.
 Qed.
@@ -66,17 +80,17 @@ Qed.
  ***)
 
 (* A logical relation is a relation between two types that respects the
-distinguished equalities of those two types; i.e., it is a morphism in the
-category of equality relations. *)
+distinguished preorders of those two types; i.e., it is a morphism in the
+category of preorders. *)
 Polymorphic Class LogRelOp@{c} (A B : Type@{c}) : Type :=
   relLR : A -> B -> Prop.
 
 (* The propositional part of a logical relation *)
 Polymorphic Class LogRel@{c} (A B : Type@{c})
-            `{EqA:Equals A} `{EqB:Equals B} `{LR:LogRelOp A B} : Prop :=
-  { logrel_proper :> Proper (equals ==> equals ==> iff) (relLR (A:=A) (B:=B)) }.
+            `{OrdA:Order A} `{OrdB:Order B} `{LR:LogRelOp A B} : Prop :=
+  { logrel_proper :> Proper (order ==> order ==> iff) (relLR (A:=A) (B:=B)) }.
 
-Notation "x '~~' y" := (relLR x y) (at level 80, no associativity).
+(* Notation "x '~~' y" := (relLR x y) (at level 80, no associativity). *)
 
 
 (* equals respects itself *)
@@ -95,6 +109,8 @@ Qed.
 (***
  *** Logical Relations
  ***)
+
+(*
 
 (* The identity logical relation, between a type and itself, is just the type's
 distinguished equality *)
@@ -124,3 +140,4 @@ rewrite e1_1; rewrite e2_1; assumption.
 rewrite e1_2; rewrite e2_2; assumption.
 Qed.
 
+*)
