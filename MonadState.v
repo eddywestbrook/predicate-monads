@@ -14,14 +14,14 @@ Polymorphic Class MonadStateOps (S:Type) (M:Type -> Type) : Type :=
     putM : S -> M unit
   }.
 
-Polymorphic Class MonadState S `{Eq_S:Equals S} `{MonadOps}
+Polymorphic Class MonadState S `{Ord_S:Order S} `{MonadOps}
             `{MonadStateOps S M}
-            `{EqualsOp unit} (* FIXME: this should not be needed!  *)
+            `{OrderOp unit} (* FIXME: this should not be needed!  *)
 : Prop :=
   {
     monad_state_monad :> Monad M;
     monad_state_get_get :
-      forall A `{Eq_A:Equals A} f,
+      forall A `{Ord_A:Order A} f,
         bindM getM (fun s => bindM getM (f s)) ==
         (bindM getM (fun s => f s s) : M A);
     monad_state_get_put : bindM getM putM == returnM tt;
@@ -44,10 +44,10 @@ Context (S:Type).
 (* NOTE: StateT requires that propositional equality, eq, be used as the
 distinguished equality for the state type, S. Otherwise, we need to restrict
 StateT to only contain Proper functions from S, which seems like a pain. *)
-Local Instance S_EqualsOp (S:Type) `{EqualsOp} : EqualsOp (prod S A) :=
-  Pair_EqualsOp S A (EqOp_A:=Eq_EqualsOp S).
-Local Instance S_Equals (S:Type) `{Equals} : Equals (prod S A) :=
-  Pair_Equals S A (Eq_A:=Eq_Equals S).
+Local Instance S_OrderOp (S:Type) `{OrderOp} : OrderOp (prod S A) :=
+  Pair_OrderOp S A (OrdOp_A:=Eq_OrderOp S).
+Local Instance S_Order (S:Type) `{Order} : Order (prod S A) :=
+  Pair_Order S A (Ord_A:=Eq_Order S).
 
 (* StateT itself *)
 Definition StateT (M: Type -> Type) (X:Type) := S -> M (prod S X).
@@ -58,10 +58,12 @@ Instance StateT_MonadOps `{MonadOps} : MonadOps (StateT M) :=
    bindM :=
      fun A B m f =>
        fun s => bindM (m s) (fun (sx:S * A) => let (s',x) := sx in f x s');
-   equalsM :=
-     fun {A} {EqualsOp} m1 m2 =>
-       forall s, equalsM (m1 s) (m2 s) }.
+   orderM :=
+     fun {A} {OrderOp} m1 m2 =>
+       forall s, orderM (m1 s) (m2 s) }.
 
+FIXME: the following worked for equalsM and the Equals class, but now has
+to be updated for orderM and the Order class
 
 (* The Monad instance for StateT *)
 Instance StateT_Monad `{Monad} : Monad (StateT M).
