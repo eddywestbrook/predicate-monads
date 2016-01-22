@@ -11,17 +11,98 @@ Require Export PredMonad.Monad.
 Polymorphic Class PredMonadOps@{d c}
             (M: Type@{d} -> Type@{c}) (PM : Type@{d} -> Type@{c}) :=
   { forallP: forall {A B: Type@{d}}, (A -> PM B) -> PM B;
-    existsP: forall {A B: Type@{d}}, (A -> PM B) -> PM B;
+    (* existsP: forall {A B: Type@{d}}, (A -> PM B) -> PM B; *)
+    orP: forall {A: Type@{d}}, PM A -> PM A -> PM A;
     impliesP: forall {A: Type@{d}}, PM A -> PM A -> PM A;
-    satisfiesP:
-      forall {A Ap: Type@{d}} `{LogRelOp A Ap},
-        LogRelOp (M A) (PM Ap);
-    entailsP:
-      forall {A: Type@{d}}, PM A -> PM A -> Prop
+    assertP: forall {A: Type@{d}}, Prop -> PM A;
+    liftP: forall {A: Type@{d}}, M A -> PM A;
+    entailsP: forall {A: Type@{d}} `{Order A}, relation (PM A)
   }.
+
+Polymorphic Definition andP@{d c}
+            {M: Type@{d} -> Type@{c}} {PM : Type@{d} -> Type@{c}}
+            `{PredMonadOps M PM} {A:Type@{d}} (P1 P2: PM A) : PM A :=
+  forallP (fun b:bool => if b then P1 else P2).
+
+Polymorphic Class PredMonad@{d c}
+            (M: Type@{d} -> Type@{c}) (PM : Type@{d} -> Type@{c})
+            `{PredMonadOps M PM} `{MonadOps M} `{MonadOps PM} : Prop :=
+  {
+    (* Both M and PM must be monads *)
+    predmonad_monad_M :> Monad M;
+    predmonad_monad_PM :> Monad PM;
+
+    (* Entailment should be a preorder whose symmetric closure is the
+    distinguished equality on PM *)
+    predmonad_entailsP_preorder
+      (A:Type@{d}) `{Order A} :> PreOrder (entailsP (A:=A));
+    predmonad_entailsP_equalsM (A:Type@{d}) `{Order A} (P1 P2: PM A) :
+      P1 == P2 <-> (entailsP P1 P2 /\ entailsP P2 P1);
+
+    (* forallP is a complete meet operator. The laws for it being a lower bound
+    and the greatest lower bound actually correspond to forall-elimination and
+    forall-introduction rules, respectively. *)
+    predmonad_forallP_elim :
+      forall {A B:Type@{d}} `{Order B} (f: A -> PM B) a,
+        entailsP (forallP f) (f a);
+    predmonad_forallP_intro :
+      forall {A B:Type@{d}} `{Order B} (f: A -> PM B) P,
+        (forall a, entailsP P (f a)) -> entailsP P (forallP f);
+
+    (* orP is a binary join operator, the laws for which actually corresond to
+    the standard or-introduction and or-elimination rules. *)
+    predmonad_orP_intro1 :
+      forall {A:Type@{d}} `{Order A} (P1 P2: PM A),
+        entailsP P1 (orP P1 P2);
+    predmonad_orP_intro2 :
+      forall {A:Type@{d}} `{Order A} (P1 P2: PM A),
+        entailsP P2 (orP P1 P2);
+    predmonad_orP_elim :
+      forall {A:Type@{d}} `{Order A} (P1 P2 P: PM A),
+        entailsP P1 P -> entailsP P2 P ->
+        entailsP (orP P1 P2) P;
+
+    (* impliesP is a right adjoint to andP, the laws for which correspond to
+    implication introduction and generalization of implication elimination
+    (where taking P1 = (impliesP P2 P3) yields the standard elimination rule) *)
+    predmonad_impliesP_intro :
+      forall {A:Type@{d}} `{Order A} (P1 P2 P3: PM A),
+        entailsP (andP P1 P2) P3 -> entailsP P1 (impliesP P2 P3);
+    predmonad_impliesP_elim :
+      forall {A:Type@{d}} `{Order A} (P1 P2 P3: PM A),
+        entailsP P1 (impliesP P2 P3) -> entailsP (andP P1 P2) P3;
+
+    (* Introduction and elimination rules for assertP *)
+    predmonad_assertP_intro :
+      forall {A:Type@{d}} `{Order A} (P:PM A),
+        entailsP P (assertP True);
+    predmonad_assertP_elim :
+      forall {A:Type@{d}} `{Order A} (P:PM A) (Pr:Prop),
+        (Pr -> entailsP (assertP True) P) ->
+        entailsP (assertP Pr) P;
+
+    (* laws about liftP *)
+    predmonad_liftP_return :
+      forall {A:Type@{d}} `{Order A} (x:A),
+        liftP (returnM x) == returnM x;
+    predmonad_liftP_bind :
+      forall {A B:Type@{d}} `{Order A} `{Order B} m (f:A -> M B),
+        liftP (bindM m f) == bindM (liftP m) (fun x => liftP (f x));
+
+    (* FIXME: need laws about how the combinators interact *)
+
+    (* FIXME: need laws about proper-ness *)
+  }.
+
+
+(* We define m |= P as holding iff (liftP m) entails P *)
+Polymorphic Definition satisfiesP `{PredMonad} `{Order} (m:M A) (P:PM A) :=
+  entailsP (liftP m) P.
 
 (* Notation for satisfaction *)
 Infix "|=" := satisfiesP (at level 80).
+
+
 
 FIXME HERE
 
