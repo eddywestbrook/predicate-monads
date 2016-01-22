@@ -81,10 +81,12 @@ Notation "x '<~' y" := (order x y) (at level 80, no associativity).
  *** Relating Distinguished Preorders and Equalities
  ***)
 
-(* A preorder can be used to make an equality *)
-Polymorphic Definition EqualsOp_of_OrderOp `{OrderOp} : EqualsOp A :=
+(* If we have a distinguished preorder on a type, we want its distinguished
+equality to be the one that is induced by that preorder. Note: we give this a
+low priority, however, to favor other equality constructions. *)
+Polymorphic Instance Order_EqualsOp `{OrderOp} : EqualsOp A | 5 :=
   fun x y => order x y /\ order y x.
-Polymorphic Definition Equals_of_Order `{Order} : @Equals A (EqualsOp_of_OrderOp).
+Polymorphic Instance Order_Equals `{Order} : Equals A | 5.
 repeat constructor.
 reflexivity.
 reflexivity.
@@ -94,7 +96,8 @@ destruct H0; destruct H1; transitivity y; assumption.
 destruct H0; destruct H1; transitivity y; assumption.
 Qed.
 
-(* Similarly, an equality can be used as a preorder *)
+(* Similarly, an equality can be used as a preorder, but we don't generally want
+this to be *the* preorder of a type *)
 Polymorphic Definition OrderOp_of_EqualsOp `{EqualsOp} : OrderOp A := equals.
 Polymorphic Definition Order_of_Equals `{Equals} : @Order A (OrderOp_of_EqualsOp).
 repeat constructor; auto with typeclass_instances.
