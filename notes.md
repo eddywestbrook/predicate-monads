@@ -1,3 +1,5 @@
+== denotes a setoid equality. We will assume that all values are Proper with respect to this relation, including function types.
+
 Monad m
 -------
  bindM   : m a -> (a -> m b) -> m b
@@ -35,4 +37,3 @@ StateMonad S m
 
  bindM get put = returnM ()
  bindM (put x) (fun _ => get) = bindM (put x) (fun _ => returnM x)
- 
