@@ -464,7 +464,7 @@ Proof.
   - admit.
   - intros. admit. (* How is this provable? *)
   - 
-
+(*
   unfold returnMeqM, SetM_eqM, IdMonad_eqM.
          bindM, SetM_bindM, IdMonad_bindM,
          satisfiesP, SetM_satisfiesP, forallP, SetM_forallP,
@@ -484,7 +484,8 @@ Proof.
   rewrite H; reflexivity.
   split; apply H; intros; assumption.
   intros x1 x2 ex m1 m2 em; rewrite ex; rewrite em; reflexivity.
-Qed.
+*)
+Abort.
 
 
 End IdentityPredMonad.
