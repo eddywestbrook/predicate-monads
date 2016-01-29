@@ -461,7 +461,10 @@ Instance SetM_PredMonadOps : PredMonadOps Identity SetM :=
 Instance SetM_PredMonad : PredMonad Identity SetM.
 Proof.
   constructor; eauto with typeclass_instances.
-  - Print Order.
+  - admit.
+  - intros. admit. (* How is this provable? *)
+  - 
+
   unfold returnMeqM, SetM_eqM, IdMonad_eqM.
          bindM, SetM_bindM, IdMonad_bindM,
          satisfiesP, SetM_satisfiesP, forallP, SetM_forallP,
