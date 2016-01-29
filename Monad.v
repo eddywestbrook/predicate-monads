@@ -1,39 +1,37 @@
-
-Add LoadPath "." as PredMonad.
+Require Import Coq.Setoids.Setoid.
 Require Export PredMonad.LogicalRelations.
-
 
 (***
  *** The monad typeclass
  ***)
 
-Polymorphic Class MonadOps@{d c} (M : Type@{d} -> Type@{c}) : Type :=
-  { returnM : forall {A : Type@{d}}, A -> M A;
-    bindM : forall {A B : Type@{d}}, M A -> (A -> M B) -> M B;
-    equalsM :> forall {A : Type@{d}} {EqOp:EqualsOp A}, EqualsOp (M A) }.
+Class MonadOps (M : Type -> Type) : Type :=
+  { returnM : forall {A : Type}, A -> M A;
+    bindM : forall {A B : Type}, M A -> (A -> M B) -> M B;
+    equalsM :> forall {A : Type} {EqOp:EqualsOp A}, EqualsOp (M A) }.
 
-Polymorphic Class Monad@{d c} (M : Type@{d} -> Type@{c})
-            {MonadOps:MonadOps@{d c} M} : Prop :=
+Class Monad (M : Type -> Type)
+            {MonadOps:MonadOps M} : Prop :=
   {
     monad_return_bind :
-      forall (A B:Type@{d}) `{Equals A} `{Equals B} x (f:A -> M B),
+      forall (A B:Type) `{Equals A} `{Equals B} x (f:A -> M B),
         bindM (returnM x) f == f x;
     monad_bind_return :
-      forall (A:Type@{d}) `{Equals A} (m:M A),
+      forall (A:Type) `{Equals A} (m:M A),
         bindM m returnM == m;
     monad_assoc :
-      forall (A B C:Type@{d}) `{Equals A} `{Equals B} `{Equals C}
+      forall (A B C:Type) `{Equals A} `{Equals B} `{Equals C}
              m (f:A -> M B) (g:B -> M C),
         bindM (bindM m f) g == bindM m (fun x => bindM (f x) g);
     monad_equalsM :>
-      forall {A:Type@{d}} `{Equals A},
+      forall {A:Type} `{Equals A},
         Equals _ (EqOp:=equalsM);
     monad_proper_return :>
-      forall (A:Type@{d}) `{Equals A},
+      forall (A:Type) `{Equals A},
         Proper (equals ==> equalsM) returnM;
     monad_proper_bind :>
-      forall (A B:Type@{d}) `{Equals A} `{Equals B},
-        Proper (equalsM ==> (equals ==> equalsM) ==> equalsM)
+      forall (A B:Type) `{Equals A} `{Equals B},
+        Proper (equals ==> (equals ==> equals) ==> equals)
                (bindM (A:=A) (B:=B))
   }.
 
@@ -66,7 +64,7 @@ Add Parametric Relation `{Monad} `{Equals} : (M A) equalsM
     transitivity proved by equalsM_Transitive
 as equalsM_Equivalence2.
 
-Polymorphic Instance equalsM_equals_iff_Proper `{Monad} `{Equals} :
+Instance equalsM_equals_iff_Proper `{Monad} `{Equals} :
   Proper (equals ==> equals ==> iff) equalsM.
 intros m11 m12 e1 m21 m22 e2; split; intros.
 transitivity m11; [ symmetry; assumption | transitivity m21; assumption ].
@@ -74,7 +72,7 @@ transitivity m12; [ assumption |
                     transitivity m22; try assumption; symmetry; assumption ].
 Qed.
 
-Polymorphic Instance equalsM_equals_impl_Proper `{Monad} `{Equals} :
+Instance equalsM_equals_impl_Proper `{Monad} `{Equals} :
   Proper (equals ==> equals ==> Basics.flip Basics.impl) equalsM.
 intros m11 m12 e1 m21 m22 e2 e12.
 transitivity m12; [ assumption |
@@ -84,6 +82,7 @@ Qed.
 Lemma bind_fun_equalsM `{Monad} {A B:Type}
       `{Equals A} `{Equals B} m (f1 f2:A -> M B) :
   (forall x, f1 x == f2 x) -> bindM m f1 == bindM m f2.
+Proof.
   intros e; apply (monad_proper_bind A B (H:=Eq_Equals A) m m).
   (* FIXME: why does the reflexivity tactic not work? *)
   apply (equalsM_Reflexive (H0:=Eq_Equals A)).

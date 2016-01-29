@@ -1,5 +1,3 @@
-
-Add LoadPath "." as PredMonad.
 Require Export PredMonad.Monad.
 
 
@@ -8,22 +6,22 @@ Require Export PredMonad.Monad.
  ***)
 
 (* FIXME: the universe constraints on M and PM could be different...? *)
-Polymorphic Class PredMonadOps@{d c}
-            (M: Type@{d} -> Type@{c}) (PM : Type@{d} -> Type@{c}) :=
-  { forallP: forall {A B: Type@{d}}, (A -> PM B) -> PM B;
-    existsP: forall {A B: Type@{d}}, (A -> PM B) -> PM B;
-    impliesP: forall {A: Type@{d}}, PM A -> PM A -> PM A;
-    liftP: forall {A: Type@{d}}, M A -> PM A;
-    entailsP: forall {A: Type@{d}} `{OrderOp A}, relation (PM A)
+Class PredMonadOps
+            (M: Type -> Type) (PM : Type -> Type) :=
+  { forallP: forall {A B: Type}, (A -> PM B) -> PM B;
+    existsP: forall {A B: Type}, (A -> PM B) -> PM B;
+    impliesP: forall {A: Type}, PM A -> PM A -> PM A;
+    liftP: forall {A: Type}, M A -> PM A;
+    entailsP: forall {A: Type} `{OrderOp A}, relation (PM A)
   }.
 
-Polymorphic Definition andP@{d c}
-            {M: Type@{d} -> Type@{c}} {PM : Type@{d} -> Type@{c}}
-            `{PredMonadOps M PM} {A:Type@{d}} (P1 P2: PM A) : PM A :=
+Definition andP
+            {M: Type -> Type} {PM : Type -> Type}
+            `{PredMonadOps M PM} {A:Type} (P1 P2: PM A) : PM A :=
   forallP (fun b:bool => if b then P1 else P2).
 
-Polymorphic Class PredMonad@{d c}
-            (M: Type@{d} -> Type@{c}) (PM : Type@{d} -> Type@{c})
+Class PredMonad
+            (M: Type -> Type) (PM : Type -> Type)
             `{PredMonadOps M PM} `{MonadOps M} `{MonadOps PM} : Prop :=
   {
     (* Both M and PM must be monads *)
@@ -33,69 +31,69 @@ Polymorphic Class PredMonad@{d c}
     (* Entailment should be a preorder whose symmetric closure is the
     distinguished equality on PM *)
     predmonad_entailsP_preorder
-      (A:Type@{d}) `{Order A} :> PreOrder (entailsP (A:=A));
-    predmonad_entailsP_equalsM {A:Type@{d}} `{Order A} (P1 P2: PM A) :
+      (A:Type) `{Order A} :> PreOrder (entailsP (A:=A));
+    predmonad_entailsP_equalsM {A:Type} `{Order A} (P1 P2: PM A) :
       P1 == P2 <-> (entailsP P1 P2 /\ entailsP P2 P1);
 
     (* forallP is a complete meet operator. The laws for it being a lower bound
     and the greatest lower bound actually correspond to forall-elimination and
     forall-introduction rules, respectively. *)
     predmonad_forallP_elim :
-      forall {A B:Type@{d}} `{Order B} (f: A -> PM B) a,
+      forall {A B:Type} `{Order B} (f: A -> PM B) a,
         entailsP (forallP f) (f a);
     predmonad_forallP_intro :
-      forall {A B:Type@{d}} `{Order B} (f: A -> PM B) P,
+      forall {A B:Type} `{Order B} (f: A -> PM B) P,
         (forall a, entailsP P (f a)) -> entailsP P (forallP f);
 
     (* existsP is a complete join operator. The laws for it being an upper bound
     and the least upper bound actually correspond to exists-introduction and
     exists-elimination rules, respectively. *)
     predmonad_existsP_intro :
-      forall {A B:Type@{d}} `{Order B} (f: A -> PM B) a,
+      forall {A B:Type} `{Order B} (f: A -> PM B) a,
         entailsP (f a) (existsP f);
     predmonad_existsP_elim :
-      forall {A B:Type@{d}} `{Order B} (f: A -> PM B) P,
+      forall {A B:Type} `{Order B} (f: A -> PM B) P,
         (forall a, entailsP (f a) P) -> entailsP (existsP f) P;
 
     (* impliesP is a right adjoint to andP, the laws for which correspond to
     implication introduction and generalization of implication elimination
     (where taking P1 = (impliesP P2 P3) yields the standard elimination rule) *)
     predmonad_impliesP_intro :
-      forall {A:Type@{d}} `{Order A} (P1 P2 P3: PM A),
+      forall {A:Type} `{Order A} (P1 P2 P3: PM A),
         entailsP (andP P1 P2) P3 -> entailsP P1 (impliesP P2 P3);
     predmonad_impliesP_elim :
-      forall {A:Type@{d}} `{Order A} (P1 P2 P3: PM A),
+      forall {A:Type} `{Order A} (P1 P2 P3: PM A),
         entailsP P1 (impliesP P2 P3) -> entailsP (andP P1 P2) P3;
 
     (* Introduction and elimination rules for assertP *)
 (*
     predmonad_assertP_intro :
-      forall {A:Type@{d}} `{Order A} (P:PM A),
+      forall {A:Type} `{Order A} (P:PM A),
         entailsP P (assertP True);
     predmonad_assertP_elim :
-      forall {A:Type@{d}} `{Order A} (P:PM A) (Pr:Prop),
+      forall {A:Type} `{Order A} (P:PM A) (Pr:Prop),
         (Pr -> entailsP (assertP True) P) ->
         entailsP (assertP Pr) P;
 *)
 
     (* laws about liftP *)
     predmonad_liftP_return :
-      forall {A:Type@{d}} `{Order A} (x:A),
+      forall {A:Type} `{Order A} (x:A),
         liftP (returnM x) == returnM x;
     predmonad_liftP_bind :
-      forall {A B:Type@{d}} `{Order A} `{Order B} m (f:A -> M B),
+      forall {A B:Type} `{Order A} `{Order B} m (f:A -> M B),
         liftP (bindM m f) == bindM (liftP m) (fun x => liftP (f x));
 
     (* FIXME: need laws about how the combinators interact *)
 
     (* Laws about the operators being proper *)
-    predmonad_forallP_proper {A B:Type@{d}} `{Order B} :
+    predmonad_forallP_proper {A B:Type} `{Order B} :
       Proper ((@eq A ==> entailsP) ==> entailsP) forallP;
-    predmonad_existsP_proper {A B:Type@{d}} `{Order B} :
+    predmonad_existsP_proper {A B:Type} `{Order B} :
       Proper ((@eq A ==> entailsP) ==> entailsP) existsP;
-    predmonad_impliesP_proper {A:Type@{d}} `{Order A} :
+    predmonad_impliesP_proper {A:Type} `{Order A} :
       Proper (Basics.flip entailsP ==> entailsP ==> entailsP) impliesP;
-    predmonad_liftP_proper {A:Type@{d}} `{Equals A} :
+    predmonad_liftP_proper {A:Type} `{Equals A} :
       Proper (equalsM ==> equalsM) liftP;
   }.
 
@@ -105,28 +103,28 @@ Polymorphic Class PredMonad@{d c}
  ***)
 
 (* We define m |= P as holding iff (liftP m) entails P *)
-Polymorphic Definition satisfiesP `{PredMonad} `{Order} (m:M A) (P:PM A) :=
+Definition satisfiesP `{PredMonad} `{Order} (m:M A) (P:PM A) :=
   entailsP (liftP m) P.
 
 (* Notation for satisfaction *)
 Infix "|=" := satisfiesP (at level 80).
 
 (* Disjunction is definable in terms of the existential *)
-Polymorphic Definition orP `{PredMonadOps} {A} (P1 P2: PM A) : PM A :=
+Definition orP `{PredMonadOps} {A} (P1 P2: PM A) : PM A :=
   existsP (fun b:bool => if b then P1 else P2).
 
 (* True and false, which correspond to top and bottom, respectively *)
-Polymorphic Definition trueP `{PredMonadOps} {A} : PM A :=
+Definition trueP `{PredMonadOps} {A} : PM A :=
   existsP (fun pm:PM A => pm).
-Polymorphic Definition falseP `{PredMonadOps} {A} : PM A :=
+Definition falseP `{PredMonadOps} {A} : PM A :=
   forallP (fun pm:PM A => pm).
 
 (* Negation, which (as in normal Coq) is implication of false *)
-Polymorphic Definition notP `{PredMonadOps} {A} (P: PM A) : PM A :=
+Definition notP `{PredMonadOps} {A} (P: PM A) : PM A :=
   impliesP P falseP.
 
 (* An assertion inside a predicate monad *)
-Polymorphic Definition assertP `{PredMonadOps} (P:Prop) : PM unit :=
+Definition assertP `{PredMonadOps} (P:Prop) : PM unit :=
   existsP (fun pf:P => trueP).
 
 
@@ -136,10 +134,10 @@ Polymorphic Definition assertP `{PredMonadOps} (P:Prop) : PM unit :=
 
 Section PredMonad_thms.
 
-Polymorphic Context `{PredMonad}.
+Context `{PredMonad}.
 
 (** entailsP is proper w.r.t. equalsM **)
-Global Polymorphic Instance predmonad_entailsP_proper_iff `{Order} :
+Global Instance predmonad_entailsP_proper_iff `{Order} :
   Proper (equals ==> equals ==> iff) (entailsP (A:=A)).
 intros P1 P1' e1 P2 P2' e2.
 destruct (predmonad_entailsP_equalsM P1 P1'). destruct (H4 e1).
@@ -150,46 +148,46 @@ transitivity P1'; [ assumption | transitivity P2'; assumption ].
 Qed.
 
 (** True is the top element **)
-Polymorphic Lemma predmonad_trueP_intro `{Order} (P: PM A) :
+Lemma predmonad_trueP_intro `{Order} (P: PM A) :
   entailsP P trueP.
 apply (predmonad_existsP_intro (fun pm => pm) P).
 Qed.
 
 (** False is the bottom element **)
-Polymorphic Lemma predmonad_falseP_elim `{Order} (P: PM A) :
+Lemma predmonad_falseP_elim `{Order} (P: PM A) :
   entailsP falseP P.
 apply (predmonad_forallP_elim (fun pm => pm) P).
 Qed.
 
 (** Conjunction satisfies the usual rules **)
-Polymorphic Lemma predmonad_andP_intro `{Order} (P1 P2 P: PM A) :
+Lemma predmonad_andP_intro `{Order} (P1 P2 P: PM A) :
   entailsP P P1 -> entailsP P P2 -> entailsP P (andP P1 P2).
 intros.
 apply predmonad_forallP_intro; intro x; destruct x; assumption.
 Qed.
 
-Polymorphic Lemma predmonad_andP_elim1 `{Order} (P1 P2: PM A) :
+Lemma predmonad_andP_elim1 `{Order} (P1 P2: PM A) :
   entailsP (andP P1 P2) P1.
 apply (predmonad_forallP_elim (fun b : bool => if b then P1 else P2) true).
 Qed.
 
-Polymorphic Lemma predmonad_andP_elim2 `{Order} (P1 P2: PM A) :
+Lemma predmonad_andP_elim2 `{Order} (P1 P2: PM A) :
   entailsP (andP P1 P2) P2.
 apply (predmonad_forallP_elim (fun b : bool => if b then P1 else P2) false).
 Qed.
 
 (** Disjunction satisfies the usual rules **)
-Polymorphic Lemma predmonad_orP_intro1 `{Order} (P1 P2: PM A) :
+Lemma predmonad_orP_intro1 `{Order} (P1 P2: PM A) :
   entailsP P1 (orP P1 P2).
 apply (predmonad_existsP_intro (fun b : bool => if b then P1 else P2) true).
 Qed.
 
-Polymorphic Lemma predmonad_orP_intro2 `{Order} (P1 P2: PM A) :
+Lemma predmonad_orP_intro2 `{Order} (P1 P2: PM A) :
   entailsP P2 (orP P1 P2).
 apply (predmonad_existsP_intro (fun b : bool => if b then P1 else P2) false).
 Qed.
 
-Polymorphic Lemma predmonad_orP_elim `{Order} (P1 P2 P: PM A) :
+Lemma predmonad_orP_elim `{Order} (P1 P2 P: PM A) :
   entailsP P1 P -> entailsP P2 P -> entailsP (orP P1 P2) P.
 intros.
 apply predmonad_existsP_elim; intro x; destruct x; assumption.
@@ -197,7 +195,7 @@ Qed.
 
 
 (** Nested foralls combine **)
-Polymorphic Lemma predmonad_forallP_forallP {A B C} `{Order C}
+Lemma predmonad_forallP_forallP {A B C} `{Order C}
             (Q : A -> B -> PM C) :
   forallP (fun x => forallP (fun y => Q x y)) ==
   forallP (fun xy => Q (fst xy) (snd xy)).
@@ -213,7 +211,7 @@ apply (predmonad_forallP_elim (fun xy => _) (x,y)).
 Qed.
 
 (** Nested exists combine **)
-Polymorphic Lemma predmonad_existsP_existsP {A B C} `{Order C}
+Lemma predmonad_existsP_existsP {A B C} `{Order C}
             (Q : A -> B -> PM C) :
   existsP (fun x => existsP (fun y => Q x y)) ==
   existsP (fun xy => Q (fst xy) (snd xy)).
@@ -230,14 +228,14 @@ Qed.
 
 
 (** Commutativity and Associativity of andP and orP **)
-Polymorphic Lemma predmonad_andP_commutative `{Order}
+Lemma predmonad_andP_commutative `{Order}
             (P1 P2: PM A) : andP P1 P2 == andP P2 P1.
 apply predmonad_entailsP_equalsM; split;
 repeat (first [ apply predmonad_andP_intro | apply predmonad_andP_elim1
                 | apply predmonad_andP_elim2 ]).
 Qed.
 
-Polymorphic Lemma predmonad_andP_associative `{Order}
+Lemma predmonad_andP_associative `{Order}
             (P1 P2 P3: PM A) : andP P1 (andP P2 P3) == andP (andP P1 P2) P3.
 apply predmonad_entailsP_equalsM; split;
 repeat (apply predmonad_andP_intro);
@@ -248,14 +246,14 @@ first [ apply predmonad_andP_elim1 | apply predmonad_andP_elim2
         first [ apply predmonad_andP_elim1 | apply predmonad_andP_elim2 ]].
 Qed.
 
-Polymorphic Lemma predmonad_orP_commutative `{Order}
+Lemma predmonad_orP_commutative `{Order}
             (P1 P2: PM A) : orP P1 P2 == orP P2 P1.
 apply predmonad_entailsP_equalsM; split;
 repeat (first [ apply predmonad_orP_elim | apply predmonad_orP_intro1
                 | apply predmonad_orP_intro2 ]).
 Qed.
 
-Polymorphic Lemma predmonad_orP_associative `{Order}
+Lemma predmonad_orP_associative `{Order}
             (P1 P2 P3: PM A) : orP P1 (orP P2 P3) == orP (orP P1 P2) P3.
 apply predmonad_entailsP_equalsM; split;
 repeat (apply predmonad_orP_elim);
@@ -268,7 +266,7 @@ Qed.
 
 
 (** Theorems that the combinators mostly mean what we expect for satisfiesP **)
-Polymorphic Theorem forallP_forall {A B} `{Order B} m (Q: A -> PM B) :
+Theorem forallP_forall {A B} `{Order B} m (Q: A -> PM B) :
   m |= forallP Q <-> forall x, m |= Q x.
 unfold satisfiesP; split; intros.
 transitivity (forallP Q); [ assumption | ].
@@ -276,7 +274,7 @@ apply predmonad_forallP_elim.
 apply predmonad_forallP_intro; assumption.
 Qed.
 
-Polymorphic Theorem andP_and `{Order} m (P1 P2: PM A) :
+Theorem andP_and `{Order} m (P1 P2: PM A) :
   m |= andP P1 P2 <-> m |= P1 /\ m |= P2.
 unfold andP.
 transitivity (forall b:bool, m |= if b then P1 else P2).
@@ -289,7 +287,7 @@ Qed.
 
 (* NOTE: the converse does not hold; e.g., a stateful computation that satisfies
 existsP Q might satisfy Q x for different x depending on the input state *)
-Polymorphic Theorem existsP_exists {A B} `{Order B} m (Q: A -> PM B) x :
+Theorem existsP_exists {A B} `{Order B} m (Q: A -> PM B) x :
   m |= Q x -> m |= existsP Q.
   unfold satisfiesP.
   intro.
@@ -298,7 +296,7 @@ Qed.
 
 (* NOTE: the converse does not hold; e.g., a stateful computation that satisfies
 orP P1 P2 might satisfy P1 for some inputs and P2 for others *)
-Polymorphic Theorem orP_or `{Order} m (P1 P2: PM A) :
+Theorem orP_or `{Order} m (P1 P2: PM A) :
   m |= P1 \/ m |= P2 -> m |= orP P1 P2.
   unfold satisfiesP.
   intros; destruct H4.
@@ -309,7 +307,7 @@ Qed.
 (** Distributivity lemmas **)
 
 (* andP distributes over existsP *)
-Polymorphic Lemma predmonad_andP_existsP {A B} `{Order B}
+Lemma predmonad_andP_existsP {A B} `{Order B}
             (P: PM B) (Q: A -> PM B) :
   andP P (existsP Q) == existsP (fun x => andP P (Q x)).
 apply predmonad_entailsP_equalsM; split.
@@ -328,7 +326,7 @@ apply (predmonad_existsP_intro).
 Qed.
 
 (* Implication commutes with forall *)
-Polymorphic Theorem predmonad_forallP_impliesP {A B} `{Order B}
+Theorem predmonad_forallP_impliesP {A B} `{Order B}
       P (Q: A -> PM B) :
   impliesP P (forallP Q) == forallP (fun x => impliesP P (Q x)).
   rewrite predmonad_entailsP_equalsM; split.
@@ -345,7 +343,7 @@ Polymorphic Theorem predmonad_forallP_impliesP {A B} `{Order B}
 Qed.
 
 (* impliesP reverse-distributes over orP (the implication only goes one way) *)
-Polymorphic Theorem predmonad_existsP_impliesP
+Theorem predmonad_existsP_impliesP
             `{Order} P (Q1 Q2: PM A) :
   entailsP (orP (impliesP P Q1) (impliesP P Q2)) (impliesP P (orP Q1 Q2)).
 apply predmonad_orP_elim.
@@ -378,7 +376,7 @@ End PredMonad_thms.
 
 Section IdentityPredMonad.
 
-Polymorphic Definition SetM (X:Type) : Type := X -> Prop.
+Definition SetM (X:Type) : Type := X -> Prop.
 
 Instance SetM_MonadOps : MonadOps SetM :=
   { returnM := fun A x z => x = z;
@@ -449,7 +447,7 @@ exists x1; split; [ assumption | exists x0; split; assumption ].
 Qed.
 
 
-Polymorphic Instance SetM_PredMonadOps : PredMonadOps Identity SetM :=
+Instance SetM_PredMonadOps : PredMonadOps Identity SetM :=
   {
     forallP := fun {A B} Q x => forall y, Q y x;
     existsP := fun {A B} Q x => exists y, Q y x;
@@ -460,12 +458,11 @@ Polymorphic Instance SetM_PredMonadOps : PredMonadOps Identity SetM :=
   }.
 
 
-FIXME HERE
-
-
 Instance SetM_PredMonad : PredMonad Identity SetM.
-  constructor;
-  unfold returnM, SetM_returnM, IdMonad_returnM, eqM, SetM_eqM, IdMonad_eqM,
+Proof.
+  constructor; eauto with typeclass_instances.
+  - Print Order.
+  unfold returnMeqM, SetM_eqM, IdMonad_eqM.
          bindM, SetM_bindM, IdMonad_bindM,
          satisfiesP, SetM_satisfiesP, forallP, SetM_forallP,
          existsP, SetM_existsP, impliesP, SetM_impliesP;

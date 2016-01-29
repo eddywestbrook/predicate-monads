@@ -1,6 +1,10 @@
 -Q . PredMonad
+
 ./LogicalRelations.v
 ./Monad.v
+
 ./MonadState.v
+./MonadApprox.v
+
 ./PredMonad.v
 ./PredMonadState.v
