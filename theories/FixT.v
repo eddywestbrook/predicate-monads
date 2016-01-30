@@ -3,8 +3,50 @@
 
 Require Import Coq.Program.Basics.
 
-Load Monad.
-Load CPO.
+Add LoadPath "." as PredMonad.
+Require Export PredMonad.Monad.
+
+
+(***
+ *** The Fixed-point Monad Transformer
+ ***)
+
+Section FixT.
+Context `{Monad}.
+
+Polymorphic Fixpoint nth_M_sum n A : Type :=
+  match n with
+    | 0 => unit
+    | S n' => M (A + nth_M_sum n' A)
+  end.
+
+Polymorphic Fixpoint nth_M_sum_extend A (lastM: M (A + unit)) n :
+  nth_M_sum n A -> nth_M_sum (S n) A :=
+  match n return nth_M_sum n A -> nth_M_sum (S n) A with
+    | 0 => fun _ => lastM
+    | S n' =>
+      fun nMs =>
+        bindM
+          (A:=A + nth_M_sum n' A)
+          nMs
+          (fun sum =>
+             match sum with
+               | inl a => returnM (inl a)
+               | inr nMs' =>
+                 returnM (inr (nth_M_sum_extend A lastM n' nMs'))
+             end)
+  end.
+
+Polymorphic Fixpoint nth_M_sum_extends n A
+            (nMs1: nth_M_sum n A) (nMs2: nth_M_sum (S n) A) : Prop :=
+  match n with
+    | 0 => True
+    | S n' =>
+
+Polymorphic Definition FixT (X:Type) :=
+
+
+FIXME HERE: old stuff below
 
 (***
  *** A diagonalization function, to surjectively map nat -> nat*nat
