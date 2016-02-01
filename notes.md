@@ -30,8 +30,8 @@ PredMonad m pm
 
  forallP f |-- f a
  (forall x, P |-- f x) -> P |-- forallP f
- f a |-- existsP
- (forall x, f x |-- P) -> existsPf |-- P
+ f a |-- existsP f
+ (forall x, f x |-- P) -> existsP f |-- P
  P |-- (Q -->> R) <-> (P //\\ Q) |-- R -- Adjunction law for implication
  liftP (returnM x) == returnM x
  liftP (bind c k) == bindM (liftP c) (fun x => liftP (k x))
