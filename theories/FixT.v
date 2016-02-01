@@ -14,13 +14,18 @@ Require Export PredMonad.Monad.
 Section FixT.
 Context `{Monad}.
 
+(* Build the type M (A + M (A + ... M (A + unit))) with depth n *)
 Polymorphic Fixpoint nth_M_sum n A : Type :=
   match n with
     | 0 => unit
     | S n' => M (A + nth_M_sum n' A)
   end.
 
-Polymorphic Fixpoint nth_M_sum_extend A (lastM: M (A + unit)) n :
+FIXME HERE: add an Equals instance for nth_M_sum
+
+(* Replace the last unit type in an nth_M_sum with an M (A + unit) computation,
+thereby moving to the type nth_M_sum (S n) A. *)
+Polymorphic Fixpoint nth_M_sum_extend {A} (lastM: M (A + unit)) {n} :
   nth_M_sum n A -> nth_M_sum (S n) A :=
   match n return nth_M_sum n A -> nth_M_sum (S n) A with
     | 0 => fun _ => lastM
@@ -33,17 +38,34 @@ Polymorphic Fixpoint nth_M_sum_extend A (lastM: M (A + unit)) n :
              match sum with
                | inl a => returnM (inl a)
                | inr nMs' =>
-                 returnM (inr (nth_M_sum_extend A lastM n' nMs'))
+                 returnM (inr (nth_M_sum_extend lastM nMs'))
              end)
   end.
 
-Polymorphic Fixpoint nth_M_sum_extends n A
+(* Whether one computation is an extension of another *)
+Polymorphic Definition nth_M_sum_extends {n A} `{EqualsOp A}
             (nMs1: nth_M_sum n A) (nMs2: nth_M_sum (S n) A) : Prop :=
-  match n with
-    | 0 => True
-    | S n' =>
+  exists lastM, nMs2 == nth_M_sum_extend lastM nMs1.
 
-Polymorphic Definition FixT (X:Type) :=
+(* FixT represents the infinite type M (A + M (A + ...)) as sequences of
+elements of unit, M (A + unit), M (A + M (A + unit)), etc., such that each
+element is an extension of the unit part of the computation before. Intuitively,
+an A value at depth n represents termination after n steps, while
+non-terminating computations always return unit values. *)
+Polymorphic Definition FixT (A:Type) :=
+  { f: forall n, nth_M_sum n A |
+    forall n, nth_M_sum_extends (f n) (f (S n))}.
+
+(* Return gives a value in the very first A type *)
+Polymorphic Program Definition FixT_returnM {A} (x:A) : FixT A :=
+  fun n =>
+    match n with
+      | 0 => tt
+      | S _ => returnM (inl x)
+    end.
+Next Obligation.
+destruct n.
+exists (returnM (inl x)). reflexivity.
 
 
 FIXME HERE: old stuff below
