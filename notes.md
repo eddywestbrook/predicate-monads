@@ -82,7 +82,10 @@ PredStateMonad S m pm
  
  
 *GM* What is the concrete instance for the standard state monad?
- 
+
+*EW* NOTE: technically it is pm T := S -> T * S -> Prop, since it is built from
+StateT (SetM), but this is morally equivalent to the below
+
      m T  := S -> (T * S)
      Monad m -- standard instance
      pm T := S -> T -> S -> Prop
