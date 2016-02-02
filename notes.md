@@ -80,3 +80,51 @@ PredStateMonad S m pm
 
  (Both m and pm satisfy the StateMonad laws)
  
+ 
+*GM* What is the concrete instance for the standard state monad?
+ 
+     m T  := S -> (T * S)
+     Monad m -- standard instance
+     pm T := S -> T -> S -> Prop
+     Monad pm
+       returnM x := fun st res st' => st = st' /\ x = res
+       bindM   c k := fun st res st'' => exists res' st', c st res' st' /\ (k res') st' res st''
+       liftP c := fun st res st' => c st = (res, st')
+       forallP P := fun st res st' => forall x, P x st res st'
+       existsP P := fun st res st' => exists x, P x st res st'
+       P -->> Q  := fun st res st' => P st res st' -->> Q st res st'
+       P |-- Q   := foral st res res' st', res < res' -> P st res st' -> Q st res st'
+     MonadState pm
+       getM := fun st res st' => st = st' /\ res = st'
+       putM x := fun _ res st' => res = tt /\ x = st'
+ 
+ 
+
+Intra-monad Reasoning
+---------------------
+
+Some basic examples written as 'hoare logic formulas'
+
+**forall x, { fun st => st = x } getM { fun result st => st = x //\\ result = x }**
+
+    let c := getM in
+    forall x, 
+      liftP c |= bindM getM (fun y => forallP (x = y) (fun _ => bindM c (fun result => bindM getM (fun st' => existsP (result = x) (fun _ => existsP (st' = x) (fun _ => returnM x))))))
+
+*GM* what is the right way to assert facts? This seems somewhat unnatural. Is there a better way to write this?
+
+Other examples:
+
+    { True } modifyM (mult 2) { fun _ st => Even st }
+    { True } tryM (raiseM 3) returnM { fun result => result = 3 } -- succeeds and result is 3
+
+Running Monads
+--------------
+
+Eventually, we want to be able to conclude something from running a monadic computation. For example,
+
+    { P } c { Q }
+    -------------------
+    runState c x = y -> (P x -> Q y)
+    
+Does this come from unfolding the definition of |--?
