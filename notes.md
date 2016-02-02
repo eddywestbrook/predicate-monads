@@ -2,10 +2,10 @@
 
 Monad m
 -------
+
     bindM   : m a -> (a -> m b) -> m b
     returnM : a -> m a
     ==      : Equals a => relation (m a)
-
     bindM (returnM x) f == f x
     bindM c returnM == c
     bindM (bindM c k) k' == bindM c (fun x => bindM (k x) k')
@@ -13,6 +13,7 @@ Monad m
 
 PredMonad m pm
 --------------
+
     Monad m
     Monad pm
     liftP   : m a -> pm a
@@ -38,12 +39,14 @@ PredMonad m pm
 
 
 (Definable operations)
-    //\\    : pm a -> pm a -> pm a -- definable from forallP
-    \\//    : pm a -> pm a -> pm a -- definable from existsP
-    x |= y  := liftP x |-- y
+
+     //\\    : pm a -> pm a -> pm a -- definable from forallP
+     \\//    : pm a -> pm a -> pm a -- definable from existsP
+     x |= y  := liftP x |-- y
 
 
 (Derivable entailment rules)
+
     P |-- Q -> P |-- R -> P |-- (Q //\\ R)
     (P //\\ Q) |-- P
     (P //\\ Q) |-- Q
@@ -60,9 +63,9 @@ PredMonad m pm
 
 StateMonad S m
 --------------
+
     getM : m S
     putM : S -> m ()
-
     bindM get (fun x => bindM get (fun y => f x y)) == bindM get (fun x => f x x)
     bindM get put == returnM ()
     bindM (put x) (fun _ => get) == bindM (put x) (fun _ => returnM x)
@@ -71,6 +74,7 @@ StateMonad S m
 
 PredStateMonad S m pm
 --------------------
+
     liftP getM == getM
     liftP (putM x) == putM
 
