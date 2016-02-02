@@ -1,4 +1,5 @@
 Require Import Coq.Setoids.Setoid.
+Add LoadPath "." as PredMonad.
 Require Export PredMonad.LogicalRelations.
 
 (***
@@ -32,7 +33,10 @@ Class Monad (M : Type -> Type)
     monad_proper_bind :>
       forall (A B:Type) `{Equals A} `{Equals B},
         Proper (equals ==> (equals ==> equals) ==> equals)
-               (bindM (A:=A) (B:=B))
+               (bindM (A:=A) (B:=B));
+    monad_proper_equalsM :>
+      forall (A:Type),
+        Proper (subrelation ==> subrelation) (@equalsM _ MonadOps A)
   }.
 
 
@@ -105,4 +109,5 @@ Instance IdMonad : Monad Identity.
   split; auto with typeclass_instances.
   intros x y exy; assumption.
   intros m1 m2 eqm f1 f2 eqf; apply eqf; assumption.
+  intros eqop1 eqop2 subr m1 m2 e1; apply subr; assumption.
 Qed.
