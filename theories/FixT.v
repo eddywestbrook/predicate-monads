@@ -15,57 +15,91 @@ Section FixT.
 Context `{Monad}.
 
 (* Build the type M (A + M (A + ... M (A + unit))) with depth n *)
-Polymorphic Fixpoint nth_M_sum n A : Type :=
+Fixpoint nth_M_sum n A : Type :=
   match n with
     | 0 => unit
     | S n' => M (A + nth_M_sum n' A)
   end.
 
-FIXME HERE: add an Equals instance for nth_M_sum
-
-(* Replace the last unit type in an nth_M_sum with an M (A + unit) computation,
-thereby moving to the type nth_M_sum (S n) A. *)
-Polymorphic Fixpoint nth_M_sum_extend {A} (lastM: M (A + unit)) {n} :
-  nth_M_sum n A -> nth_M_sum (S n) A :=
-  match n return nth_M_sum n A -> nth_M_sum (S n) A with
-    | 0 => fun _ => lastM
+(* Replace the last M (A + unit) with unit, thereby going from nth_M_sum (S n) A
+to nth_M_sum n A. *)
+Fixpoint nth_M_sum_truncate {A} {n} :
+  nth_M_sum (S n) A -> nth_M_sum n A :=
+  match n return nth_M_sum (S n) A -> nth_M_sum n A with
+    | 0 => fun _ => tt
     | S n' =>
       fun nMs =>
         bindM
-          (A:=A + nth_M_sum n' A)
+          (A:=A + nth_M_sum (S n') A)
           nMs
           (fun sum =>
              match sum with
                | inl a => returnM (inl a)
                | inr nMs' =>
-                 returnM (inr (nth_M_sum_extend lastM nMs'))
+                 returnM (inr (nth_M_sum_truncate nMs'))
              end)
   end.
 
+(* Distinguished equality on nth_M_sum *)
+Fixpoint nth_M_sum_equals {A:Type} {EqOp:EqualsOp A} n :
+  EqualsOp (nth_M_sum n A) :=
+  match n return EqualsOp (nth_M_sum n A) with
+    | 0 => fun _ _ => True
+    | S n' =>
+      equalsM (EqOp:=Sum_EqualsOp _ _ (EqOp_B:=nth_M_sum_equals n'))
+  end.
+
+Instance nth_M_sum_EqualsOp `{EqualsOp} n :
+  EqualsOp (nth_M_sum n A) := nth_M_sum_equals n.
+
+Instance nth_M_sum_Equals `{Equals} n : Equals (nth_M_sum n A).
+  induction n; repeat constructor;
+    unfold equals, nth_M_sum_EqualsOp;
+    unfold nth_M_sum_equals; fold nth_M_sum_equals; intro; intros.
+  reflexivity.
+  symmetry; assumption.
+  transitivity y; assumption.
+Qed.
+
+
+Context {A:Type}.
+
+(* We locally use provable equality as the EqualsOp on A *)
+Local Instance A_EqualsOp : EqualsOp A := Eq_EqualsOp A.
+Local Instance A_Equals : Equals A := Eq_Equals A.
+
 (* Whether one computation is an extension of another *)
-Polymorphic Definition nth_M_sum_extends {n A} `{EqualsOp A}
-            (nMs1: nth_M_sum n A) (nMs2: nth_M_sum (S n) A) : Prop :=
-  exists lastM, nMs2 == nth_M_sum_extend lastM nMs1.
+Definition nth_M_sum_extends {n} (nMs1: nth_M_sum n A)
+           (nMs2: nth_M_sum (S n) A) : Prop :=
+  nMs1 == nth_M_sum_truncate nMs2.
 
 (* FixT represents the infinite type M (A + M (A + ...)) as sequences of
 elements of unit, M (A + unit), M (A + M (A + unit)), etc., such that each
 element is an extension of the unit part of the computation before. Intuitively,
 an A value at depth n represents termination after n steps, while
 non-terminating computations always return unit values. *)
-Polymorphic Definition FixT (A:Type) :=
+Definition FixT :=
   { f: forall n, nth_M_sum n A |
     forall n, nth_M_sum_extends (f n) (f (S n))}.
 
 (* Return gives a value in the very first A type *)
-Polymorphic Program Definition FixT_returnM {A} (x:A) : FixT A :=
+Program Definition FixT_returnM (x:A) : FixT :=
   fun n =>
     match n with
       | 0 => tt
       | S _ => returnM (inl x)
     end.
 Next Obligation.
+unfold nth_M_sum_extends.
 destruct n.
-exists (returnM (inl x)). reflexivity.
+reflexivity.
+unfold nth_M_sum_truncate.
+rewrite monad_return_bind.
+reflexivity.
+auto with typeclass_instances.
+auto with typeclass_instances.
+Qed.
+
 
 
 FIXME HERE: old stuff below
