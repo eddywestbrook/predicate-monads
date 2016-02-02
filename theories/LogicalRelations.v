@@ -76,6 +76,30 @@ Qed.
 Qed.
 
 
+(* Equality on sums = equality on the two components *)
+ Instance Sum_EqualsOp (A B: Type)
+            {EqOp_A:EqualsOp A} `{EqOp_B:EqualsOp B} : EqualsOp (A+B) :=
+  fun p1 p2 =>
+    match p1, p2 with
+      | inl x1, inl x2 => x1 == x2
+      | inr y1, inr y2 => y1 == y2
+      | _, _ => False
+    end.
+
+(* Pair equality is a valid equality *)
+ Instance Sum_Equals (A B: Type)
+            `{Eq_A:Equals A} `{Eq_B:Equals B} : Equals (A+B).
+  repeat constructor; unfold equals, Sum_EqualsOp; intro; intros.
+  destruct x; reflexivity.
+  destruct x; destruct y; try symmetry; assumption.
+  destruct x; destruct y; destruct z; try assumption.
+  transitivity a0; assumption.
+  elimtype False; assumption.
+  elimtype False; assumption.
+  transitivity b0; assumption.
+Qed.
+
+
 (***
  *** Distinguished Preorders
  ***)
