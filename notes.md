@@ -28,6 +28,7 @@ PredMonad m pm
  hold. Conversely, for PP : pm (pm a) and QQ : pm (pm a), if PP |-- QQ then we
  would expect join PP |-- join QQ, even if (join PP) == (join QQ) does not
  hold. That is, join is Proper for (|-- (Order:=|--)) ==> (|--). )
+*GM* this makes sense to me now. This ordering is the computation ordering.
 
     forallP f |-- f a
     (forall x, P |-- f x) -> P |-- forallP f
@@ -37,15 +38,13 @@ PredMonad m pm
     liftP (returnM x) == returnM x
     liftP (bind c k) == bindM (liftP c) (fun x => liftP (k x))
 
-
-(Definable operations)
+*Definable operations*
 
      //\\    : pm a -> pm a -> pm a -- definable from forallP
      \\//    : pm a -> pm a -> pm a -- definable from existsP
      x |= y  := liftP x |-- y
 
-
-(Derivable entailment rules)
+*Derivable entailment rules*
 
     P |-- Q -> P |-- R -> P |-- (Q //\\ R)
     (P //\\ Q) |-- P
@@ -54,7 +53,8 @@ PredMonad m pm
     P |-- (P \\// Q) 
     Q |-- (P \\// Q)
 
-(Derivable rules about monad satisfaction)
+*Derivable rules about monad satisfaction*
+
     m |= forallP P <-> (forall x, (m |= P x))
     m |= (P //\\ Q) <-> (m |= P) /\ (m |= Q)
     (m |= Q x) -> (m |= existsP Q) -- Note the asymmetry
@@ -73,9 +73,10 @@ StateMonad S m
 
 
 PredStateMonad S m pm
---------------------
+---------------------
 
     liftP getM == getM
-    liftP (putM x) == putM
+    liftP (putM x) == putM x
 
  (Both m and pm satisfy the StateMonad laws)
+ 
