@@ -1,5 +1,4 @@
 Require Import Coq.Setoids.Setoid.
-Add LoadPath "." as PredMonad.
 Require Export PredMonad.LogicalRelations.
 
 (***
