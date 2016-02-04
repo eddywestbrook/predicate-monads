@@ -30,18 +30,30 @@ PredMonad m pm
  hold. That is, join is Proper for (|-- (Order:=|--)) ==> (|--). )
 *GM* this makes sense to me now. This ordering is the computation ordering.
 
+*Rules for logical operators*
     forallP f |-- f a
     (forall x, P |-- f x) -> P |-- forallP f
     f a |-- existsP f
     (forall x, f x |-- P) -> existsP f |-- P
     P |-- (Q -->> R) <-> (P //\\ Q) |-- R -- Adjunction law for implication
+
+*Rules for liftP*
     liftP (returnM x) == returnM x
     liftP (bind c k) == bindM (liftP c) (fun x => liftP (k x))
+
+*Rules for commuting logical operators with bind*
+    (forallP P) >>= Q == forallP (fun x => P x >>= Q)
+    P >>= (fun x => forallP (Q x)) == forallP (fun y => P >>= fun x => Q x y)
+    (existsP P) >>= Q == existsP (fun x => P x >>= Q)
+    P >>= (fun x => existsP (Q x)) == existsP (fun y => P >>= fun x => Q x y)
+    (P1 -->> P2) >>= Q == (P1 >>= Q) -->> (P2 >>= Q)
+    P >>= (fun x => Q1 x -->> Q2 x) == (P1 >>= Q) --> (P2 >>= Q)
 
 *Definable operations*
 
      //\\    : pm a -> pm a -> pm a -- definable from forallP
      \\//    : pm a -> pm a -> pm a -- definable from existsP
+     assertP : Prop -> pm a -- definable from existsP
      x |= y  := liftP x |-- y
 
 *Derivable entailment rules*
@@ -52,6 +64,8 @@ PredMonad m pm
     P |-- R -> Q |-- R -> (P \\// Q) |-- R
     P |-- (P \\// Q) 
     Q |-- (P \\// Q)
+    (phi -> trueP |-- P) -> assertP phi |-- P
+    phi -> P  |-- assertP phi
 
 *Derivable rules about monad satisfaction*
 
@@ -66,10 +80,10 @@ StateMonad S m
 
     getM : m S
     putM : S -> m ()
-    bindM get (fun x => bindM get (fun y => f x y)) == bindM get (fun x => f x x)
-    bindM get put == returnM ()
-    bindM (put x) (fun _ => get) == bindM (put x) (fun _ => returnM x)
-    bindM (put x) (fun _ => put y) == put y
+    bindM getM (fun _ => m) == m
+    bindM getM putM == returnM ()
+    bindM (putM x) (fun _ => getM) == bindM (putM x) (fun _ => returnM x)
+    bindM (putM x) (fun _ => putM y) == putM y
 
 
 PredStateMonad S m pm
@@ -106,13 +120,61 @@ StateT (SetM), but this is morally equivalent to the below
 Intra-monad Reasoning
 ---------------------
 
+Defining Hoare logic:
+
+    hoareP (pre: S -> Prop) (post: A -> S -> Prop) : PM A :=
+        (getP >>= fun st => assertP (pre st)) -->>
+        (trueP >>= fun res => getP >>= fun st' =>
+            andP (assertP (post res st')) (returnP res))
+
+Theorem:
+**forall m pre post,
+    (forall st, pre st ->
+        (putP st >> liftP m) |--
+        (do
+            putP st;
+            res <- liftP m;
+            st' <- getP;
+            andP (assertP (post res st')) (returnP res))) ->
+    m |= hoareP pre post**
+
 Some basic examples written as 'hoare logic formulas'
 
-**forall x, { fun st => st = x } getM { fun result st => st = x //\\ result = x }**
+**forall x, { fun st => st = x } getM { fun result st => st = x /\ result = x }**
 
-    let c := getM in
-    forall x, 
-      liftP c |= bindM getM (fun y => forallP (x = y) (fun _ => bindM c (fun result => bindM getM (fun st' => existsP (result = x) (fun _ => existsP (st' = x) (fun _ => returnM x))))))
+    forall x, getM |= hoareP (fun st => st = x) (fun result st => st = x /\ result = x)
+
+*Proof*
+    st = x ->
+    (putP st >> getP) |--
+    (do
+        putP st;
+        res <- getP;
+        st' <- getP;
+        andP (assertP (st' = x /\ res = x)) (returnP res))
+
+By rewriting using st = x:
+
+    (putP x >> getP) |--
+    (do
+        putP x;
+        res <- getP;
+        st' <- getP;
+        andP (assertP (st' = x /\ res = x)) (returnP res))
+
+By state monad laws:
+
+    (putP x >> returnP x) |--
+    (do
+        putP x;
+        andP (assertP (x = x /\ x = x)) (returnP x))
+
+By assertP introduction, proper-ness, and the law "andP trueP P = P":
+
+    (putP x >> returnP x) |-- (putP x >> returnP x)
+
+Q.E.D. by reflexivity.
+
 
 *GM* what is the right way to assert facts? This seems somewhat unnatural. Is there a better way to write this?
 
@@ -120,6 +182,7 @@ Other examples:
 
     { True } modifyM (mult 2) { fun _ st => Even st }
     { True } tryM (raiseM 3) returnM { fun result => result = 3 } -- succeeds and result is 3
+
 
 Running Monads
 --------------
