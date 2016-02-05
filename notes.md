@@ -31,6 +31,7 @@ PredMonad m pm
 *GM* this makes sense to me now. This ordering is the computation ordering.
 
 *Rules for logical operators*
+
     forallP f |-- f a
     (forall x, P |-- f x) -> P |-- forallP f
     f a |-- existsP f
@@ -38,10 +39,12 @@ PredMonad m pm
     P |-- (Q -->> R) <-> (P //\\ Q) |-- R -- Adjunction law for implication
 
 *Rules for liftP*
+
     liftP (returnM x) == returnM x
     liftP (bind c k) == bindM (liftP c) (fun x => liftP (k x))
 
 *Rules for commuting logical operators with bind*
+
     (forallP P) >>= Q == forallP (fun x => P x >>= Q)
     P >>= (fun x => forallP (Q x)) == forallP (fun y => P >>= fun x => Q x y)
     (existsP P) >>= Q == existsP (fun x => P x >>= Q)
@@ -145,6 +148,7 @@ Some basic examples written as 'hoare logic formulas'
     forall x, getM |= hoareP (fun st => st = x) (fun result st => st = x /\ result = x)
 
 *Proof*
+
     st = x ->
     (putP st >> getP) |--
     (do
