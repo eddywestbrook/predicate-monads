@@ -120,6 +120,12 @@ Global Instance StateT_Monad `{Monad M} : Monad (StateT).
     red. intros.
     destruct x1; destruct y1. destruct H4; simpl in *.
     subst. eapply H3. assumption. }
+  { red. red. unfold subrelation.
+    intros.
+    eapply monad_proper_equalsM. 2: eapply H1.
+    red. intros; auto. unfold S_EqualsOp in *.
+    destruct H2; split; auto.
+    unfold equals in *. eapply H0. assumption. }
 Qed.
 
 Global Instance StateT_getM `{Monad M} : MonadStateOps S (StateT) :=
@@ -158,6 +164,3 @@ Qed.
 End StateT.
 
 Arguments MonadState _ _ {_ _ _} : clear implicits.
-
-
-
