@@ -2,8 +2,6 @@
 (* Some attempts to build a fixed-point monad transformer *)
 
 Require Import Coq.Program.Basics.
-
-Add LoadPath "." as PredMonad.
 Require Export PredMonad.Monad.
 
 
@@ -49,7 +47,7 @@ Fixpoint nth_M_sum_equals {A:Type} {EqOp:EqualsOp A} n :
       equalsM (EqOp:=Sum_EqualsOp _ _ (EqOp_B:=nth_M_sum_equals n'))
   end.
 
-Instance nth_M_sum_EqualsOp `{EqualsOp} n :
+Instance nth_M_sum_EqualsOp `{EqOp:EqualsOp} n :
   EqualsOp (nth_M_sum n A) := nth_M_sum_equals n.
 
 Instance nth_M_sum_Equals `{Equals} n : Equals (nth_M_sum n A).
@@ -62,14 +60,9 @@ Instance nth_M_sum_Equals `{Equals} n : Equals (nth_M_sum n A).
 Qed.
 
 
-Context {A:Type}.
-
-(* We locally use provable equality as the EqualsOp on A *)
-Local Instance A_EqualsOp : EqualsOp A := Eq_EqualsOp A.
-Local Instance A_Equals : Equals A := Eq_Equals A.
-
 (* Whether one computation is an extension of another *)
-Definition nth_M_sum_extends {n} (nMs1: nth_M_sum n A)
+Definition nth_M_sum_extends {A} {n} (EqOp:EqualsOp A)
+           (nMs1: nth_M_sum n A)
            (nMs2: nth_M_sum (S n) A) : Prop :=
   nMs1 == nth_M_sum_truncate nMs2.
 
@@ -78,12 +71,21 @@ elements of unit, M (A + unit), M (A + M (A + unit)), etc., such that each
 element is an extension of the unit part of the computation before. Intuitively,
 an A value at depth n represents termination after n steps, while
 non-terminating computations always return unit values. *)
-Definition FixT :=
+Definition FixT A :=
   { f: forall n, nth_M_sum n A |
-    forall n, nth_M_sum_extends (f n) (f (S n))}.
+    forall n, nth_M_sum_extends (Eq_EqualsOp A) (f n) (f (S n))}.
+
+
+(* Helper assumptions for defining our monad operations *)
+Context {A B:Type}.
+
+Local Instance A_EqualsOp : EqualsOp A := Eq_EqualsOp A.
+Local Instance A_Equals : Equals A := Eq_Equals A.
+Local Instance B_EqualsOp : EqualsOp B := Eq_EqualsOp B.
+Local Instance B_Equals : Equals B := Eq_Equals B.
 
 (* Return gives a value in the very first A type *)
-Program Definition FixT_returnM (x:A) : FixT :=
+Program Definition FixT_returnM (x:A) : FixT A :=
   fun n =>
     match n with
       | 0 => tt
@@ -100,9 +102,36 @@ auto with typeclass_instances.
 auto with typeclass_instances.
 Qed.
 
+(* Bind... *)
+Fixpoint nth_M_sum_bind n :
+  nth_M_sum n A -> (A -> nth_M_sum n B) -> nth_M_sum n B :=
+  match n return nth_M_sum n A -> (A -> nth_M_sum n B) -> nth_M_sum n B with
+  | 0 => fun _ _ => tt
+  | S n' =>
+    fun m f =>
+      bindM
+        (A:=A + nth_M_sum n' A)
+        m
+        (fun sum =>
+           match sum with
+           | inl x => returnM (inr (nth_M_sum_truncate (f x)))
+           | inr m' =>
+             returnM (inr (nth_M_sum_bind n' m' (fun x => nth_M_sum_truncate (f x))))
+           end)
+  end.
 
+Program Definition FixT_bindM (m: FixT A) (f: A -> FixT B) : FixT B :=
+  fun n => nth_M_sum_bind n (m n) (fun x => f x n).
+Next Obligation.
+unfold nth_M_sum_extends.
+destruct n.
+reflexivity.
+unfold nth_M_sum_bind; fold nth_M_sum_bind.
+
+unfold nth_M_sum_truncate; repeat (fold (nth_M_sum_truncate (n:=n) (A:=B))).
 
 FIXME HERE: old stuff below
+
 
 (***
  *** A diagonalization function, to surjectively map nat -> nat*nat
