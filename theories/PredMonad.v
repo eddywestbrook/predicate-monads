@@ -30,6 +30,7 @@ Class PredMonad
 
     (* Entailment should be a preorder whose symmetric closure is the
     distinguished equality on PM *)
+    (* NOTE(gmalecha): Neither of these are provable! *)
     predmonad_entailsP_preorder
       (A:Type) `{Order A} :> PreOrder (entailsP (A:=A));
     predmonad_entailsP_equalsM {A:Type} `{Order A} (P1 P2: PM A) :
@@ -387,63 +388,69 @@ Instance SetM_MonadOps : MonadOps SetM :=
                    (m2 z1 -> exists z2, e z1 z2 /\ m1 z2) }.
 
 Instance SetM_Monad : Monad SetM.
-constructor; unfold returnM, bindM, equalsM, SetM_MonadOps; intros.
-split; intros.
-destruct H1; destruct H1.
-exists z1; split.
-apply Equivalence_Reflexive.
-rewrite H1; assumption.
-exists z1; split.
-apply Equivalence_Reflexive.
-exists x; split; [ reflexivity | assumption ].
-split; intros.
-destruct H0; destruct H0.
-exists x; split.
-rewrite H1; apply Equivalence_Reflexive.
-assumption.
-exists z1; split.
-apply Equivalence_Reflexive.
-exists z1; split; [ assumption | reflexivity ].
-split; intros.
-repeat (destruct H2).
-exists z1; split.
-apply Equivalence_Reflexive.
-exists x0; split; [ assumption | ].
-exists x; split; assumption.
-repeat (destruct H2); repeat (destruct H3).
-exists z1; split; [ apply Equivalence_Reflexive | ].
-exists x0; split; [ | assumption ].
-exists x; split; assumption.
-repeat constructor; intros.
-exists z1; split; [ apply Equivalence_Reflexive | assumption ].
-exists z1; split; [ apply Equivalence_Reflexive | assumption ].
-destruct (H0 z1). destruct (H3 H1); destruct H4.
-exists x0; split; assumption.
-destruct (H0 z1). destruct (H2 H1); destruct H4.
-exists x0; split; assumption.
-destruct (H0 z1). destruct (H3 H2). destruct H5.
-destruct (H1 x0). destruct (H7 H6). destruct H9.
-exists x1; split.
-apply (Equivalence_Transitive _ x0); assumption.
-assumption.
-destruct (H1 z1). destruct (H4 H2). destruct H5.
-destruct (H0 x0). destruct (H8 H6). destruct H9.
-exists x1; split.
-apply (Equivalence_Transitive _ x0); assumption.
-assumption.
-intros x y e_xy z1; split; intros.
-exists y. rewrite <- H0. split; [ assumption | reflexivity ].
-exists x. rewrite <- H0.
-split; [ apply Equivalence_Symmetric; assumption | reflexivity ].
-intros m1 m2 e_m f1 f2 e_f z1.
-split; intros; repeat (destruct H1).
-destruct (e_m x). destruct (H3 H1). destruct H5.
-destruct (e_f x x0 H5 z1). destruct (H7 H2). destruct H9.
-exists x1; split; [ assumption | exists x0; split; assumption ].
-destruct (e_m x). destruct (H4 H1). destruct H5.
-assert (x0 == x); [ apply Equivalence_Symmetric; assumption | ].
-destruct (e_f x0 x H7 z1). destruct (H9 H2). destruct H10.
-exists x1; split; [ assumption | exists x0; split; assumption ].
+Proof.
+  constructor; unfold returnM, bindM, equalsM, SetM_MonadOps; intros.
+  { split; intros.
+    destruct H1; destruct H1.
+    exists z1; split.
+    apply Equivalence_Reflexive.
+    rewrite H1; assumption.
+    exists z1; split.
+    apply Equivalence_Reflexive.
+    exists x; split; [ reflexivity | assumption ]. }
+  { split; intros.
+    destruct H0; destruct H0.
+    exists x; split.
+    rewrite H1; apply Equivalence_Reflexive.
+    assumption.
+    exists z1; split.
+    apply Equivalence_Reflexive.
+    exists z1; split; [ assumption | reflexivity ]. }
+  { split; intros.
+    repeat (destruct H2).
+    exists z1; split.
+    apply Equivalence_Reflexive.
+    exists x0; split; [ assumption | ].
+    exists x; split; assumption.
+    repeat (destruct H2); repeat (destruct H3).
+    exists z1; split; [ apply Equivalence_Reflexive | ].
+    exists x0; split; [ | assumption ].
+    exists x; split; assumption. }
+  { repeat constructor; intros.
+    exists z1; split; [ apply Equivalence_Reflexive | assumption ].
+    exists z1; split; [ apply Equivalence_Reflexive | assumption ].
+    destruct (H0 z1). destruct (H3 H1); destruct H4.
+    exists x0; split; assumption.
+    destruct (H0 z1). destruct (H2 H1); destruct H4.
+    exists x0; split; assumption.
+    destruct (H0 z1). destruct (H3 H2). destruct H5.
+    destruct (H1 x0). destruct (H7 H6). destruct H9.
+    exists x1; split.
+    apply (Equivalence_Transitive _ x0); assumption.
+    assumption.
+    destruct (H1 z1). destruct (H4 H2). destruct H5.
+    destruct (H0 x0). destruct (H8 H6). destruct H9.
+    exists x1; split.
+    apply (Equivalence_Transitive _ x0); assumption.
+    assumption. }
+  { intros x y e_xy z1; split; intros.
+    exists y. rewrite <- H0. split; [ assumption | reflexivity ].
+    exists x. rewrite <- H0.
+    split; [ apply Equivalence_Symmetric; assumption | reflexivity ]. }
+  { intros m1 m2 e_m f1 f2 e_f z1.
+    split; intros; repeat (destruct H1).
+    destruct (e_m x). destruct (H3 H1). destruct H5.
+    destruct (e_f x x0 H5 z1). destruct (H7 H2). destruct H9.
+    exists x1; split; [ assumption | exists x0; split; assumption ].
+    destruct (e_m x). destruct (H4 H1). destruct H5.
+    assert (x0 == x); [ apply Equivalence_Symmetric; assumption | ].
+    destruct (e_f x0 x H7 z1). destruct (H9 H2). destruct H10.
+    exists x1; split; [ assumption | exists x0; split; assumption ]. }
+  { red. red. unfold subrelation; intros.
+    destruct (H0 z1); clear H0.
+    split.
+    + intros. destruct H1; eauto. exists x1. destruct H1; split; eauto.
+    + intros; destruct H2; eauto. exists x1. destruct H2; split; eauto. }
 Qed.
 
 
@@ -457,13 +464,21 @@ Instance SetM_PredMonadOps : PredMonadOps Identity SetM :=
                   forall x y, ord x y -> P1 x -> P2 y
   }.
 
-
 Instance SetM_PredMonad : PredMonad Identity SetM.
 Proof.
   constructor; eauto with typeclass_instances.
-  - admit.
-  - intros. admit. (* How is this provable? *)
-  - 
+  { (** NOTE(gmalecha): This is *not* provable! **) admit. }
+  { intros. compute. split; intros.
+    + split; intros.
+      - destruct (H x); clear H. destruct (H3 H1); clear H3.
+        (** NOTE(gmalecha): This is not provable unless [OrdOp] is
+         ** anti-symmetric
+         **)
+        admit.
+      - admit.
+    + admit. }
+  all: admit.
+
 (*
   unfold returnMeqM, SetM_eqM, IdMonad_eqM.
          bindM, SetM_bindM, IdMonad_bindM,
