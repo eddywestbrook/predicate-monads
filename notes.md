@@ -32,10 +32,10 @@ PredMonad m pm
 
 *GM* The current definition of PredMonad states the following:
 
-   predmonad_entailsP_preorder
-     (A:Type) `{Order A} :> PreOrder (entailsP (A:=A));
-   predmonad_entailsP_equalsM {A:Type} `{Order A} (P1 P2: PM A) :
-     P1 == P2 <-> (entailsP P1 P2 /\ entailsP P2 P1);
+    predmonad_entailsP_preorder
+      (A:Type) `{Order A} :> PreOrder (entailsP (A:=A));
+    predmonad_entailsP_equalsM {A:Type} `{Order A} (P1 P2: PM A) :
+      P1 == P2 <-> (entailsP P1 P2 /\ entailsP P2 P1);
 
 neither of these is provable for the Identity monad (where [PM a = a -> Prop]).
 
@@ -56,7 +56,6 @@ Something like the following:
     Record otype : Type :=
     { T :> Type
     ; order :> OrderOp T }.
-
     PM : otype -> Type
 
 In this world, we need to carry around that *all* relevant functions respect
