@@ -469,11 +469,11 @@ Instance SetM_PredMonad : PredMonad Identity SetM.
 Proof.
   constructor; eauto with typeclass_instances.
   { intros; constructor; compute; intros.
-    exists x0; repeat split; try (apply (PreOrder_Reflexive)); assumption.
-    destruct (H x0 H1); destruct H3; destruct H4.
-    destruct (H0 x1 H5); destruct H6; destruct H7.
-    exists x2; repeat split;
-      try (apply (PreOrder_Transitive _ x1)); assumption. }
+    + exists x0; repeat split; try (apply (PreOrder_Reflexive)); assumption.
+    + destruct (H x0 H1); destruct H3; destruct H4.
+      destruct (H0 x1 H5); destruct H6; destruct H7.
+      exists x2; repeat split;
+        try (apply (PreOrder_Transitive _ x1)); assumption. }
   { intros. compute. repeat split; intros.
     + destruct (H x); clear H. destruct (H1 H0). clear H1; clear H3.
       repeat destruct H. exists x0; repeat split; assumption.
