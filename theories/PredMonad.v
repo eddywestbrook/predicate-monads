@@ -461,22 +461,29 @@ Instance SetM_PredMonadOps : PredMonadOps Identity SetM :=
     impliesP := fun {A} P1 P2 x => P1 x -> P2 x;
     liftP := fun {A} z x => z = x;
     entailsP := fun {A} ord P1 P2 =>
-                  forall x y, ord x y -> P1 x -> P2 y
+                  forall x, P1 x ->
+                            exists y, ord x y /\ ord y x /\ P2 y
   }.
 
 Instance SetM_PredMonad : PredMonad Identity SetM.
 Proof.
   constructor; eauto with typeclass_instances.
-  { (** NOTE(gmalecha): This is *not* provable! **) admit. }
-  { intros. compute. split; intros.
-    + split; intros.
-      - destruct (H x); clear H. destruct (H3 H1); clear H3.
-        (** NOTE(gmalecha): This is not provable unless [OrdOp] is
-         ** anti-symmetric
-         **)
-        admit.
-      - admit.
-    + admit. }
+  { intros; constructor; compute; intros.
+    exists x0; repeat split; try (apply (PreOrder_Reflexive)); assumption.
+    destruct (H x0 H1); destruct H3; destruct H4.
+    destruct (H0 x1 H5); destruct H6; destruct H7.
+    exists x2; repeat split;
+      try (apply (PreOrder_Transitive _ x1)); assumption. }
+  { intros. compute. repeat split; intros.
+    + destruct (H x); clear H. destruct (H1 H0). clear H1; clear H3.
+      repeat destruct H. exists x0; repeat split; assumption.
+    + destruct (H x); clear H. destruct (H3 H0). clear H1; clear H3.
+      repeat destruct H. exists x0; repeat split; assumption.
+    + destruct H. destruct (H z1 H0). destruct H3. destruct H4.
+      exists x; repeat split; assumption.
+    + destruct H. destruct (H1 z1 H0). destruct H3. destruct H4.
+      exists x; repeat split; assumption.
+  }
   all: admit.
 
 (*
