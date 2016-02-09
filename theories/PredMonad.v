@@ -484,30 +484,82 @@ Proof.
     + destruct H. destruct (H1 z1 H0). destruct H3. destruct H4.
       exists x; repeat split; assumption.
   }
-  all: admit.
-
-(*
-  unfold returnMeqM, SetM_eqM, IdMonad_eqM.
-         bindM, SetM_bindM, IdMonad_bindM,
-         satisfiesP, SetM_satisfiesP, forallP, SetM_forallP,
-         existsP, SetM_existsP, impliesP, SetM_impliesP;
-  intros; try auto with typeclass_instances; try reflexivity.
-  split; intros; symmetry; assumption.
-  split; intros.
-  destruct H as [ x H ]; destruct H.
-  exists (fun y => x = y); exists (exist _ x eq_refl); exists (fun _ => m).
-  split; [ assumption
-         | split; [ intros y e; rewrite <- e; assumption | reflexivity ] ].
-  destruct H as [ phi H ]; destruct H as [ m' H ]; destruct H as [ f H ];
-  destruct H as [ H H0 ]; destruct H0.
-  destruct m'. exists x. split; [ assumption | ].
-  rewrite H1. apply H0. assumption.
-  split; intros.
-  rewrite H; reflexivity.
-  split; apply H; intros; assumption.
-  intros x1 x2 ex m1 m2 em; rewrite ex; rewrite em; reflexivity.
-*)
-Abort.
-
+  { red. simpl; intros.
+    exists x.
+    split; [ eapply equals_preorder | ].
+    split; [ eapply equals_preorder | ].
+    eauto. }
+  { simpl. intros.
+    exists x.
+    split; [ eapply equals_preorder | ].
+    split; [ eapply equals_preorder | ].
+    intros.
+    eapply H in H0.
+    destruct H0. destruct H0. destruct H1.
+    revert H3. instantiate (1:= y). admit. (* Requires antisymmetry of OrdOp *) }
+  { simpl. intros.
+    exists x.
+    split; [ eapply equals_preorder | ].
+    split; [ eapply equals_preorder | ].
+    eauto. }
+  { simpl. intros.
+    destruct H0.
+    eapply H in H0. eauto. }
+  { simpl. intros.
+    specialize (H x).
+    exists x.
+    split; [ eapply equals_preorder | ].
+    split; [ eapply equals_preorder | ].
+    intros.
+    destruct H.
+    { destruct y; auto. }
+    { admit. (* requires antisymmetry of OrdOp *) } }
+  { simpl. intros.
+    destruct (H x (H0 true)).
+    exists x0. destruct H1 as [ ? [ ? ? ] ].
+    split; auto. split; auto.
+    eapply H4. (* requires antisymmetry of OrdOp *) admit. }
+  { simpl; intros.
+    red. intros. split; intros; subst.
+    { exists z1; split; eauto.
+      compute. split; eapply equals_preorder. }
+    { exists z1; split; eauto.
+      compute. split; eapply equals_preorder. } }
+  { simpl; intros.
+    red. intros.
+    split; intros.
+    { exists z1. split. split; eapply equals_preorder. eauto. }
+    { exists z1. split. split; eapply equals_preorder.
+      destruct H. destruct H. subst; auto. } }
+  { simpl. red. red. intros.
+    exists x0.
+    split; [ eapply equals_preorder | ].
+    split; [ eapply equals_preorder | ].
+    intros. specialize (H0 y0). eapply H in H0.
+    2: reflexivity.
+    (* antisymmetry of OrdOp *)
+    admit. }
+  { simpl; red. red. intros.
+    exists x0.
+    split; [ eapply equals_preorder | ].
+    split; [ eapply equals_preorder | ].
+    destruct H0. eapply H in H0; [| reflexivity ].
+    admit. (* antisymmetry of OrdOp *) }
+  { compute. intros.
+    exists x1.
+    split; [ eapply equals_preorder | ].
+    split; [ eapply equals_preorder | ].
+    intros.
+    eapply H in H3.
+    destruct H3 as [ ? [ ? [ ? ? ] ] ].
+    (* antisymmetry of OrdOp *)
+    admit. }
+  { compute.
+    intros. split; intros.
+    { subst. eauto. }
+    { subst. exists z1.
+      (* anti-symmetry of Equals *)
+      admit. } }
+Admitted.
 
 End IdentityPredMonad.
