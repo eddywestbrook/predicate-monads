@@ -1,5 +1,7 @@
 -Q theories PredMonad
 
+./theories/OrderedTerms.v
+
 ./theories/LogicalRelations.v
 ./theories/Monad.v
 
