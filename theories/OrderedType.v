@@ -264,9 +264,25 @@ Admitted.
  *** Examples
  ***)
 
+(* Example: the identity on Prop *)
 Definition proper_id_Prop_fun : Prop -> Prop :=
   ot_pair_to_elem (proper_fun (A:=OTProp) (fun x => x _ _)).
 
+(* You can see tat it is the identity, and we get an (almost) automatic Proper
+proof for it... *)
 Eval compute in proper_id_Prop_fun.
 Goal (Proper (OTArrow OTProp OTProp) proper_id_Prop_fun).
 unfold proper_id_Prop_fun; auto with typeclass_instances.
+Qed.
+
+(* Example 2: the first projection function on 2 Props *)
+Definition proper_proj1_Prop_fun : Prop -> Prop -> Prop :=
+  ot_pair_to_elem
+    (proper_fun (A:=OTProp)
+                (fun x =>
+                   (proper_fun (A:=OTProp) (fun y => x _ _)))).
+
+Eval compute in proper_proj1_Prop_fun.
+Goal (Proper (OTArrow OTProp (OTArrow OTProp OTProp)) proper_proj1_Prop_fun).
+unfold proper_proj1_Prop_fun; auto with typeclass_instances.
+Qed.
