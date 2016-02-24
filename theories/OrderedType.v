@@ -39,20 +39,6 @@ Record OrderedType : Type :=
     ot_PreOrder :> SemiTransitive ot_R
   }.
 
-(* An element of an ordered type has to be proper *)
-(*
-Definition OTElem (A:OrderedType) : Type :=
-  {x:ot_Type A | ot_R A x x}.
- *)
-
-(*
-Inductive OTElem (A:OrderedType) : Type :=
-| mkOTElem (x:ot_Type A) (pf:ot_R A x x).
-*)
-
-(* OTElem is how we view an OrderedType as a type *)
-(* Coercion OTElem : OrderedType >-> Sortclass. *)
-
 
 (***
  *** Commonly-Used Ordered Types
@@ -176,22 +162,6 @@ Inductive OTPair ctx A : Type :=
            (pf: validR (ot_R (OTInCtx ctx A)) x1 x2) :
     OTPair ctx A.
 
-(* OTPairs in the empty context can be coerced to OTElems *)
-Definition ot_pair_to_elem {A} (p: OTPair [] A) : ot_Type A :=
-  match p with
-  | mkOTPair _ _ x1 x2 pf => x1 tt
-  end.
-
-(* FIXME: does not satisfy the uniform inheritance condition... *)
-Coercion ot_pair_to_elem : OTPair >-> ot_Type.
-
-(* Any OTPair is always Proper *)
-Instance ot_pair_proper {A} (p:OTPair [] A) :
-  Proper (ot_R A) (ot_pair_to_elem p).
-destruct p; unfold ot_pair_to_elem. destruct pf; apply H.
-repeat split.
-Qed.
-
 (* Weakening for OTContexts: captures that ctx2 is an extension of ctx1 by
 saying that any object in ctx1 can be translated to ctx2 *)
 Class OTCtxExtends ctx1 ctx2 : Type :=
@@ -216,6 +186,30 @@ Instance OTCtxExtends_cons_right ctx1 ctx2
   fun {A} elem ctx_elem =>
     let (_, ctx_elem') := ctx_elem in
     (ext _ elem) ctx_elem'.
+
+
+(***
+ *** Proper Terms
+ ***)
+
+(* A "proper term" is an OTPair in the empty context *)
+Definition ProperTerm (A:OrderedType) := OTPair [] A.
+
+(* We can coerce a ProperTerm A to an element of ot_Type A by just taking the
+first projection of the pair in the ProperTerm *)
+Definition coerce_proper_term {A} (p: ProperTerm A) : ot_Type A :=
+  match p with
+  | mkOTPair _ _ x1 x2 pf => x1 tt
+  end.
+
+Coercion coerce_proper_term : ProperTerm >-> ot_Type.
+
+(* Any ProperTerm is always Proper *)
+Instance ProperTerm_Proper {A} (p:ProperTerm A) : Proper (ot_R A) p.
+destruct p; unfold coerce_proper_term. destruct pf; apply H.
+repeat split.
+Qed.
+
 
 
 (***
@@ -265,24 +259,22 @@ Admitted.
  ***)
 
 (* Example: the identity on Prop *)
-Definition proper_id_Prop_fun : Prop -> Prop :=
-  ot_pair_to_elem (proper_fun (A:=OTProp) (fun x => x _ _)).
+Definition proper_id_Prop_fun : ProperTerm (OTArrow OTProp OTProp) :=
+  proper_fun (A:=OTProp) (fun x => x _ _).
 
-(* You can see tat it is the identity, and we get an (almost) automatic Proper
-proof for it... *)
-Eval compute in proper_id_Prop_fun.
+(* It is the identity, and we get an automatic Proper proof for it *)
+Eval compute in (coerce_proper_term proper_id_Prop_fun : Prop -> Prop).
 Goal (Proper (OTArrow OTProp OTProp) proper_id_Prop_fun).
-unfold proper_id_Prop_fun; auto with typeclass_instances.
+auto with typeclass_instances.
 Qed.
 
 (* Example 2: the first projection function on 2 Props *)
-Definition proper_proj1_Prop_fun : Prop -> Prop -> Prop :=
-  ot_pair_to_elem
-    (proper_fun (A:=OTProp)
-                (fun x =>
-                   (proper_fun (A:=OTProp) (fun y => x _ _)))).
+Definition proper_proj1_Prop_fun : ProperTerm (OTArrow OTProp (OTArrow OTProp OTProp)) :=
+  proper_fun (A:=OTProp)
+             (fun x =>
+                (proper_fun (A:=OTProp) (fun y => x _ _))).
 
-Eval compute in proper_proj1_Prop_fun.
+Eval compute in (coerce_proper_term proper_proj1_Prop_fun).
 Goal (Proper (OTArrow OTProp (OTArrow OTProp OTProp)) proper_proj1_Prop_fun).
-unfold proper_proj1_Prop_fun; auto with typeclass_instances.
+auto with typeclass_instances.
 Qed.
