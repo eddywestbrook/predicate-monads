@@ -34,14 +34,16 @@ Definition validR {A} (R:relation A) : relation A :=
 
 Record OrderedType : Type :=
   {
-    ot_Type : Type;
+    ot_Type :> Type;
     ot_R :> relation ot_Type;
     ot_PreOrder :> SemiTransitive ot_R
   }.
 
 (* An element of an ordered type has to be proper *)
+(*
 Definition OTElem (A:OrderedType) : Type :=
   {x:ot_Type A | ot_R A x x}.
+ *)
 
 (*
 Inductive OTElem (A:OrderedType) : Type :=
@@ -49,7 +51,7 @@ Inductive OTElem (A:OrderedType) : Type :=
 *)
 
 (* OTElem is how we view an OrderedType as a type *)
-Coercion OTElem : OrderedType >-> Sortclass.
+(* Coercion OTElem : OrderedType >-> Sortclass. *)
 
 
 (***
@@ -162,10 +164,6 @@ Qed.
 Definition OTInCtx (ctx:OTContext) (A:OrderedType) : OrderedType :=
   OTArrow (OTCtxElem ctx) A.
 
-Definition OrderedTypeAndCtx : Type := OTContext * OrderedType.
-
-Definition OTElem_inCtx ctx A : Type := OTElem (OTInCtx ctx A).
-
 
 (***
  *** Pairs of Related Elements
@@ -179,16 +177,20 @@ Inductive OTPair ctx A : Type :=
     OTPair ctx A.
 
 (* OTPairs in the empty context can be coerced to OTElems *)
-Program Definition ot_pair_to_elem A (p: OTPair [] A) : OTElem A :=
+Definition ot_pair_to_elem {A} (p: OTPair [] A) : ot_Type A :=
   match p with
   | mkOTPair _ _ x1 x2 pf => x1 tt
   end.
-Next Obligation.
-  destruct pf; apply H. repeat split; apply I.
-Qed.
 
 (* FIXME: does not satisfy the uniform inheritance condition... *)
-Coercion ot_pair_to_elem : OTPair >-> OTElem.
+Coercion ot_pair_to_elem : OTPair >-> ot_Type.
+
+(* Any OTPair is always Proper *)
+Instance ot_pair_proper {A} (p:OTPair [] A) :
+  Proper (ot_R A) (ot_pair_to_elem p).
+destruct p; unfold ot_pair_to_elem. destruct pf; apply H.
+repeat split.
+Qed.
 
 (* Weakening for OTContexts: captures that ctx2 is an extension of ctx1 by
 saying that any object in ctx1 can be translated to ctx2 *)
@@ -236,7 +238,7 @@ Next Obligation.
 Qed.
 
 Program Definition proper_fun {ctx} {A} {B}
-        (f: (forall {ctx'} {ext: OTCtxExtends (A::ctx) ctx'}, OTPair ctx' A) ->
+        (f: (forall {ctx'} `{ext: OTCtxExtends (A::ctx) ctx'}, OTPair ctx' A) ->
             OTPair (A::ctx) B) :
   OTPair ctx (OTArrow A B) :=
   let (y1,y2,pf_y) :=
@@ -250,3 +252,21 @@ Program Definition proper_fun {ctx} {A} {B}
            (fun ctx_elem x => y2 (x,ctx_elem)) _.
 Next Obligation.
   repeat split; intros.
+  { admit. }
+  { admit. }
+  { admit. }
+Admitted.
+Next Obligation.
+Admitted.
+
+
+(***
+ *** Examples
+ ***)
+
+Definition proper_id_Prop_fun : Prop -> Prop :=
+  ot_pair_to_elem (proper_fun (A:=OTProp) (fun x => x _ _)).
+
+Eval compute in proper_id_Prop_fun.
+Goal (Proper (OTArrow OTProp OTProp) proper_id_Prop_fun).
+unfold proper_id_Prop_fun; auto with typeclass_instances.
