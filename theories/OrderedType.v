@@ -113,14 +113,18 @@ dependent version of OTContext, below. *)
  *** Types-in-Context
  ***)
 
+(* An ordered type context is a list of ordered types *)
 Definition OTContext := list OrderedType.
 
+(* An element of an ordered type context is an element of each ordered type *)
 Fixpoint ctx_elem (ctx:OTContext) : Type :=
   match ctx with
   | [] => unit
   | A::ctx' => (ot_Type A) * (ctx_elem ctx')
   end.
 
+(* The ordering on ordered type context elements is the pointwise orderings of
+all the ordered types in the context *)
 Fixpoint ctx_elem_lt (ctx:OTContext) : relation (ctx_elem ctx) :=
   match ctx with
   | [] => fun _ _ => True
@@ -129,6 +133,19 @@ Fixpoint ctx_elem_lt (ctx:OTContext) : relation (ctx_elem ctx) :=
                  ctx_elem_lt ctx' (snd e1) (snd e2)
   end.
 
+(* Consing two ordered objects to two ordered context elements yields two
+ordered context elements *)
+Lemma ctx_elem_lt_cons ctx A celem1 celem2 a1 a2
+      (pf_ctx: validR (ctx_elem_lt ctx) celem1 celem2)
+      (pf_A : validR (ot_R A) a1 a2) :
+  validR (ctx_elem_lt (A::ctx)) (a1,celem1) (a2,celem2).
+  unfold ctx_elem_lt; fold ctx_elem_lt.
+  destruct pf_ctx as [ pf_ctx1 pf_ctx2 ]; destruct pf_ctx2 as [ pf_ctx2 pf_ctx3 ].
+  destruct pf_A as [ pf_A1 pf_A2 ]; destruct pf_A2 as [ pf_A2 pf_A3 ].
+  repeat split; assumption.
+Qed.
+
+(* The ordered type of context elements *)
 Program Definition OTCtxElem (ctx:OTContext) : OrderedType :=
   {|
     ot_Type := ctx_elem ctx;
@@ -147,8 +164,88 @@ Next Obligation.
   }
 Qed.
 
+(* The ordered type of objects-in-context *)
 Definition OTInCtx (ctx:OTContext) (A:OrderedType) : OrderedType :=
   OTArrow (OTCtxElem ctx) A.
+
+
+(***
+ *** Context Extensions
+ ***)
+
+(* Captures that one context extends another. Note that we put this in Type
+instead of Prop so we can induct on it. *)
+Inductive ContextExtends : OTContext -> OTContext -> Type :=
+| ContextExtends_nil : ContextExtends [] []
+| ContextExtends_cons_both {ctx1 ctx2} A :
+    ContextExtends ctx1 ctx2 -> ContextExtends (A::ctx1) (A::ctx2)
+| ContextExtends_cons_right {ctx1 ctx2} A :
+    ContextExtends ctx1 ctx2 -> ContextExtends ctx1 (A::ctx2)
+.
+
+(* Context extension is reflexive *)
+Lemma ContextExtends_reflexive ctx : ContextExtends ctx ctx.
+  induction ctx; constructor; assumption.
+Qed.
+
+(* Context extension as a type class *)
+Class OTCtxExtends ctx1 ctx2 : Type :=
+  context_extends : ContextExtends ctx1 ctx2.
+
+Arguments context_extends {_ _ _}.
+
+(* The rules for context extension, as type class instances *)
+Instance OTCtxExtends_base ctx : OTCtxExtends ctx ctx :=
+  ContextExtends_reflexive _.
+
+Instance OTCtxExtends_cons_both ctx1 ctx2
+         {ext:OTCtxExtends ctx1 ctx2} {B} : OTCtxExtends (B::ctx1) (B::ctx2) :=
+  ContextExtends_cons_both _ context_extends.
+
+Instance OTCtxExtends_cons_right ctx1 ctx2
+         {ext:OTCtxExtends ctx1 ctx2} {B} : OTCtxExtends ctx1 (B::ctx2) :=
+  ContextExtends_cons_right _ context_extends.
+
+
+(* "Forget" elements of an extended context to get an un-extended context *)
+Fixpoint context_forget {ctx1 ctx2} (ext: ContextExtends ctx1 ctx2) :
+  ctx_elem ctx2 -> ctx_elem ctx1 :=
+  match ext in ContextExtends ctx1 ctx2
+        return ctx_elem ctx2 -> ctx_elem ctx1 with
+    | ContextExtends_nil => fun celem => celem
+    | ContextExtends_cons_both A ext' =>
+      fun celem =>
+        let (a,celem') := celem in
+        (a, context_forget ext' celem')
+    | ContextExtends_cons_right A ext' =>
+      fun celem =>
+        let (a,celem') := celem in
+        context_forget ext' celem'
+  end.
+
+(* Forgetting preserves context element ordering *)
+Lemma context_forget_preserves {ctx1 ctx2} ext celem2_1 celem2_2 :
+  ctx_elem_lt ctx2 celem2_1 celem2_2 ->
+  ctx_elem_lt ctx1 (context_forget ext celem2_1) (context_forget ext celem2_2).
+  revert celem2_1 celem2_2; induction ext; intros.
+  { unfold context_forget; assumption. }
+  { unfold context_forget; fold (context_forget ext).
+    destruct celem2_1; destruct celem2_2. destruct H; destruct H; destruct H1.
+    repeat constructor; unfold fst in * |- *; try assumption.
+    apply IHext; assumption. }
+  { unfold context_forget; fold (context_forget ext).
+    destruct celem2_1; destruct celem2_2. destruct H; destruct H; destruct H1.
+    apply IHext; assumption. }
+Qed.
+
+(* Forgetting thus preserves valid context element ordering *)
+Lemma context_forget_preserves_validR {ctx1 ctx2} ext celem2_1 celem2_2 :
+  validR (ctx_elem_lt ctx2) celem2_1 celem2_2 ->
+  validR (ctx_elem_lt ctx1)
+         (context_forget ext celem2_1) (context_forget ext celem2_2).
+  intro pf; destruct pf as [ pf1 pf2 ]; destruct pf2 as [ pf2 pf3 ].
+  repeat constructor; apply context_forget_preserves; assumption.
+Qed.
 
 
 (***
@@ -162,30 +259,21 @@ Inductive OTPair ctx A : Type :=
            (pf: validR (ot_R (OTInCtx ctx A)) x1 x2) :
     OTPair ctx A.
 
-(* Weakening for OTContexts: captures that ctx2 is an extension of ctx1 by
-saying that any object in ctx1 can be translated to ctx2 *)
-Class OTCtxExtends ctx1 ctx2 : Type :=
-  weaken_context :
-    forall {A}, (ctx_elem ctx1 -> ot_Type A) ->
-                ctx_elem ctx2 -> ot_Type A.
-
-(* The rules for context extension, as type class instances *)
-Instance OTCtxExtends_base ctx : OTCtxExtends ctx ctx :=
-  fun {A} elem => elem.
-
-Instance OTCtxExtends_cons_both ctx1 ctx2
-         {ext:OTCtxExtends ctx1 ctx2} {B}
-  : OTCtxExtends (B::ctx1) (B::ctx2) :=
-  fun {A} elem ctx_elem =>
-    let (celem1, ctx_elem') := ctx_elem in
-    (ext _ (fun ctx_elem'' => elem (celem1, ctx_elem''))) ctx_elem'.
-
-Instance OTCtxExtends_cons_right ctx1 ctx2
-         {ext:OTCtxExtends ctx1 ctx2} {B}
-  : OTCtxExtends ctx1 (B::ctx2) :=
-  fun {A} elem ctx_elem =>
-    let (_, ctx_elem') := ctx_elem in
-    (ext _ elem) ctx_elem'.
+(* Weakening the context of an OTPair *)
+Program Definition weaken_context {ctx1 ctx2} (ext: ContextExtends ctx1 ctx2)
+           {A} (p: OTPair ctx1 A) : OTPair ctx2 A :=
+  match p with
+    | mkOTPair _ _ x1 x2 pf =>
+      mkOTPair _ _ (fun celem1 => x1 (context_forget ext celem1))
+               (fun celem1 => x2 (context_forget ext celem1))
+               _
+  end.
+Next Obligation.
+  destruct pf as [ pf1 pf2 ]; destruct pf2 as [ pf2 pf3 ].
+  repeat constructor;
+    intros; [ apply pf1 | apply pf2 | apply pf3 ];
+    apply context_forget_preserves_validR; assumption.
+Qed.
 
 
 (***
@@ -209,7 +297,6 @@ Instance ProperTerm_Proper {A} (p:ProperTerm A) : Proper (ot_R A) p.
 destruct p; unfold coerce_proper_term. destruct pf; apply H.
 repeat split.
 Qed.
-
 
 
 (***
@@ -236,22 +323,15 @@ Program Definition proper_fun {ctx} {A} {B}
             OTPair (A::ctx) B) :
   OTPair ctx (OTArrow A B) :=
   let (y1,y2,pf_y) :=
-      f (fun {ctx'} {ext} =>
-           let (x1,x2,pf_x) := proper_var ctx A in
-           mkOTPair _ _ (weaken_context x1)
-                    (weaken_context x2)
-                    _)
+      f (fun {ctx'} {ext} => weaken_context ext (proper_var ctx A))
   in
   mkOTPair _ _ (fun ctx_elem x => y1 (x,ctx_elem))
            (fun ctx_elem x => y2 (x,ctx_elem)) _.
 Next Obligation.
-  repeat split; intros.
-  { admit. }
-  { admit. }
-  { admit. }
-Admitted.
-Next Obligation.
-Admitted.
+  destruct pf_y as [ pf1 pf2 ]; destruct pf2 as [ pf2 pf3 ].
+  repeat split; intros; [ apply pf1 | apply pf2 | apply pf3 ];
+  apply ctx_elem_lt_cons; assumption.
+Qed.
 
 
 (***
