@@ -330,17 +330,46 @@ Section SetMonad.
             etransitivity; [ eapply H0 | eapply H ]).
   Defined.
 
-  Definition Oexists {A : otype} : (A -o> oprop) -o> oprop.
+  Definition Oge {A : otype} : A -o> otype_flip A -o> otype_flip oprop.
+  refine (ToCtx (\ A => \ otype_flip A => _)).
+  red. simpl.
+  unfold otype_flip. simpl.
+  eexists. Unshelve.
+  Focus 2. simpl.
+  refine (fun x => ole (fst (snd x)) (fst x) ).
+  red. red. simpl. intros.
+  destruct H.
+  destruct H0.
+  red. red. red. red. red. intro.
+  etransitivity. red. simpl in *. eassumption. 
+  etransitivity. eapply H2. eassumption.
+  Defined.
+
+  Definition Oexists {A : otype} : (A -o> otype_flip A -o> oprop) -o> oprop.
   refine (ToCtx (\ _ => _ )).
   red. simpl.
-  refine (@otype_abs _ _ (fun f_ => exists x, (fst f_) @ x) _).
+  refine (@otype_abs _ _ (fun (f_ : (A -o> otype_flip A -o> oprop) * otype_unit) =>
+                            exists x : A, function (function (fst f_) x) x) _).
+  Proof.
   red. red. red. simpl. intros.
   red. intros.
   destruct H0. exists x0.
-  eapply H. reflexivity. eapply H0.
+  eapply H. reflexivity. reflexivity. eassumption.
   Defined.
 
-  Definition Oand {A : otype} : oprop -o> oprop -o> oprop.
+  Definition Oforall {A : otype} : (A -o> otype_flip A -o> oprop) -o> oprop.
+  refine (ToCtx (\ _ => _ )).
+  red. simpl.
+  refine (@otype_abs _ _ (fun (f_ : (A -o> otype_flip A -o> oprop) * otype_unit) =>
+                            forall x : A, function (function (fst f_) x) x) _).
+  Proof.
+  red. red. red. simpl. intros.
+  red. intros.
+  specialize (H0 x0).
+  eapply H. reflexivity. reflexivity. eassumption.
+  Defined.
+
+  Definition Oand : oprop -o> oprop -o> oprop.
   refine (ToCtx (\ _ => \ _ => _ )).
   red. simpl.
   refine (@otype_abs _ _ (fun f_ => (fst (snd f_)) /\ (fst f_)) _).
@@ -348,12 +377,138 @@ Section SetMonad.
   split; eapply H; tauto.
   Defined.
 
+  Definition Oimpl : otype_flip oprop -o> oprop -o> oprop.
+  refine (ToCtx (\ _ => \ _ => _ )).
+  red. simpl.
+  refine (@otype_abs _ _ (fun f_ => Basics.impl _ (fst f_)) _).
+  Unshelve.
+  Focus 2.
+  refine (fst (snd f_)).
+  red. red. red. simpl. unfold Basics.impl. intros.
+  eapply H. eapply H0. eapply H. eapply H1.
+  Defined.
+
+  (** NOTE: These are generic lemmas that belong elsewhere **)
+  Lemma Prop_oequiv (a b : oprop) : (a ~~ b) <-> (a <-> b).
+  Proof. red. split; intro; eassumption. Qed.
+  Lemma exists_and : forall {A : Type} P (Q  : Prop),
+      ((exists x : A, P x) /\ Q) <-> exists x : A, P x /\ Q.
+  Proof. intuition. destruct H0; eauto. destruct H; eauto. exists x; tauto. destruct H; tauto. Qed.
+  Lemma exists_comm {A B : Type} (P : A -> B -> Prop) :
+    (exists x y, P x y) <-> (exists y x, P x y).
+  Proof. split; destruct 1 as [ ? [ ? ? ] ]; do 2 eexists; eauto. Qed.
+
+  Hint Rewrite @otype_abs_otype_apply : reduce.
+
+  (** TODO: It would be good to simplify the reasoning about the logical
+   ** connectives.
+   **)
+
   Instance OMonad_Ensemble : OMonad Ensemble :=
   { returnM := fun A => ToCtx (\ A => \ otype_flip A => !Ole @ #0 @ #1)
-  ; bindM   := fun A B => ToCtx ( \ Ensemble A => \ (A -o> Ensemble B) => \ otype_flip B => !Oexists @ \ otype_flip A => !Oand @ (#3 @ #0) $ #2 @ _ @ #1)
+  ; bindM   := fun A B => ToCtx (
+      \ Ensemble A => \ (A -o> Ensemble B) => \ otype_flip B =>
+          !Oexists @ \ A => \ otype_flip A =>
+             !Oand @ (#4 @ #0) $ #3 @ #1 @ #2)
   }.
-  (** NOTE: bindM does not work because of the flip, but the flip is necessary
-   ** in order to make the functions respect their ordering
-   **)
-  Admitted.
+  Proof.
+  all: unfold Ensemble; simpl List.nth_error; intros.
+  { simpl otype_tuple. oext. oreduce.
+    unfold Oexists. oreduce.
+    simpl otype_tuple.
+    oreduce. simpl fst.
+    split.
+    { intro. destruct H.
+      simpl in H. destruct H.
+      revert H0.
+      change (f @ x1 @ x0 <~ f @ x @ x0).
+      eapply Proper_otype_apply_ole; try reflexivity.
+      clear - H.
+      eapply (@Proper_otype_apply_ole _ _ f). reflexivity. eapply H. }
+    { intro.
+      exists x. simpl. split. reflexivity. eassumption. } }
+  { oext. oreduce. unfold Oexists.
+    oreduce.
+    simpl otype_tuple.
+    oreduce.
+    simpl.
+    split.
+    { intro. destruct H. destruct H.
+      revert H.
+      change (m @ x0 <~ m @ x).
+      eapply Proper_otype_apply_ole; try reflexivity.
+      eassumption. }
+    { intro. eexists; split; eauto. reflexivity. } }
+  { oext. oreduce.
+    unfold Oexists. oreduce.
+    simpl otype_tuple.
+    oreduce. simpl.
+    eapply Prop_oequiv.
+    setoid_rewrite exists_and.
+    rewrite exists_comm.
+    eapply Morphisms_Prop.ex_iff_morphism. red. intros.
+    rewrite and_comm.
+    rewrite exists_and.
+    eapply Morphisms_Prop.ex_iff_morphism. red. intros. tauto. }
+  Defined.
+
 End SetMonad.
+
+
+(* Definition Flip_cast {a b : otype} (x : otype_flip a -o> otype_flip b) *)
+(* : otype_flip (a -o> b). *)
+(* red. simpl. simpl in x. *)
+(* destruct x. *)
+(* compute in function. exists function. *)
+(* red. red. red. intros. *)
+(* eapply Proper_function. eapply H. *)
+(* Defined. *)
+(* Definition Flip_cast' {a b : otype} (x : otype_flip (a -o> b)) *)
+(* : otype_flip a -o> otype_flip b. *)
+(* Admitted. *)
+
+(* Definition Flip {a b : otype} (x : a -o> b) *)
+(* : otype_flip (otype_flip a -o> otype_flip b). *)
+(* red. simpl. simpl in x. *)
+(* destruct x. *)
+(* destruct a. destruct b. simpl in *. *)
+(* unfold otype_flip; simpl. *)
+(* exists function. *)
+(* red. red. red. intros. *)
+(* eapply Proper_function. eapply H. *)
+(* Defined. *)
+
+(* Definition Flip_Flip {a : otype} (x : otype_flip (otype_flip a)) : a := x. *)
+(* Definition Flip_Flip' {a : otype} (x : a) : otype_flip (otype_flip a) := x. *)
+
+(* Structure Flipper : Type := *)
+(* { _type :> otype *)
+(* ; _Ftype : otype *)
+(* ; _Fcast : _type -o> otype_flip _Ftype *)
+(* }. *)
+
+(* Axiom todo : forall x : Type, x. *)
+
+(* Canonical Structure Flipper_otype_flip (x : otype) : Flipper := *)
+(* {| _type  := otype_flip x *)
+(*  ; _Ftype := x *)
+(*  ; _Fcast := todo _ *)
+(*  |}. *)
+
+(* Canonical Structure Flipper_otype_fun (a b : Flipper) : Flipper := *)
+(* {| _type  := otype_fun a.(_type) b.(_type) *)
+(*  ; _Ftype := otype_fun a.(_Ftype) b.(_Ftype) *)
+(*  ; _Fcast := todo _ *)
+(*  |}. *)
+
+
+(* Definition Flip_ctx {g} {a : Flipper} (x : InCtx g a.(_type)) *)
+(* : InCtx g a.(_Ftype). *)
+(* red. red. simpl. red in x. simpl in x. *)
+(* eexists (fun g => Flip_Flip (a.(_Fcast) $ x @ g)). *)
+(* red. red. intros. *)
+(* unfold Flip_Flip. *)
+(* eapply (Proper_otype_apply_ole (_Fcast a) (_Fcast a)). reflexivity. *)
+(* eapply (Proper_otype_apply_ole x x). reflexivity. *)
+(* red in H. red in H. red. red. *)
+(* clear - H. revert H. unfold ole, le. simpl. *)
