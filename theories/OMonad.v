@@ -284,3 +284,76 @@ Section StateT.
     reflexivity. }
   Time Defined.
 End StateT.
+
+Section PredMonad.
+  Variable M : otype -> otype.
+  Variable PM : otype -> otype.
+  Context {OMonad_M : OMonad M} {OMonad_PM : OMonad PM}.
+
+  Class PredMonad : Type :=
+  { forallP: forall {A B: otype}, (A -o> PM B) -o> PM B
+  ; existsP: forall {A B: otype}, (A -o> PM B) -o> PM B
+  ; impliesP: forall {A: otype}, PM A -o> PM A -o> PM A
+  ; liftP: forall {A: otype}, M A -o> PM A
+(*  ; entailsP: forall {A: otype}, relation (PM A) *)
+
+  ; forallP_elim :
+      forall {A B:otype} (f: A -o> PM B) a,
+        (forallP @ f) <~ (f @ a)
+  ; forallP_intro :
+      forall {A B: otype} (f: A -o> PM B) P,
+        (forall a, P <~ f @ a) ->
+        P <~ forallP @ f
+  }.
+End PredMonad.
+
+Canonical Structure oprop : otype :=
+{| T := Prop
+ ; order := {| le := Basics.impl |} |}.
+
+(* contra-variant *)
+Definition otype_flip (x : otype) :=
+{| T := x.(T)
+ ; order := {| le := Basics.flip (@le _ x.(order)) |} |}.
+
+Section SetMonad.
+  Definition Ensemble (x : otype) : otype := otype_flip x -o> oprop.
+
+  Definition Ole {A : otype} : otype_flip A -o> A -o> oprop.
+  refine (ToCtx (\ otype_flip A => \ A => _)).
+  red. simpl.
+  refine (@otype_abs _ _ (fun x => ole _ (fst (snd x))) _).
+  Unshelve.
+  Focus 2. simpl. eapply (fst x).
+  abstract (do 6 red; simpl; intros;
+            etransitivity; [ eapply H | ];
+            etransitivity; [ eapply H0 | eapply H ]).
+  Defined.
+
+  Definition Oexists {A : otype} : (A -o> oprop) -o> oprop.
+  refine (ToCtx (\ _ => _ )).
+  red. simpl.
+  refine (@otype_abs _ _ (fun f_ => exists x, (fst f_) @ x) _).
+  red. red. red. simpl. intros.
+  red. intros.
+  destruct H0. exists x0.
+  eapply H. reflexivity. eapply H0.
+  Defined.
+
+  Definition Oand {A : otype} : oprop -o> oprop -o> oprop.
+  refine (ToCtx (\ _ => \ _ => _ )).
+  red. simpl.
+  refine (@otype_abs _ _ (fun f_ => (fst (snd f_)) /\ (fst f_)) _).
+  red. red. red. simpl. unfold Basics.impl. intros.
+  split; eapply H; tauto.
+  Defined.
+
+  Instance OMonad_Ensemble : OMonad Ensemble :=
+  { returnM := fun A => ToCtx (\ A => \ otype_flip A => !Ole @ #0 @ #1)
+  ; bindM   := fun A B => ToCtx ( \ Ensemble A => \ (A -o> Ensemble B) => \ otype_flip B => !Oexists @ \ otype_flip A => !Oand @ (#3 @ #0) $ #2 @ _ @ #1)
+  }.
+  (** NOTE: bindM does not work because of the flip, but the flip is necessary
+   ** in order to make the functions respect their ordering
+   **)
+  Admitted.
+End SetMonad.
