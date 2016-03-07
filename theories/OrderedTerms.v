@@ -22,17 +22,56 @@ Existing Instance order.
 
 Definition ole {T : otype} (a b : T) : Prop :=
   le a b.
+
+Global Instance Reflexive_ole {T} : Reflexive (@ole T).
+Proof. red. intros. red. destruct T0. eapply Refl_le. Qed.
+Global Instance Transitive_ole {T} : Transitive (@ole T).
+Proof. red. intros. red. destruct T0. eapply Trans_le; eauto. Qed.
+
+Instance Proper_ole_impl {A : otype}
+: Morphisms.Proper (ole --> ole ==> Basics.impl) (@ole A).
+Proof.
+  do 4 red. intros.
+  etransitivity. eapply H. etransitivity; eauto.
+Qed.
+
 Definition oequiv {T : otype} (a b : T) : Prop :=
   ole a b /\ ole b a.
 
+Global Instance Reflexive_oequiv {T} : Reflexive (@oequiv T).
+Proof. red. intros. red. destruct T0. split; eapply Refl_le. Qed.
+Global Instance Symmetric_oequiv {A} : Symmetric (@oequiv A).
+Proof. red. unfold oequiv. tauto. Qed.
+Global Instance Transitive_oequiv {T} : Transitive (@oequiv T).
+Proof. do 2 red. intros.
+       destruct T0. destruct H; destruct H0; split; etransitivity; eauto.
+Qed.
+
+Instance Proper_oequiv_iff {A : otype}
+: Morphisms.Proper (oequiv ==> oequiv ==> iff) (@oequiv A).
+Proof.
+  red. red. red. intros.
+  split; intros.
+  etransitivity. symmetry; eauto. etransitivity; eauto.
+  etransitivity. eauto. etransitivity; eauto. symmetry; eauto.
+Qed.
+
+Instance Proper_ole_oequiv_iff {A : otype}
+: Morphisms.Proper (oequiv ==> oequiv ==> iff) (@ole A).
+Proof.
+  red. red. red. intros.
+  split; intros.
+  etransitivity. eapply H. etransitivity; eauto. eapply H0.
+  etransitivity. eapply H. etransitivity; eauto. eapply H0.
+Qed.
+
 (* The discrete ordering *)
-Definition otype_eq (T : Type) : otype.
-exists T.
-exists eq.
-eauto. eauto with typeclass_instances.
-Defined.
+Definition otype_eq (T : Type) : otype :=
+{| T := T
+ ; order := {| le := @eq T |}
+ |}.
 
-
+(** * Ordered Products **)
 Definition Order_prod (A B : Type) `{OA : Order A} `{OB : Order B}
 : Order (A * B).
 refine
@@ -41,15 +80,27 @@ refine
 { red. destruct 1; destruct 1; split; eapply Trans_le; eassumption. }
 Defined.
 
-Canonical Structure otype_prod (a b : otype) : otype := (* canonical structure *)
+Canonical Structure otype_prod (a b : otype) : otype :=
 {| T := a.(T) * b.(T)
 ; order := @Order_prod a.(T) b.(T) a.(order) b.(order) |}.
 
+(** * Ordered Unit **)
+Definition Order_unit : Order unit.
+refine
+  {| le := fun _ _ => True |}.
+compute; auto.
+compute; auto.
+Defined.
+
+Canonical Structure otype_unit : otype :=
+{| T := unit ; order := @Order_unit |}.
+
+(** * Ordered Functions **)
 Record PFun (A B : otype) : Type :=
 { function : A -> B
 ; Proper_function : Proper (ole ==> ole) function }.
 
-Definition Order_fun (A B : otype)
+Local Definition Order_fun (A B : otype)
 : Order (PFun A B).
 refine
 {| le := fun a b => (ole ==> ole)%signature (function a) (function b) |}.
@@ -64,31 +115,49 @@ Definition otype_fun (a b : otype) : otype :=
 {| T := PFun a b
 ; order := @Order_fun a b |}.
 
-Definition Order_unit : Order unit.
-refine
-  {| le := fun _ _ => True |}.
-compute; auto.
-compute; auto.
-Defined.
-
-Canonical Structure otype_unit : otype :=
-{| T := unit ; order := @Order_unit |}.
-
-
 Definition otype_apply {a b : otype} (f : otype_fun a b) (x : a) : b :=
   f.(function) x.
 
-Lemma Proper_otype_apply {a b : otype}
+Global Instance Proper_otype_apply_ole {a b : otype}
 : Proper (ole ==> ole ==> ole) (@otype_apply a b).
+Proof.
   red. red. red. intros.
   red in H. unfold le in H. unfold order in H. simpl in H.
   eapply H. assumption.
 Defined.
 
+Global Instance Proper_otype_apply_oequiv {A B}
+: Morphisms.Proper (oequiv ==> oequiv ==> oequiv) (@otype_apply A B).
+Proof.
+  do 3 red. intros.
+  unfold otype_apply.
+  destruct H.
+  split.
+  eapply H; eapply H0.
+  eapply H1; eapply H0.
+Qed.
+
+Lemma otype_ext_eq : forall {A B : otype} (f g : otype_fun A  B),
+    (forall x, oequiv (otype_apply f x) (otype_apply g x)) ->
+    oequiv f g.
+Proof.
+  intros.
+  destruct f; destruct g; simpl in *.
+  split.
+  { red. simpl. red. intros.
+    etransitivity.
+    eapply Proper_function0. eassumption.
+    eapply H. }
+  { red. simpl. red. intros.
+    etransitivity.
+    eapply Proper_function1. eassumption.
+    eapply H. }
+Qed.
+
 Definition otype_abs {a b : otype} (f : a -> b) (pf : Proper (@le _ a.(order) ==> @le _ b.(order)) f) : otype_fun a b.
   exists f. assumption.
 Defined.
-
+Arguments otype_abs {_ _} _ {_} : clear implicits.
 
 (** * A Shallow Encoding using Eddy's 'ProperInCtx' phrasing **)
 (**************************************************************)
@@ -109,7 +178,7 @@ instantiate (1 := fun ctx =>
                     otype_apply (otype_apply f ctx)
                                 (otype_apply x ctx)).
 red. red. intros.
-repeat simple eapply Proper_otype_apply; try eassumption; eapply Refl_le.
+repeat simple eapply Proper_otype_apply_ole; try eassumption; reflexivity.
 Defined.
 
 Definition Lift_ctx {ls} {a : otype} (x : a) : InCtx ls a.
@@ -168,144 +237,32 @@ Fixpoint Var_ctx {a} (n : nat) {ls} {struct n}
   | nil , S _ => fun x : None = Some a => match x with eq_refl => tt end
   end.
 
-(** * A Deeply Embedded Language **)
-(**********************************)
-Require Import ExtLib.Data.Member.
-Section fo.
-  Inductive oexpr (g : list otype) : otype -> Type :=
-  | Const : forall ot : otype, ot.(T) -> oexpr g ot
-  | Var : forall T, member T g -> oexpr g T
-  | App : forall a b : otype, oexpr g (otype_fun a b) -> oexpr g a -> oexpr g b
-  | Abs : forall a b : otype, oexpr (a :: g) b -> oexpr g (otype_fun a b).
-End fo.
-Arguments oexpr _ _ : clear implicits.
+(** * Instances **)
+Global Instance Proper_App_ctx G A B
+: Morphisms.Proper (oequiv ==> oequiv ==> oequiv) (@App_ctx G A B).
+Proof.
+  red. red. red. simpl. intros.
+  unfold App_ctx. simpl. split; red; simpl; red; intros.
+  { eapply H; eauto.
+    eapply H0; eauto. }
+  { eapply H; eauto.
+    eapply H0; eauto. }
+Qed.
 
-Fixpoint member_to_nat {T : Type} ls (l : T) (m : member l ls)
-: { n : nat & nth_error ls n = Some l } :=
-  match m in member _ ls
-        return { n : nat & nth_error ls n = Some l }
-  with
-  | MZ _ _ => @existT _ _ 0 eq_refl
-  | MN _ m => match @member_to_nat T _ _ m with
-              | existT _ n pf => @existT _ _ (S n) pf
-              end
-  end.
+Global Instance Proper_Abs_ctx G B A
+: Morphisms.Proper (oequiv ==> oequiv) (@Abs_ctx G A B).
+Proof.
+  unfold Abs_ctx. red. red. simpl. intros.
+  simpl. apply otype_ext_eq; intros.
+  simpl. unfold otype_abs. split; red; simpl; red; intros; eapply H; eauto.
+  constructor; simpl; eauto. reflexivity.
+  constructor; simpl; eauto. reflexivity.
+Qed.
 
-Fixpoint oexprD {ls} {ot} (e : oexpr ls ot) : InCtx ls ot :=
-  match e in oexpr _ ot return InCtx ls ot with
-  | Const _ t c => Lift_ctx c
-  | Var v => let '(existT _ n pf) := member_to_nat v in Var_ctx n pf
-  | @App _ d c f x =>
-    App_ctx (oexprD f) (oexprD x)
-  | Abs body => Abs_ctx (oexprD body)
-  end.
-
-Require Import ExtLib.Data.HList.
-
-Fixpoint arrs (ls : list otype) (d : otype) : otype :=
-  match ls with
-  | nil => d
-  | l :: ls => otype_fun l (arrs ls d)
-  end.
-Fixpoint apps {vs ls : list otype} {d : otype} (f : oexpr vs (arrs ls d)) (xs : hlist (oexpr vs) ls)
-: oexpr vs d.
-refine (
-  match xs in hlist _ ls
-        return oexpr vs (arrs ls d) -> oexpr vs d
-  with
-  | Hnil => fun f => f
-  | @Hcons _ _ l ls x xs => fun f => @apps vs ls _ (@App _ _ _ f x) xs
-  end f).
-Defined.
-
-(*
-Section tele.
-  Context {T : Type}.
-  Variable F : list T -> T -> Type.
-
-  Inductive tele : list T -> Type :=
-  | Tend : tele nil
-  | Tcons : forall t ts, F ts t -> tele ts -> tele (t :: ts).
-End tele.
-
-Section rem.
-  Context {T} {F : list T -> T -> Type}.
-  Fixpoint tele_rem  {ts} (t : tele (fun ts t => option (F ts t)) ts) : list T :=
-    match t with
-    | Tend _ => nil
-    | @Tcons _ _ t _ None ts => t :: tele_rem ts
-    | @Tcons _ _ _ _ (Some _) ts => tele_rem ts
-    end.
-End rem.
-*)
-
-Section Subst.
-  Context {T : Type}.
-  Variable F : list T -> T -> Type.
-  Inductive Subst : list T -> list T -> Type :=
-  | Snil : Subst nil nil
-  | Sterm : forall ts ts' t, F ts' t -> Subst ts ts' -> Subst (t :: ts) ts'
-  | Sskip : forall ts ts' t, Subst ts ts' -> Subst (t :: ts) (t :: ts').
-End Subst.
-
-(* NOTE: You can not implement this when you have a shallow encoding of types
-Fixpoint oexpr_red {ls' ls ds} {ot}
-         (g : Subst oexpr ls ls')
-         (e : oexpr ls (arrs ds ot))
-         (xs : hlist (oexpr ls') ds)
-: oexpr ls' ot.
-refine (
-  match e in oexpr _ ot'
-        return ot' = arrs ds ot -> oexpr ls' ot
-  with
-  | Const _ t c => fun pf =>
-                     _
-  | Var v => _
-  | @App _ d c f x => fun pf =>
-    @oexpr_red _ _ (d :: ds) ot g
-               match pf in _ = X return oexpr _ (otype_fun _ X) with
-               | eq_refl => f
-               end (Hcons (@oexpr_red _ _ nil d g x Hnil) xs)
-  | @Abs _ d c body =>
-    match xs in hlist _ ds
-          return otype_fun d c = arrs ds ot -> oexpr ls' ot
-    with
-    | Hnil => fun pf : otype_fun d c = ot =>
-      match pf with
-      | eq_refl => @Abs _ d c (@oexpr_red _ _ nil _ (@Sskip _ _ _ _ _ g)
-                                          body
-                                          Hnil)
-      end
-    | Hcons x xs => _
-    end
-  end eq_refl).
-Focus 3. simpl.
-refine
-  (fun pf => @oexpr_red ls' (_ :: ls) _ _ (Sterm _ x g) _ xs).
-*)
-
-Definition OExprD {ot} (e : oexpr nil ot) : ot :=
-  ToCtx (oexprD e).
-
-Arguments Abs {_} _ {_} _ : clear implicits.
-Arguments Var {_ _} _ : clear implicits.
-Arguments Const {_ _} _ : clear implicits.
-Arguments MZ {_ _ _}.
-Arguments MN {_ _ _ _} _ : clear implicits.
-
-(* A very simple example *)
-Eval compute in OExprD (Abs (otype_eq nat) (Var MZ)).
-
-Definition otype_abs_eq {T} {a : otype} (F : T -> a)
-: otype_fun (otype_eq T) a.
-red. exists F. red. red. intros. compute in H. simpl in H. subst. eapply Refl_le.
-Defined.
-
-Definition inj {a:otype} (x : a) : a := x.
-Canonical Structure otype_nat := otype_eq nat.
-
-(* Embedding functions is going to be horrible *)
-Definition Plus : otype_fun (otype_eq nat) (otype_fun (otype_eq nat) (otype_eq nat)) :=
-  otype_abs_eq (fun x : nat => otype_abs_eq (fun y : nat => inj (x + y))).
-
-Eval compute in OExprD (Abs otype_nat (Abs otype_nat (App (App (Const Plus) (Var MZ)) (Var (MN MZ))))).
+Global Instance Proper_Lift_ctx A G
+: Morphisms.Proper (oequiv ==> oequiv) (@Lift_ctx A G).
+Proof.
+  do 2 red. simpl. unfold Lift_ctx. intros.
+  eapply otype_ext_eq.
+  intros. assumption.
+Qed.
