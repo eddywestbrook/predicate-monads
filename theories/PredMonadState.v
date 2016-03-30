@@ -1,6 +1,6 @@
 Require Import PredMonad.PredMonad.
 
-
+(*
 Class PredMonadState S M PM
       {MonadRetM:MonadRet M} {MonadBindM:MonadBind M}
       {MonadEquivM:MonadEquiv M} {MonadGetM:MonadGet S M} {MonadPutM:MonadPut S M}
@@ -19,3 +19,4 @@ Class PredMonadState S M PM
     predmonad_state_put_put :
       forall s m, m |= putM s <-> m == putM s
   }.
+*)
