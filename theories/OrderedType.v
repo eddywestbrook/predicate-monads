@@ -22,8 +22,8 @@ Class SemiTransitive {A} (R:relation A) : Prop :=
 
 (* Restrict a semi-transitive relation to the "valid" elements, i.e., those that
 are related to themselves *)
-Definition validR {A} (R:relation A) : relation A :=
-   fun x y => R x x /\ R y y /\ R x y.
+Inductive validR {A} (R:relation A) (x:A) (y:A) : Prop :=
+| mkValidR : R x x -> R y y -> R x y -> validR R x y.
 
 (* FIXME: validR R is transitive when R is semi-transitive *)
 
@@ -34,7 +34,7 @@ Definition validR {A} (R:relation A) : relation A :=
 
 Record OrderedType : Type :=
   {
-    ot_Type :> Type;
+    ot_Type : Type;
     ot_R :> relation ot_Type;
     ot_PreOrder :> SemiTransitive ot_R
   }.
@@ -48,7 +48,7 @@ Record OrderedType : Type :=
 Program Definition OTProp : OrderedType :=
   {|
     ot_Type := Prop;
-    ot_R := iff;
+    ot_R := Basics.impl;
   |}.
 Next Obligation.
   constructor.
@@ -94,15 +94,30 @@ Program Definition OTArrow
               forall x y, validR (ot_R A) x y -> ot_R B (f x) (g y);
   |}.
 Next Obligation.
-  constructor. intros f g h; intros. destruct H4; destruct H5.
+  constructor; intros f g h; intros; destruct H4.
   apply (semitransitivity (SemiTransitive:=B) _ (g y)).
-  { apply H; repeat split; assumption. }
-  { apply H0; repeat split; assumption. }
-  { apply H1; repeat split; assumption. }
-  { apply H2; repeat split; assumption. }
-  { apply H3; repeat split; assumption. }
+  { apply H; split; assumption. }
+  { apply H0; split; assumption. }
+  { apply H1; split; assumption. }
+  { apply H2; split; assumption. }
+  { apply H3; split; assumption. }
 Qed.
 
+(* FIXME: could also do a forall type, but need the second type argument, B, to
+itself be proper, i.e., to be an element of OTArrow A OType. Would also need a
+dependent version of OTContext, below. *)
+
+
+(* Flip the ordering of an OrderedType *)
+Program Definition OTFlip (A:OrderedType) : OrderedType :=
+  {|
+    ot_Type := ot_Type A;
+    ot_R := fun x y => ot_R A y x
+  |}.
+Next Obligation.
+  constructor. intros p1 p2 p3; intros.
+  apply (semitransitivity (SemiTransitive:=A) _ p2); assumption.
+Qed.
 
 (* The non-dependent product ordered type *)
 Program Definition OTProd
@@ -147,12 +162,6 @@ Next Obligation.
   { apply (semitransitivity (SemiTransitive:=B) _ o0); assumption. }
 Qed.
 
-(* FIXME: also need notations *)
-
-(* FIXME: could also do a forall type, but need the second type argument, B, to
-itself be proper, i.e., to be an element of OTArrow A OType. Would also need a
-dependent version of OTContext, below. *)
-
 
 
 (***
@@ -186,8 +195,7 @@ Lemma ctx_elem_lt_cons ctx A celem1 celem2 a1 a2
       (pf_A : validR (ot_R A) a1 a2) :
   validR (ctx_elem_lt (A::ctx)) (a1,celem1) (a2,celem2).
   unfold ctx_elem_lt; fold ctx_elem_lt.
-  destruct pf_ctx as [ pf_ctx1 pf_ctx2 ]; destruct pf_ctx2 as [ pf_ctx2 pf_ctx3 ].
-  destruct pf_A as [ pf_A1 pf_A2 ]; destruct pf_A2 as [ pf_A2 pf_A3 ].
+  destruct pf_ctx; destruct pf_A.
   repeat split; assumption.
 Qed.
 
@@ -201,9 +209,8 @@ Next Obligation.
   induction ctx; constructor.
   { intros; assumption. }
   { repeat (intro foo; destruct foo). split.
-    - destruct H; destruct H3; destruct H5; destruct H11;
-        destruct H7; destruct H13.
-      repeat split; try assumption.
+    - destruct H; destruct H3; destruct H5; destruct H7.
+      split; try assumption.
       apply (@semitransitivity _ _ (ot_PreOrder a) _ (fst (o0, c0)));
         try assumption.
     - apply (semitransitivity _ (snd (o0, c0))); assumption.
@@ -241,7 +248,7 @@ Class OTCtxExtends ctx1 ctx2 : Type :=
 Arguments context_extends {_ _ _}.
 
 (* The rules for context extension, as type class instances *)
-Instance OTCtxExtends_base ctx : OTCtxExtends ctx ctx :=
+Instance OTCtxExtends_refl ctx : OTCtxExtends ctx ctx :=
   ContextExtends_reflexive _.
 
 Instance OTCtxExtends_cons_both ctx1 ctx2
@@ -254,7 +261,7 @@ Instance OTCtxExtends_cons_right ctx1 ctx2
 
 
 (* "Forget" elements of an extended context to get an un-extended context *)
-Fixpoint context_forget {ctx1 ctx2} (ext: ContextExtends ctx1 ctx2) :
+Fixpoint context_forget {ctx1 ctx2} (ext: OTCtxExtends ctx1 ctx2) :
   ctx_elem ctx2 -> ctx_elem ctx1 :=
   match ext in ContextExtends ctx1 ctx2
         return ctx_elem ctx2 -> ctx_elem ctx1 with
@@ -276,11 +283,11 @@ Lemma context_forget_preserves {ctx1 ctx2} ext celem2_1 celem2_2 :
   revert celem2_1 celem2_2; induction ext; intros.
   { unfold context_forget; assumption. }
   { unfold context_forget; fold (context_forget ext).
-    destruct celem2_1; destruct celem2_2. destruct H; destruct H; destruct H1.
+    destruct celem2_1; destruct celem2_2. destruct H; destruct H.
     repeat constructor; unfold fst in * |- *; try assumption.
     apply IHext; assumption. }
   { unfold context_forget; fold (context_forget ext).
-    destruct celem2_1; destruct celem2_2. destruct H; destruct H; destruct H1.
+    destruct celem2_1; destruct celem2_2. destruct H; destruct H.
     apply IHext; assumption. }
 Qed.
 
@@ -289,7 +296,7 @@ Lemma context_forget_preserves_validR {ctx1 ctx2} ext celem2_1 celem2_2 :
   validR (ctx_elem_lt ctx2) celem2_1 celem2_2 ->
   validR (ctx_elem_lt ctx1)
          (context_forget ext celem2_1) (context_forget ext celem2_2).
-  intro pf; destruct pf as [ pf1 pf2 ]; destruct pf2 as [ pf2 pf3 ].
+  intro pf; destruct pf.
   repeat constructor; apply context_forget_preserves; assumption.
 Qed.
 
@@ -306,7 +313,7 @@ Inductive OTPairInCtx ctx A : Type :=
     OTPairInCtx ctx A.
 
 (* Weakening the context of an OTPairInCtx *)
-Program Definition weaken_context {ctx1 ctx2} (ext: ContextExtends ctx1 ctx2)
+Program Definition weaken_context {ctx1 ctx2} {ext: OTCtxExtends ctx1 ctx2}
            {A} (p: OTPairInCtx ctx1 A) : OTPairInCtx ctx2 A :=
   match p with
     | mkOTPairInCtx _ _ x1 x2 pf =>
@@ -315,7 +322,7 @@ Program Definition weaken_context {ctx1 ctx2} (ext: ContextExtends ctx1 ctx2)
                     _
   end.
 Next Obligation.
-  destruct pf as [ pf1 pf2 ]; destruct pf2 as [ pf2 pf3 ].
+  destruct pf as [ pf1 pf2 pf3 ].
   repeat constructor;
     intros; [ apply pf1 | apply pf2 | apply pf3 ];
     apply context_forget_preserves_validR; assumption.
@@ -332,9 +339,8 @@ Program Definition top_var_in_context ctx A : OTPairInCtx (A::ctx) A :=
 Next Obligation.
   repeat split;
     intros x y; destruct x; destruct y; unfold fst; unfold snd;
-      intros; repeat (destruct H); repeat (destruct H0);
-        destruct H2; destruct H3; destruct H5; destruct H3; destruct H9;
-          assumption.
+      intros; repeat (destruct H); repeat (destruct H0); repeat (destruct H1);
+        assumption.
 Qed.
 
 (* OTPairInCtx is a functor w.r.t. proper functions *)
@@ -345,10 +351,10 @@ Program Definition map_OTPairInCtx {ctx A B}
   let (x1,x2,pf_x) := x in
   mkOTPairInCtx _ _ (fun celem => f (x1 celem)) (fun celem => f (x2 celem)) _.
 Next Obligation.
-  destruct pf_x as [ pfx_1 pfx_2 ]; destruct pfx_2 as [ pfx_2 pfx_3 ].
+  destruct pf_x as [ pfx_1 pfx_2 pfx_3 ].
   repeat split; intros celem1 celem2 H; apply proper; repeat split;
   first [ apply pfx_1 | apply pfx_2 | apply pfx_3 ];
-  try assumption; destruct H; destruct H0; repeat split; assumption.
+  try assumption; destruct H; repeat split; assumption.
 Qed.
 
 (* OTPairInCtx is also a bi-functor w.r.t. proper functions *)
@@ -361,12 +367,12 @@ Program Definition map2_OTPairInCtx {ctx A B C}
   mkOTPairInCtx _ _ (fun celem => f (x1 celem) (y1 celem))
                 (fun celem => f (x2 celem) (y2 celem)) _.
 Next Obligation.
-  destruct pf_x as [ pfx_1 pfx_2 ]; destruct pfx_2 as [ pfx_2 pfx_3 ].
-  destruct pf_y as [ pfy_1 pfy_2 ]; destruct pfy_2 as [ pfy_2 pfy_3 ].
+  destruct pf_x as [ pfx_1 pfx_2 pfx_3 ].
+  destruct pf_y as [ pfy_1 pfy_2 pfy_3 ].
   repeat split; intros celem1 celem2 H; apply proper; repeat split;
   first [ apply pfx_1 | apply pfy_1 | apply pfx_2 | apply pfy_2 |
           apply pfx_3 | apply pfy_3 ];
-  try assumption; destruct H; destruct H0; repeat split; assumption.
+  try assumption; destruct H; repeat split; assumption.
 Qed.
 
 (* OTPairInCtx is also a tri-functor w.r.t. proper functions *)
@@ -382,14 +388,14 @@ Program Definition map3_OTPairInCtx {ctx A B C D}
   mkOTPairInCtx _ _ (fun celem => f (x1 celem) (y1 celem) (z1 celem))
                 (fun celem => f (x2 celem) (y2 celem) (z2 celem)) _.
 Next Obligation.
-  destruct pf_x as [ pfx_1 pfx_2 ]; destruct pfx_2 as [ pfx_2 pfx_3 ].
-  destruct pf_y as [ pfy_1 pfy_2 ]; destruct pfy_2 as [ pfy_2 pfy_3 ].
-  destruct pf_z as [ pfz_1 pfz_2 ]; destruct pfz_2 as [ pfz_2 pfz_3 ].
+  destruct pf_x as [ pfx_1 pfx_2 pfx_3 ].
+  destruct pf_y as [ pfy_1 pfy_2 pfy_3 ].
+  destruct pf_z as [ pfz_1 pfz_2 pfz_3 ].
   repeat split; intros celem1 celem2 H; apply proper; repeat split;
   first [ apply pfx_1 | apply pfy_1 | apply pfz_1 |
           apply pfx_2 | apply pfy_2 | apply pfz_2 |
           apply pfx_3 | apply pfy_3 | apply pfz_3 ];
-  try assumption; destruct H; destruct H0; repeat split; assumption.
+  try assumption; destruct H; repeat split; assumption.
 Qed.
 
 
@@ -400,20 +406,39 @@ Qed.
 (* A "proper term" is an OTPairInCtx in the empty context *)
 Definition ProperTerm (A:OrderedType) := OTPairInCtx [] A.
 
+(* ProperTerm is "the" way to view an OrderedType as a Type *)
+Coercion ProperTerm : OrderedType >-> Sortclass.
+
 (* We can coerce a ProperTerm A to an element of ot_Type A by just taking the
 first projection of the pair in the ProperTerm *)
-Definition coerce_proper_term {A} (p: ProperTerm A) : ot_Type A :=
+Definition get_proper_term {A} (p: ProperTerm A) : ot_Type A :=
   match p with
   | mkOTPairInCtx _ _ x1 x2 pf => x1 tt
   end.
 
-Coercion coerce_proper_term : ProperTerm >-> ot_Type.
+(* Coercion coerce_proper_term : ProperTerm >-> ot_Type. *)
 
 (* Any ProperTerm is always Proper *)
-Instance ProperTerm_Proper {A} (p:ProperTerm A) : Proper (ot_R A) p.
-destruct p; unfold coerce_proper_term. destruct pf; apply H.
+Instance ProperTerm_Proper {A} (p:ProperTerm A) :
+  Proper (ot_R A) (get_proper_term p).
+destruct p; unfold get_proper_term. destruct pf; apply H.
 repeat split.
 Qed.
+
+(* Propositions as ProperTerms *)
+Definition ProperProp := ProperTerm OTProp.
+
+(* We can view a ProperProp as a Prop *)
+Definition get_prop : ProperProp -> Prop := get_proper_term.
+Coercion get_prop : ProperProp >-> Sortclass.
+
+(* Lifting the ordering of an OrderedType to an ordering on ProperTerms *)
+Definition OT_leq {A} : relation (ProperTerm A) :=
+  fun x y => ot_R A (get_proper_term x) (get_proper_term y).
+
+(* Equivalence on ProperTerms *)
+Definition OT_equiv {A:OrderedType} : relation (ProperTerm A) :=
+  fun x y => OT_leq x y /\ OT_leq y x.
 
 
 (***
@@ -427,12 +452,12 @@ Program Definition proper_fun {ctx} {A} {B}
             OTPairInCtx (A::ctx) B) :
   OTPairInCtx ctx (OTArrow A B) :=
   let (y1,y2,pf_y) :=
-      f (fun {ctx'} {ext} => weaken_context ext (top_var_in_context ctx A))
+      f (fun {ctx'} {ext} => weaken_context (ext:=ext) (top_var_in_context ctx A))
   in
   mkOTPairInCtx _ _ (fun ctx_elem x => y1 (x,ctx_elem))
            (fun ctx_elem x => y2 (x,ctx_elem)) _.
 Next Obligation.
-  destruct pf_y as [ pf1 pf2 ]; destruct pf2 as [ pf2 pf3 ].
+  destruct pf_y as [ pf1 pf2 pf3 ].
   repeat split; intros; [ apply pf1 | apply pf2 | apply pf3 ];
   apply ctx_elem_lt_cons; assumption.
 Qed.
@@ -452,13 +477,24 @@ Program Definition proper_apply {ctx} {A} {B}
         (x: OTPairInCtx ctx A) : OTPairInCtx ctx B :=
   map2_OTPairInCtx (A:=OTArrow A B) (fun g y => g y) _ f x.
 Next Obligation.
-  intros f1 f2 pf_f;
-  destruct pf_f as [ pf_f1 pf_f2 ]; destruct pf_f2 as [ pf_f2 pf_f3 ];
-  intros x1 x2 pf_x;
-  destruct pf_x as [ pf_x1 pf_x2 ]; destruct pf_x2 as [ pf_x2 pf_x3 ];
+  intros f1 f2 pf_f; destruct pf_f as [ pf_f1 pf_f2 pf_f3 ];
+  intros x1 x2 pf_x; destruct pf_x as [ pf_x1 pf_x2 pf_x3 ];
   repeat split;
   first [ apply pf_f1 | apply pf_f2 | apply pf_f3 ];
   repeat split; assumption.
+Qed.
+
+(* Helper to build a ProperProp for the leq relation of an OrderedType *)
+Program Definition proper_leq {ctx} {A}
+        (x: OTPairInCtx ctx (OTFlip A))
+        (y: OTPairInCtx ctx A) : OTPairInCtx ctx OTProp :=
+
+  map2_OTPairInCtx (A:=OTFlip A) (C:=OTProp) (fun x y => ot_R A x y) _ x y.
+Next Obligation.
+  repeat (intro; intros); destruct H; destruct H0.
+  split; intro; try assumption.
+  apply (semitransitivity (SemiTransitive:=A) _ x0); try assumption.
+  apply (semitransitivity (SemiTransitive:=A) _ x1); try assumption.
 Qed.
 
 (* Helper to build a ProperTerm for a pair *)
@@ -467,7 +503,7 @@ Program Definition proper_pair {ctx} {A} {B}
   OTPairInCtx ctx (OTProd A B) :=
   map2_OTPairInCtx (C:=OTProd A B) (fun x y => (x,y)) _ x y.
 Next Obligation.
-repeat (intro; intros); destruct H; destruct H1; destruct H0; destruct H3.
+repeat (intro; intros); destruct H; destruct H0.
 unfold fst, snd; repeat split; assumption.
 Qed.
 
@@ -478,7 +514,7 @@ Program Definition proper_proj1 {ctx} {A} {B}
 Next Obligation.
   intros p1 p2; destruct p1; destruct p2; unfold fst;
   intro pf_p; destruct pf_p.
-  destruct H; repeat destruct H0; destruct H2.
+  destruct H; destruct H0; destruct H1.
   repeat split; assumption.
 Qed.
 
@@ -489,7 +525,7 @@ Program Definition proper_proj2 {ctx} {A} {B}
 Next Obligation.
   intros p1 p2; destruct p1; destruct p2; unfold snd;
   intro pf_p; destruct pf_p.
-  destruct H; repeat destruct H0; destruct H2.
+  destruct H; destruct H0; destruct H1.
   repeat split; assumption.
 Qed.
 
@@ -498,7 +534,7 @@ Program Definition proper_inl {ctx} {A} {B}
            (x: OTPairInCtx ctx A) : OTPairInCtx ctx (OTSum A B) :=
   map_OTPairInCtx (B:=OTSum A B) (fun y => inl y) _ x.
 Next Obligation.
-  intros x1 x2 pf_x; assumption.
+  intros x1 x2 pf_x; destruct pf_x; split; assumption.
 Qed.
 
 (* Helper to build a ProperTerm for the inr constructor *)
@@ -506,7 +542,7 @@ Program Definition proper_inr {ctx} {A} {B}
            (x: OTPairInCtx ctx B) : OTPairInCtx ctx (OTSum A B) :=
   map_OTPairInCtx (B:=OTSum A B) (fun y => inr y) _ x.
 Next Obligation.
-  intros x1 x2 pf_x; assumption.
+  intros x1 x2 pf_x; destruct pf_x; split; assumption.
 Qed.
 
 (* Helper to build a ProperTerm for sum elimination *)
@@ -522,14 +558,42 @@ Program Definition proper_sum_elim {ctx} {A} {B} {C}
                                    end) _ x f1 f2.
 Next Obligation.
   intros sum1 sum2; destruct sum1; destruct sum2;
-  intros H g1 g2 pf_g h1 h2 pf_h; destruct H; destruct H0;
-  destruct pf_g as [ pf_g1 pf_g2 ]; destruct pf_g2 as [ pf_g2 pf_g3 ];
-  destruct pf_h as [ pf_h1 pf_h2 ]; destruct pf_h2 as [ pf_h2 pf_h3 ];
+  intros H g1 g2 pf_g h1 h2 pf_h; destruct H;
+  destruct pf_g as [ pf_g1 pf_g2 pf_g3 ];
+  destruct pf_h as [ pf_h1 pf_h2 pf_h3 ];
   repeat split;
   first [ apply pf_g1 | apply pf_g2 | apply pf_g3
           | apply pf_h1 | apply pf_h2 | apply pf_h3
           | elimtype False; assumption ];
   repeat split; assumption.
+Qed.
+
+(* Existentials for OTProp *)
+Program Definition proper_exists {ctx} {A}
+        (f: OTPairInCtx ctx (OTArrow A OTProp)) : OTPairInCtx ctx OTProp :=
+  map_OTPairInCtx (A:= OTArrow A OTProp) (B:=OTProp)
+                  (fun f => exists x, ot_R A x x /\ f x) _ f.
+Next Obligation.
+  intros f1 f2 pf_f; destruct pf_f as [ pf_f1 pf_f2 pf_f3 ].
+  split; intro; try assumption.
+  destruct H as [ x H ]; destruct H.
+  exists x; split; [ assumption | ].
+  unfold Basics.impl in pf_f3; apply (pf_f3 x).
+  split; assumption. assumption.
+Qed.
+
+(* Conjunction for OTProp *)
+Program Definition proper_and {ctx} (P: OTPairInCtx ctx OTProp)
+        (Q: OTPairInCtx ctx OTProp) : OTPairInCtx ctx OTProp :=
+  map2_OTPairInCtx (A:=OTProp) (B:=OTProp) (C:=OTProp)
+                   (fun P Q => P /\ Q) _ P Q.
+Next Obligation.
+  unfold Basics.impl.
+  intros P1 P2 P_pf Q1 Q2 Q_pf.
+  destruct P_pf as [ P_pf1 P_pf2 P_pf3 ].
+  destruct Q_pf as [ Q_pf1 Q_pf2 Q_pf3 ].
+  split; intro; try assumption.
+  destruct H; split; [ apply P_pf3 | apply Q_pf3 ]; assumption.
 Qed.
 
 
@@ -545,19 +609,28 @@ Module ProperTermNotations.
     (OTProd A B) (left associativity, at level 40).
   Notation "A '+o+' B" :=
     (OTSum A B) (left associativity, at level 50).
+  Notation "'~o~' A" :=
+    (OTFlip A) (right associativity, at level 35).
 
   Delimit Scope pterm_scope with pterm.
-
+  Bind Scope pterm_scope with OTPairInCtx.
   Bind Scope pterm_scope with ProperTerm.
+
+  Notation "x <o= y" :=
+    (OT_leq x%pterm y%pterm) (no associativity, at level 70).
+  Notation "x =o= y" :=
+    (OT_equiv x%pterm y%pterm) (no associativity, at level 70).
 
   Notation "'pfun' ( x ::: T ) ==> y" :=
     (proper_fun (A:=T) (fun x => y%pterm))
       (at level 100, right associativity, x at level 99) : pterm_scope.
 
-  Notation "'pvar' x" := (proper_var x) (no associativity, at level 75) : pterm_scope.
+  Notation "'pvar' x" := (proper_var x) (no associativity, at level 10) : pterm_scope.
+
+  Notation "'!' x" := (weaken_context (ctx2:=_) (ext:=_) x) (no associativity, at level 10) : pterm_scope.
 
   Notation "x @ y" :=
-    (proper_apply x y) (right associativity, at level 20) : pterm_scope.
+    (proper_apply x y) (left associativity, at level 20) : pterm_scope.
 
   Notation "( x ,o, y )" :=
     (proper_pair x%pterm y%pterm)
@@ -597,10 +670,10 @@ Definition proper_id_Prop_fun : ProperTerm (OTProp -o> OTProp) :=
   pfun ( x ::: OTProp ) ==> pvar x.
 
 (* You can see that it yields the identity function *)
-Eval compute in (coerce_proper_term proper_id_Prop_fun : Prop -> Prop).
+Eval compute in (get_proper_term proper_id_Prop_fun : Prop -> Prop).
 
 (* The proof of Proper-ness is automatic by typeclass instances *)
-Goal (Proper (OTProp -o> OTProp) proper_id_Prop_fun).
+Goal (Proper (OTProp -o> OTProp) (get_proper_term proper_id_Prop_fun)).
 auto with typeclass_instances.
 Qed.
 

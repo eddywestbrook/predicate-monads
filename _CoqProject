@@ -3,6 +3,7 @@
 ./theories/OrderedTerms.v
 
 ./theories/OrderedType.v
+./theories/OrderedMonad.v
 
 ./theories/LogicalRelations.v
 ./theories/Monad.v
