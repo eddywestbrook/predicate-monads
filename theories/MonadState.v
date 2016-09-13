@@ -16,13 +16,13 @@ Hint Extern 1 (EqualsOp unit) => exact EqualsOp_unit : typeclass_instances.
  ***)
 
 Section State.
-  Variables (S : Type) (M : Type -> Type).
+  Polymorphic Variables (S : Type) (M : Type -> Type).
   (* State effects = get and put *)
   Polymorphic Class MonadStateOps : Type :=
   { getM : M S
   ; putM : S -> M unit
   }.
-  Context `{Equals S} `{MonadOps M}.
+  Polymorphic Context `{Equals S} `{MonadOps M}.
 
   Polymorphic Class MonadState (ms : MonadStateOps) : Prop :=
   {
