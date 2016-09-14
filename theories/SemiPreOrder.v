@@ -92,7 +92,7 @@ Proof. apply PER_SemiPreOrder. Qed.
  *** Pre-Defined Logical Relations
  ***)
 
-(* The logical relation for pairs is just the pointwise relation *)
+(* The LR for pairs is just the pointwise relation on the components *)
 Instance LR_Op_pair {A B} `{LR_Op A} `{LR_Op B} : LR_Op (A * B) :=
   fun p1 p2 =>
     lr_leq (fst p1) (fst p2) /\ lr_leq (snd p1) (snd p2).
@@ -105,4 +105,26 @@ Proof.
     first [ left; assumption | right; assumption ].
   intros p1 p2 p3 R12 R23; destruct R12; destruct R23; split;
     [ transitivity (fst p2) | transitivity (snd p2) ]; assumption.
+Qed.
+
+
+(* The LR for functions is the pointwise relation on all the outputs, restricted
+so to only relate proper functions *)
+Instance LR_Op_fun {A B} `{LR_Op A} `{LR_Op B} : LR_Op (A -> B) :=
+  fun f g =>
+    forall x y, x <~ y -> f x <~ f y /\ g x <~ g y /\ f x <~ g y.
+
+Instance LR_fun {A B} `{LR A} `{LR B} : LR (A -> B).
+Proof.
+  constructor; constructor.
+  { intros f g Rfg x y Rxy; destruct Rfg as [ Rfg | Rfg ];
+      destruct (Rfg x y) as [ Rfg1 Rfg2 ]; try assumption;
+        destruct Rfg2 as [ Rfg2 Rfg3 ]; repeat split; assumption. }
+  { intros f g h Rfg Rgh x y Rxy; repeat split.
+    + destruct (Rfg x y); assumption.
+    + destruct (Rgh x y) as [ Rgh1 Rgh2 ]; try assumption; destruct Rgh2; assumption.
+    + transitivity (g x).
+      - apply Rfg; apply (semi_reflexivity _ y); left; assumption.
+      - apply Rgh; assumption. 
+  }
 Qed.

@@ -10,19 +10,18 @@ Require Export PredMonad.SemiPreOrder.
 Polymorphic Class MonadOps (M : Type -> Type) : Type :=
   { returnM : forall {A : Type}, A -> M A;
     bindM : forall {A B : Type}, M A -> (A -> M B) -> M B;
-    lrM :> forall {A : Type}, LR_Op A -> LR_Op (M A) }.
+    lrM :> forall {A : Type} `{LR_Op A}, LR_Op (M A) }.
 
 Polymorphic Class Monad (M : Type -> Type) {MonadOps:MonadOps M} : Prop :=
   {
     monad_LR :> forall `{LR}, LR (M A);
 
     monad_proper_return :>
-      forall {A R} `{@LR A R},
-        Proper (R ==> lrM R) returnM;
+      forall {A R} `{@LR A R}, Proper (lr_leq ==> lr_leq) returnM;
 
     monad_proper_bind :>
       forall {A B RA RB} `{@LR A RA} `{@LR B RB},
-        Proper (lrM RA ==> (RA ==> lrM RB) ==> lrM RB)
+        Proper (lr_leq ==> lr_leq ==> lr_leq)
                (bindM (A:=A) (B:=B));
 
     monad_proper_lrM :>
@@ -31,20 +30,19 @@ Polymorphic Class Monad (M : Type -> Type) {MonadOps:MonadOps M} : Prop :=
 
     monad_return_bind :
       forall {A B RA RB} `{@LR A RA} `{@LR B RB} x (f:A -> M B)
-             `{Proper _ RA x} `{Proper _ (RA ==> lrM RB) f},
+             `{Proper _ lr_leq x} `{Proper _ (lr_leq ==> lr_leq) f},
         bindM (returnM x) f ~~ f x;
 
     monad_bind_return :
-      forall {A RA} `{@LR A RA} (m:M A)
-             `{Proper _ (lrM RA) m},
+      forall {A RA} `{@LR A RA} (m:M A) `{Proper _ lr_leq m},
         bindM m returnM ~~ m;
 
     monad_assoc :
       forall {A B C RA RB RC}
              `{@LR A RA} `{@LR B RB} `{@LR C RC}
              m (f:A -> M B) (g:B -> M C)
-             `{Proper _ (lrM RA) m} `{Proper _ (RA ==> lrM RB) f}
-             `{Proper _ (RB ==> lrM RC) g},
+             `{Proper _ lr_leq m} `{Proper _ (lr_leq ==> lr_leq) f}
+             `{Proper _ (lr_leq ==> lr_leq) g},
         bindM (bindM m f) g ~~ bindM m (fun x => bindM (f x) g);
 
   }.

@@ -57,33 +57,29 @@ Global Instance StateT_MonadOps : MonadOps StateT :=
    bindM :=
      fun A B m f =>
        fun s => do s_x <- m s; f (snd s_x) (fst s_x);
-   lrM :=
-     fun {A} _ m1 m2 =>
-       forall s1 s2,
-         s1 <~ s2 -> m1 s1 <~ m1 s2 /\ m2 s1 <~ m2 s2 /\ m1 s1 <~ m2 s2 }.
+   lrM := fun {A} _ => LR_Op_fun }.
 
-
-FIXME HERE: lrM above should be built using a forall operator
 
 (* The Monad instance for StateT *)
 Global Instance StateT_Monad : Monad (StateT).
 Proof.
   constructor; intros.
-  { constructor. constructor.
-    + intros m1 m2 R12 s1 s2 Rs; destruct R12. apply (semi_reflexivity _ (m2 s)); [ left | right ]; apply H2.
-    + intros m1 m2 m3 R12 R23 s. transitivity (m2 s); [ apply R12 | apply R23 ]. }
-  { intros x y Rxy s; apply monad_proper_return; split.
+  { apply LR_fun. }
+  { intros x y Rxy s1 s2 Rs; repeat split; apply monad_proper_return; split;
+      try assumption;
+      [ apply (semi_reflexivity _ y); left
+      | apply (semi_reflexivity _ x); right ]; assumption. }
+  { intros m1 m2 Rm f1 f2 Rf s1 s2 Rs; repeat split;
+      apply (monad_proper_bind (M:=M)); try ( apply Rm; assumption );
+        intros p1 p2 Rp; repeat split; apply Rf; apply Rp. }
+  { intros R1 R2 sub m1 m2 Rm s1 s2 Rs; repeat split;
+      ( eapply monad_proper_lrM;
+        [ intros p1 p2 Rp; split; try apply sub
+        | apply Rm; assumption ]); apply Rp. }
+  {
 
-  { red; intros.
-    etransitivity.
-    eapply (monad_proper_bind (M:=M)). tc. tc. reflexivity.
-    instantiate (1 := returnM).
-    red. intros. destruct x. eapply monad_proper_return; tc.
-    eapply (monad_bind_return (M:=M)). tc. }
-  { red. intros.
-    rewrite monad_assoc; tc.
-    eapply bind_fun_equalsM. intros.
-    destruct x. reflexivity. }
+FIXME HERE NOW
+
   { eapply StateT_Equals. }
   { red. red. intros.
     eapply monad_proper_return; tc.
