@@ -1,5 +1,7 @@
 -Q theories PredMonad
 
+./theories/SemiPreOrder.v
+
 ./theories/OrderedTerms.v
 
 ./theories/OrderedType.v

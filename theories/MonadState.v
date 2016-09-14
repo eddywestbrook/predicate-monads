@@ -1,44 +1,45 @@
 Require Import PredMonad.Monad.
 
-Global Instance EqualsOp_unit : EqualsOp unit :=
-{ equals := fun _ _ => True }.
-Instance Equals_unit : Equals unit.
+(* We use the only possible relation as the logical relation on unit *)
+Global Instance LR_Op_unit : LR_Op unit := { lr_leq := fun _ _ => True }.
+Global Instance LR_unit : LR unit.
 Proof.
-  constructor.
-  constructor; compute; tauto.
+  constructor. constructor; compute; tauto.
 Qed.
 
-Hint Extern 1 (EqualsOp unit) => exact EqualsOp_unit : typeclass_instances.
+Hint Extern 1 (LR unit) => exact LR_unit : typeclass_instances.
 
 
 (***
  *** Monads with State Effects
  ***)
 
-Section State.
-  Polymorphic Variables (S : Type) (M : Type -> Type).
+Section MonadState.
+  Polymorphic Context (S : Type) {R_S} `{LR_S:@LR S R_S} (M : Type -> Type) `{MonadOps M}.
+
   (* State effects = get and put *)
   Polymorphic Class MonadStateOps : Type :=
   { getM : M S
   ; putM : S -> M unit
   }.
-  Polymorphic Context `{Equals S} `{MonadOps M}.
 
   Polymorphic Class MonadState (ms : MonadStateOps) : Prop :=
   {
     monad_state_monad :> Monad M;
+    monad_proper_get :> Proper lr_leq getM;
+    monad_proper_put :> Proper (lr_leq ==> lr_leq) putM;
     monad_state_get_get :
-      forall A `{Eq_A:Equals A} f,
-        bindM getM (fun s => bindM getM (f s)) ==
-        (bindM getM (fun s => f s s) : M A);
-    monad_state_get_put : bindM getM putM == returnM tt ;
+      forall {A} `{LR A} f,
+        bindM getM (fun s => bindM getM (f s)) ~~
+        (bindM getM (fun s => f s s) : M A) ;
+    monad_state_get_put : bindM getM putM ~~ returnM tt ;
     monad_state_put_get :
-      forall s, bindM (putM s) (fun _ => getM) ==
+      forall s, bindM (putM s) (fun _ => getM) ~~
                 bindM (putM s) (fun _ => returnM s);
     monad_state_put_put :
-      forall s1 s2, bindM (putM s1) (fun _ => putM s2) == putM s2
+      forall s1 s2, bindM (putM s1) (fun _ => putM s2) ~~ putM s2
   }.
-End State.
+End MonadState.
 
 (***
  *** The State Monad Transformer
@@ -46,7 +47,62 @@ End State.
 
 Section StateT.
 
-Context (S:Type).
+Context (S:Type) {R_S} `{@LR S R_S} (M:Type -> Type) `{Monad M}.
+
+Definition StateT (X:Type) := S -> M (S * X).
+
+Global Instance StateT_MonadOps : MonadOps StateT :=
+  {returnM :=
+     fun A x => fun s => returnM (s, x);
+   bindM :=
+     fun A B m f =>
+       fun s => do s_x <- m s; f (snd s_x) (fst s_x);
+   lrM :=
+     fun {A} _ m1 m2 =>
+       forall s1 s2,
+         s1 <~ s2 -> m1 s1 <~ m1 s2 /\ m2 s1 <~ m2 s2 /\ m1 s1 <~ m2 s2 }.
+
+
+FIXME HERE: lrM above should be built using a forall operator
+
+(* The Monad instance for StateT *)
+Global Instance StateT_Monad : Monad (StateT).
+Proof.
+  constructor; intros.
+  { constructor. constructor.
+    + intros m1 m2 R12 s1 s2 Rs; destruct R12. apply (semi_reflexivity _ (m2 s)); [ left | right ]; apply H2.
+    + intros m1 m2 m3 R12 R23 s. transitivity (m2 s); [ apply R12 | apply R23 ]. }
+  { intros x y Rxy s; apply monad_proper_return; split.
+
+  { red; intros.
+    etransitivity.
+    eapply (monad_proper_bind (M:=M)). tc. tc. reflexivity.
+    instantiate (1 := returnM).
+    red. intros. destruct x. eapply monad_proper_return; tc.
+    eapply (monad_bind_return (M:=M)). tc. }
+  { red. intros.
+    rewrite monad_assoc; tc.
+    eapply bind_fun_equalsM. intros.
+    destruct x. reflexivity. }
+  { eapply StateT_Equals. }
+  { red. red. intros.
+    eapply monad_proper_return; tc.
+    split. reflexivity. assumption. }
+  { do 4 red. intros.
+    eapply monad_proper_bind; tc.
+    red. intros.
+    destruct x1; destruct y1. destruct H4; simpl in *.
+    subst. eapply H3. assumption. }
+  { red. red. unfold subrelation.
+    intros.
+    eapply monad_proper_equalsM. 2: eapply H1.
+    red. intros; auto. unfold S_EqualsOp in *.
+    destruct H2; split; auto.
+    unfold equals in *. eapply H0. assumption. }
+Qed.
+
+
+
 
 Record StateResult (T : Type) : Type := mkStResult
 { state : S ; result : T }.

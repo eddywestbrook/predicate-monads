@@ -1,47 +1,75 @@
 Require Import Coq.Setoids.Setoid.
-Require Export PredMonad.LogicalRelations.
+Require Export Coq.Classes.Morphisms.
+Require Export PredMonad.SemiPreOrder.
+
 
 (***
  *** The monad typeclass
  ***)
 
-Class MonadOps (M : Type -> Type) : Type :=
+Polymorphic Class MonadOps (M : Type -> Type) : Type :=
   { returnM : forall {A : Type}, A -> M A;
     bindM : forall {A B : Type}, M A -> (A -> M B) -> M B;
-    equalsM :> forall {A : Type} {EqOp:EqualsOp A}, EqualsOp (M A) }.
+    lrM :> forall {A : Type}, LR_Op A -> LR_Op (M A) }.
 
-Class Monad (M : Type -> Type)
-            {MonadOps:MonadOps M} : Prop :=
+Polymorphic Class Monad (M : Type -> Type) {MonadOps:MonadOps M} : Prop :=
   {
-    monad_return_bind :
-      forall (A B:Type) `{Equals A} `{Equals B} x (f:A -> M B),
-        bindM (returnM x) f == f x;
-    monad_bind_return :
-      forall (A:Type) `{Equals A} (m:M A),
-        bindM m returnM == m;
-    monad_assoc :
-      forall (A B C:Type) `{Equals A} `{Equals B} `{Equals C}
-             m (f:A -> M B) (g:B -> M C),
-        bindM (bindM m f) g == bindM m (fun x => bindM (f x) g);
-    monad_equalsM :>
-      forall {A:Type} `{Equals A},
-        Equals _ (EqOp:=equalsM);
+    monad_LR :> forall `{LR}, LR (M A);
+
     monad_proper_return :>
-      forall (A:Type) `{Equals A},
-        Proper (equals ==> equalsM) returnM;
+      forall {A R} `{@LR A R},
+        Proper (R ==> lrM R) returnM;
+
     monad_proper_bind :>
-      forall (A B:Type) `{Equals A} `{Equals B},
-        Proper (equals ==> (equals ==> equals) ==> equals)
+      forall {A B RA RB} `{@LR A RA} `{@LR B RB},
+        Proper (lrM RA ==> (RA ==> lrM RB) ==> lrM RB)
                (bindM (A:=A) (B:=B));
-    monad_proper_equalsM :>
-      forall (A:Type),
-        Proper (subrelation ==> subrelation) (@equalsM _ MonadOps A)
+
+    monad_proper_lrM :>
+      forall {A},
+        Proper (subrelation ==> subrelation) (@lrM _ MonadOps A);
+
+    monad_return_bind :
+      forall {A B RA RB} `{@LR A RA} `{@LR B RB} x (f:A -> M B)
+             `{Proper _ RA x} `{Proper _ (RA ==> lrM RB) f},
+        bindM (returnM x) f ~~ f x;
+
+    monad_bind_return :
+      forall {A RA} `{@LR A RA} (m:M A)
+             `{Proper _ (lrM RA) m},
+        bindM m returnM ~~ m;
+
+    monad_assoc :
+      forall {A B C RA RB RC}
+             `{@LR A RA} `{@LR B RB} `{@LR C RC}
+             m (f:A -> M B) (g:B -> M C)
+             `{Proper _ (lrM RA) m} `{Proper _ (RA ==> lrM RB) f}
+             `{Proper _ (RB ==> lrM RC) g},
+        bindM (bindM m f) g ~~ bindM m (fun x => bindM (f x) g);
+
   }.
 
 
 (***
- *** Helper theorems about monads
+ *** Helper theorems / utilities about monads
  ***)
+
+(* Helpful bind notation *)
+Notation "'do' x <- m1 ; m2" :=
+  (bindM m1 (fun x => m2)) (at level 60, right associativity).
+
+Instance Monad_lr_leq_SemiPreOrder `{Monad} `{LR} : SemiPreOrder (lr_leq (A:=M A)).
+Proof.
+  auto with typeclass_instances.
+Qed.
+
+Instance Monad_lr_eq_SemiPreOrder `{Monad} `{LR} : SemiPreOrder (lr_eq (A:=M A)).
+Proof.
+  apply PER_SemiPreOrder.
+Qed.
+
+
+(*
 
 (* FIXME: Equivalence and friends are not polymorphic... *)
 Instance equalsM_Equivalence `{Monad} `{Equals} : Equivalence (equalsM (A:=A)).
@@ -92,21 +120,26 @@ Proof.
   intros x y exy; rewrite exy; apply e.
 Qed.
 
+*)
+
 
 (***
  *** The Identity Monad
  ***)
 
-Definition Identity (X:Type) := X.
-Instance IdMonad_MonadOps : MonadOps Identity :=
+Polymorphic Definition Identity (X:Type) := X.
+Polymorphic Instance IdMonad_MonadOps : MonadOps Identity :=
   { returnM := fun A x => x;
     bindM := fun A B m f => f m;
-    equalsM := fun A e => e }.
+    lrM := fun A R => R }.
 
-Instance IdMonad : Monad Identity.
-  constructor; intros; try reflexivity.
-  split; auto with typeclass_instances.
-  intros x y exy; assumption.
-  intros m1 m2 eqm f1 f2 eqf; apply eqf; assumption.
-  intros eqop1 eqop2 subr m1 m2 e1; apply subr; assumption.
+Polymorphic Instance IdMonad : Monad Identity.
+constructor; intros.
+assumption.
+intros x y Rxy; assumption.
+intros m1 m2 Rm f1 f2 Rf. apply Rf; apply Rm.
+intros R1 R2 sub; assumption.
+apply st_step. apply H2. apply H1.
+apply st_step. apply H0.
+apply st_step. apply H4. apply H3. apply H2.
 Qed.
