@@ -38,29 +38,21 @@ intros x y H1; destruct H1; transitivity y;
   try assumption; symmetry; assumption.
 Qed.
 
-(* Symmetric closure *)
-Definition clos_sym (R:relation A) : relation A :=
-  fun x y => R x y \/ R y x.
+(* Symmetric intersection: the intersection of a relation and its converse *)
+Definition inter_sym (R:relation A) : relation A :=
+  fun x y => R x y /\ R y x.
 
-(* The symmetric closure of any relation is symmetric *)
-Global Instance sym_clos_Symmetric {R} : Symmetric (clos_sym R).
-intros x y H; destruct H; [ right | left ]; assumption.
+(* The symmetric intersection of any relation is symmetric *)
+Global Instance inter_sym_Symmetric {R} : Symmetric (inter_sym R).
+intros x y H; destruct H; split; assumption.
 Qed.
 
-(* Symmetric-Transitive closure *)
-Inductive clos_sym_trans (R:relation A) (x:A) : A -> Prop :=
-| st_step (y:A) : R x y -> clos_sym_trans R x y
-| st_rstep (y:A) : R y x -> clos_sym_trans R x y
-| st_trans (y z:A) : clos_sym_trans R x y -> clos_sym_trans R y z -> clos_sym_trans R x z.
-
-(* The symmetric-transitive closure of a SemiPreOrder is a PER *)
-Global Instance SemiPreOrder_sym_clos {R} `{@SemiPreOrder R} : PER (clos_sym_trans R).
-destruct H; constructor.
-+ intros x y Rxy. induction Rxy.
-  - apply st_rstep; assumption.
-  - apply st_step; assumption.
-  - apply (st_trans _ _ y); assumption.
-+ intros x y z Rxy Ryz. apply (st_trans _ _ y); assumption.
+(* The symmetric intersection of any semi-preorder is a PER *)
+Global Instance inter_sym_PER `{SemiPreOrder} : PER (inter_sym R).
+Proof.
+  constructor.
+  + auto with typeclass_instances.
+  + intros x y z Rxy Ryz; destruct Rxy; destruct Ryz; split; transitivity y; assumption.
 Qed.
 
 End SemiPreOrder.
@@ -80,7 +72,7 @@ Class LR A `{R:LR_Op A} : Prop :=
 Notation "x '<~' y" := (lr_leq x y) (at level 80, no associativity).
 
 (* Helper notation for using the PER associated with a logical relation *)
-Definition lr_eq `{LR_Op} : relation A := clos_sym_trans lr_leq.
+Definition lr_eq `{LR_Op} : relation A := inter_sym lr_leq.
 
 Notation "x '~~' y" := (lr_eq x y) (at level 80, no associativity).
 

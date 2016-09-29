@@ -137,7 +137,7 @@ assumption.
 intros x y Rxy; assumption.
 intros m1 m2 Rm f1 f2 Rf. apply Rf; apply Rm.
 intros R1 R2 sub; assumption.
-apply st_step. apply H2. apply H1.
-apply st_step. apply H0.
-apply st_step. apply H4. apply H3. apply H2.
+split; apply H2; apply H1.
+split; apply H0.
+split; apply H4; apply H3; apply H2.
 Qed.
