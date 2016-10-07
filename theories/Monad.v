@@ -129,15 +129,9 @@ Polymorphic Definition Identity (X:Type) := X.
 Polymorphic Instance IdMonad_MonadOps : MonadOps Identity :=
   { returnM := fun A x => x;
     bindM := fun A B m f => f m;
-    lrM := fun A R => R }.
+    lrM := fun A R => lr_leq }.
 
 Polymorphic Instance IdMonad : Monad Identity.
-constructor; intros.
-assumption.
-intros x y Rxy; assumption.
-intros m1 m2 Rm f1 f2 Rf. apply Rf; apply Rm.
-intros R1 R2 sub; assumption.
-split; apply H2; apply H1.
-split; apply H0.
-split; apply H4; apply H3; apply H2.
+constructor; intros; unfold returnM, bindM, lrM, IdMonad_MonadOps; auto with LR.
+repeat prove_proper_fun. elim_lr_fun.
 Qed.

@@ -47,7 +47,7 @@ End MonadState.
 
 Section StateT.
 
-Context (S:Type) {R_S} `{@LR S R_S} (M:Type -> Type) `{Monad M}.
+Context (S:Type) {R_S:LR_Op S} `{@LR S R_S} (M:Type -> Type) `{Monad M}.
 
 Definition StateT (X:Type) := S -> M (S * X).
 
@@ -57,26 +57,29 @@ Global Instance StateT_MonadOps : MonadOps StateT :=
    bindM :=
      fun A B m f =>
        fun s => do s_x <- m s; f (snd s_x) (fst s_x);
-   lrM := fun {A} _ => LR_Op_fun }.
+   lrM := fun {A} _ => lr_leq }.
 
 
 (* The Monad instance for StateT *)
 Global Instance StateT_Monad : Monad (StateT).
 Proof.
-  constructor; intros.
+  constructor; intros; unfold returnM, bindM, lrM, StateT_MonadOps.
   { apply LR_fun. }
-  { intros x y Rxy s1 s2 Rs; repeat split; apply monad_proper_return; split;
-      try assumption;
+  { intros x y Rxy. intros s1 s2 Rs.
+    repeat split; apply monad_proper_return; split.
+      try assumption.
       [ apply (semi_reflexivity _ y); left
       | apply (semi_reflexivity _ x); right ]; assumption. }
   { intros m1 m2 Rm f1 f2 Rf s1 s2 Rs; repeat split;
       apply (monad_proper_bind (M:=M)); try ( apply Rm; assumption );
         intros p1 p2 Rp; repeat split; apply Rf; apply Rp. }
-  { intros R1 R2 sub m1 m2 Rm s1 s2 Rs; repeat split;
+  { intros R1 R2 sub m1 m2 Rm s1 s2 Rs. repeat split;
       ( eapply monad_proper_lrM;
         [ intros p1 p2 Rp; split; try apply sub
         | apply Rm; assumption ]); apply Rp. }
-  {
+  { unfold returnM, bindM, StateT_MonadOps.
+
+    split; intros s1 s2 sub_s; repeat split. try apply (monad_proper_bind (M:=M)).
 
 FIXME HERE NOW
 
