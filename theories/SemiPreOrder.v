@@ -211,7 +211,7 @@ Qed.
 
 
 (***
- *** Logical Relation for Functions and Pairs
+ *** Logical Relation for Common Types
  ***)
 
 (* The LR for functions is the pointwise relation on all the outputs, restricted
@@ -250,9 +250,9 @@ Qed.
 
 
 (* The LR for pairs is just the pointwise relation on the components *)
-Class LRPair {A B} `{LR_Op A} `{LR_Op B} (p1 p2 : A * B) : Prop :=
-  { LRPair_fst :> fst p1 <~ fst p2;
-    LRPair_snd :> snd p1 <~ snd p2
+Record LRPair {A B} `{LR_Op A} `{LR_Op B} (p1 p2 : A * B) : Prop :=
+  { LRPair_fst : fst p1 <~ fst p2;
+    LRPair_snd : snd p1 <~ snd p2
   }.
 
 (* Make LRPair itself an instance of LR_Op *)
@@ -287,6 +287,16 @@ Instance Proper_LRPair_pair {A B} `{LR A} `{LR B} :
 Proof.
   split; intros x1 y1 Rxy1; split; intros x2 y2 Rxy2; split; unfold fst, snd;
     try assumption; try assumption_semi_refl.
+Qed.
+
+
+(* The LR for the unit type is the obvious one *)
+Definition LRUnit : relation unit := fun _ _ => True.
+Instance LR_Op_unit : LR_Op unit := LRUnit.
+
+Instance LR_unit : LR unit.
+Proof.
+  repeat constructor.
 Qed.
 
 
