@@ -51,6 +51,9 @@ Class Monad (M : Type -> Type) {MonadOps:MonadOps M} : Prop :=
 Notation "'do' x <- m1 ; m2" :=
   (bindM m1 (fun x => m2)) (at level 60, right associativity).
 
+(* Add the monad laws to the LR rewrite set *)
+Hint Rewrite @monad_return_bind @monad_bind_return @monad_assoc : LR.
+
 
 (***
  *** The Identity Monad

@@ -1,44 +1,46 @@
+Require Import PredMonad.SemiPreOrder.
 Require Import PredMonad.Monad.
-
-(* We use the only possible relation as the logical relation on unit *)
-Global Instance LR_Op_unit : LR_Op unit := { lr_leq := fun _ _ => True }.
-Global Instance LR_unit : LR unit.
-Proof.
-  constructor. constructor; compute; tauto.
-Qed.
-
-Hint Extern 1 (LR unit) => exact LR_unit : typeclass_instances.
-
 
 (***
  *** Monads with State Effects
  ***)
 
 Section MonadState.
-  Polymorphic Context (S : Type) {R_S} `{LR_S:@LR S R_S} (M : Type -> Type) `{MonadOps M}.
+  Context (S : Type) {R_S} `{LR_S:@LR S R_S} (M : Type -> Type) `{MonadOps M}.
 
   (* State effects = get and put *)
-  Polymorphic Class MonadStateOps : Type :=
+  Class MonadStateOps : Type :=
   { getM : M S
   ; putM : S -> M unit
   }.
 
-  Polymorphic Class MonadState (ms : MonadStateOps) : Prop :=
+  Class MonadState (ms : MonadStateOps) : Prop :=
   {
     monad_state_monad :> Monad M;
     monad_proper_get :> Proper lr_leq getM;
-    monad_proper_put :> Proper (lr_leq ==> lr_leq) putM;
-    monad_state_get_get :
-      forall {A} `{LR A} f,
-        bindM getM (fun s => bindM getM (f s)) ~~
-        (bindM getM (fun s => f s s) : M A) ;
-    monad_state_get_put : bindM getM putM ~~ returnM tt ;
+    monad_proper_put :> Proper lr_leq putM;
+    monad_state_get :
+      forall {A} `{LR A} (m : M A),
+        Proper lr_leq m ->
+        bindM getM (fun _ => m) ~~ m ;
+
+    monad_state_get_put :
+      forall {A} `{LR A} (f : S -> unit -> M A),
+        Proper lr_leq f ->
+        bindM getM (fun s => bindM (putM s) (f s)) ~~ bindM getM (fun s => f s tt) ;
+
     monad_state_put_get :
-      forall s, bindM (putM s) (fun _ => getM) ~~
-                bindM (putM s) (fun _ => returnM s);
+      forall {A} `{LR A} s (f : unit -> S -> M A),
+        Proper lr_leq f ->
+        bindM (putM s) (fun u => bindM getM (f u))
+              ~~ bindM (putM s) (fun u => f u s) ;
+
     monad_state_put_put :
-      forall s1 s2, bindM (putM s1) (fun _ => putM s2) ~~ putM s2
+      forall {A} `{LR A} s1 s2 (f : unit -> unit -> M A),
+        Proper lr_leq f ->
+        bindM (putM s1) (fun u => bindM (putM s2) (f u)) ~~ bindM (putM s2) (f tt)
   }.
+
 End MonadState.
 
 (***
@@ -57,13 +59,76 @@ Global Instance StateT_MonadOps : MonadOps StateT :=
    bindM :=
      fun A B m f =>
        fun s => do s_x <- m s; f (snd s_x) (fst s_x);
-   lrM := fun {A} _ => lr_leq }.
+   lrM := fun {A} _ => LR_Op_fun }.
 
 
 (* The Monad instance for StateT *)
 Global Instance StateT_Monad : Monad (StateT).
 Proof.
-  constructor; intros; unfold returnM, bindM, lrM, StateT_MonadOps.
+  constructor; intros; unfold returnM, bindM, lrM, StateT_MonadOps;
+  try apply LR_fun; try prove_lr; try prove_lr_proper.
+  admit. (* FIXME HERE NOW *)
+  transitivity (do s_x <- m x; returnM s_x); prove_lr.
+
+  FIXME HERE NOW: the above could maybe be done with an alternative monad-return-bind...?
+
+  Print apply_lr_leq.
+
+  match goal with
+  | |- (?f _) <~ (?g _) => apply apply_lr_leq; [ change (f <~ g) | ]; prove_lr
+  end.
+
+  rewrite Rxy.
+
+  prove_lr_proper.
+  prove_lr_proper.
+  admit.
+  autorewrite with LR.
+
+  build_lr_fun; prove_lr.
+  
+  lazymatch goal with
+  | |- _ <~ (fun _ => _) =>
+    let x := fresh "x" in
+    let y := fresh "y" in
+    let Rxy := fresh "Rxy" in
+    apply Build_LRFun; intros x y Rxy; prove_lr
+  end.
+  
+  split; intros foo1 foo2 Rfoo; prove_lr.
+
+  { apply LR_fun. }
+  {
+  repeat (first [ solve [ eauto with typeclass_instances ]
+                | progress (apply fun_Proper_lr_leq)
+                | apply fun_Proper_lr_leq_adjoint
+                | apply fun_Proper_arrow_pair_commute
+                | apply fun_Proper_arrow_adjoint ]).
+  repeat (intro; intros).
+  apply apply_lr_leq; [ change (returnM <~ (returnM : S * A -> M (S * A))) | ].
+  lazymatch goal with
+  | |- ?f <~ ?g =>
+    first [ change (Proper lr_leq f) (* ; solve [ eauto with typeclass_instances ] *)
+          | change (f <~ f); assumption_semi_refl
+          | assumption
+          | idtac ]
+  end.
+  Print HintDb typeclass_instances.
+  auto with typeclass_instances.
+  apply monad_proper_return.
+
+
+  prove_lr.
+    first [ change (Proper lr_leq f); solve [ eauto with typeclass_instances ]
+          | change (returnM <~ (returnM : S * A -> M (S * A))); assumption_semi_refl
+          | assumption
+          | idtac ].
+
+
+ prove_lr.
+
+ prove_lr_proper.
+
   { apply LR_fun. }
   { intros x y Rxy. intros s1 s2 Rs.
     repeat split; apply monad_proper_return; split.

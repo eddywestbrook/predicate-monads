@@ -289,6 +289,12 @@ Proof.
     try assumption; try assumption_semi_refl.
 Qed.
 
+(* Eta rule for pairs *)
+Lemma LRPair_eta {A B} `{LR A} `{LR B} (p : A*B) : p <~ p -> (fst p, snd p) ~~ p.
+  intro Rp; destruct p; split; assumption.
+Qed.
+Hint Rewrite @LRPair_eta : LR.
+
 
 (* The LR for the unit type is the obvious one *)
 Definition LRUnit : relation unit := fun _ _ => True.
@@ -304,6 +310,13 @@ Qed.
  *** Automation
  ***)
 
+(* Helper tactic for prove_lr: proves f <~ g by the Build_LRFun constructor *)
+Ltac build_lr_fun :=
+  let x := fresh "x" in
+  let y := fresh "y" in
+  let Rxy := fresh "Rxy" in
+  apply Build_LRFun; intros x y Rxy.
+
 (* Tactic to prove things like (f x y) <~ (f' x' y') and (f x y) ~~ (f' x' y')
  by reducing them to f <~ f', x <~ x', and y <~ y' (or similar with ~~ in place
  of <~).  This is similar to (and the code is adapted from) the f_equiv tactic
@@ -313,18 +326,22 @@ Ltac prove_lr :=
   match goal with
   | |- (?f _) <~ (?g _) => apply apply_lr_leq; [ change (f <~ g) | ]; prove_lr
   | |- (?f _) ~~ (?g _) => apply apply_lr_eq; prove_lr
+  | |- (fun _ => _) <~ _ => build_lr_fun; prove_lr
+  | |- _ <~ (fun _ => _) => build_lr_fun; prove_lr
+  | |- (fun _ => _) ~~ _ => split; build_lr_fun; prove_lr
+  | |- _ ~~ (fun _ => _) => split; build_lr_fun; prove_lr
   | |- ?f <~ ?g =>
-    first [ change (Proper lr_leq f); solve [ eauto with typeclass_instances ]
+    first [ change (Proper lr_leq f); solve [ auto with typeclass_instances ]
           | change (f <~ f); assumption_semi_refl
           | assumption
-          | idtac ]
+          | autorewrite with LR ]
   | |- ?f ~~ ?g =>
-    first [ change (Proper lr_eq f); solve [ eauto with typeclass_instances ]
+    first [ change (Proper lr_eq f); solve [ auto with typeclass_instances ]
           | split; change (Proper lr_leq f);
-            solve [ eauto with typeclass_instances ]
+            solve [ auto with typeclass_instances ]
           | change (f ~~ f); assumption_semi_refl
           | assumption
-          | idtac ]
+          | autorewrite with LR ]
  end.
 
 
@@ -369,7 +386,7 @@ Qed.
 
 (* Tactic to prove Proper lr_leq f from Proper (lr_leq ==> ... ==> lr_leq) f *)
 Ltac prove_lr_proper :=
-  repeat (first [ solve [ eauto with typeclass_instances ]
+  repeat (first [ solve [ auto with typeclass_instances ]
                 | progress (apply fun_Proper_lr_leq)
                 | apply fun_Proper_lr_leq_adjoint
                 | apply fun_Proper_arrow_pair_commute
