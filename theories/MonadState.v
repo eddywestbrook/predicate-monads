@@ -14,7 +14,7 @@ Section MonadState.
   ; putM : S -> M unit
   }.
 
-  Class MonadState (ms : MonadStateOps) : Prop :=
+  Class MonadState `{MonadStateOps} : Prop :=
   {
     monad_state_monad :> Monad M;
     monad_proper_get :> Proper lr_leq getM;
@@ -31,13 +31,13 @@ Section MonadState.
 
     monad_state_put_get :
       forall {A} `{LR A} s (f : unit -> S -> M A),
-        Proper lr_leq f ->
+        Proper lr_leq s -> Proper lr_leq f ->
         bindM (putM s) (fun u => bindM getM (f u))
               ~~ bindM (putM s) (fun u => f u s) ;
 
     monad_state_put_put :
       forall {A} `{LR A} s1 s2 (f : unit -> unit -> M A),
-        Proper lr_leq f ->
+        Proper lr_leq s1 -> Proper lr_leq s2 -> Proper lr_leq f ->
         bindM (putM s1) (fun u => bindM (putM s2) (f u)) ~~ bindM (putM s2) (f tt)
   }.
 
@@ -77,29 +77,43 @@ Proof.
   - prove_lr.
 Qed.
 
-FIXME HERE NOW
+Global Instance StateT_MonadStateOps : MonadStateOps S StateT :=
+  { getM := fun s => returnM (s, s)
+  ; putM := fun s _ => returnM (s, tt)
+  }.
 
-Instance StateT_MonadState `{Monad M}
-: @MonadState S StateT (EqualsOp_Libniz S) _ _.
+Global Instance StateT_MonadState : MonadState S StateT.
 Proof.
-  constructor.
-  { eapply StateT_Monad. }
-  { intros.
-    do 3 red. intros.
-    unfold bindM. simpl.
-    repeat rewrite monad_return_bind; tc.
-    reflexivity. }
-  { do 3 red; intros. unfold bindM; simpl.
-    repeat rewrite monad_return_bind; tc.
-    reflexivity. }
-  { do 3 red. intros.
-    unfold bindM; simpl.
-    repeat rewrite monad_return_bind; tc. reflexivity. }
-  { do 3 red. intros.
-    unfold bindM; simpl.
-    repeat rewrite monad_return_bind; tc. reflexivity. }
+  constructor; intros;
+    unfold StateT, returnM, bindM, lrM, getM, putM,
+    StateT_MonadOps, StateT_MonadStateOps.
+  - auto with typeclass_instances.
+  - prove_lr_proper.
+  - prove_lr_proper.
+  - prove_lr.
+  - split; build_lr_fun.
+    (* NOTE: we write these out here so you can see the progress as they
+    run; this is really just the same as prove_lr *)
+    + autorewrite with LR; prove_lr_proper; prove_lr.
+    + autorewrite with LR; prove_lr_proper; prove_lr.
+    + autorewrite with LR; prove_lr_proper; prove_lr.
+    + autorewrite with LR; prove_lr_proper; prove_lr.
+    + autorewrite with LR; prove_lr_proper; prove_lr.
+    + autorewrite with LR; prove_lr_proper; prove_lr.
+  - split; build_lr_fun.
+    + autorewrite with LR; prove_lr_proper; prove_lr.
+    + autorewrite with LR; prove_lr_proper; prove_lr.
+    + autorewrite with LR; prove_lr_proper; prove_lr.
+    + autorewrite with LR; prove_lr_proper; prove_lr.
+    + autorewrite with LR; prove_lr_proper; prove_lr.
+    + autorewrite with LR; prove_lr_proper; prove_lr.
+  - split; build_lr_fun.
+    + autorewrite with LR; prove_lr_proper; prove_lr.
+    + autorewrite with LR; prove_lr_proper; prove_lr.
+    + autorewrite with LR; prove_lr_proper; prove_lr.
+    + autorewrite with LR; prove_lr_proper; prove_lr.
+    + autorewrite with LR; prove_lr_proper; prove_lr.
+    + autorewrite with LR; prove_lr_proper; prove_lr.
 Qed.
 
 End StateT.
-
-Arguments MonadState _ _ {_ _ _} : clear implicits.
