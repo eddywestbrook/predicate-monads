@@ -319,9 +319,11 @@ Definition LRUnit : relation unit := fun _ _ => True.
 Instance LR_Op_unit : LR_Op unit := LRUnit.
 
 Instance LR_unit : LR unit.
-Proof.
-  repeat constructor.
-Qed.
+Proof. repeat constructor. Qed.
+
+(* tt is a Proper morphism *)
+Instance Proper_LRUnit_tt : Proper lr_leq tt.
+Proof. constructor. Qed.
 
 
 (***
