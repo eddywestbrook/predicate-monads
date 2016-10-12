@@ -68,6 +68,6 @@ Instance IdMonad_MonadOps : MonadOps Identity :=
 
 Instance IdMonad : Monad Identity.
 constructor; intros; unfold returnM, bindM, lrM, IdMonad_MonadOps;
-  try assumption; try prove_lr; prove_lr_proper.
+  try assumption; try prove_lr; try prove_lr_proper.
 intros R1 R2 sub; assumption.
 Qed.

@@ -241,6 +241,16 @@ Proof.
       + apply Rgh; assumption. }
 Qed.
 
+(* LRFun itself is Proper w.r.t. subrelations in the second argument *)
+Instance LRFun_Proper_subrelation {A B} `{LR_Op A} :
+  Proper (subrelation ==> subrelation) (@LR_Op_fun A B _).
+Proof.
+  intros R1 R2 subR f g Rfg; destruct Rfg as [Pf Pg Rfg].
+  split; intros x y Rxy; apply subR;
+    first [ apply Pf | apply Pg | apply Rfg ]; assumption.
+Qed.
+
+
 (* Elimination principle for proving ~~ from functions *)
 Lemma apply_lr_eq {A B} `{LR_Op A} `{LR_Op B} (f g : A -> B) :
   f ~~ g -> forall x y, x ~~ y -> f x ~~ g y.
@@ -265,6 +275,14 @@ Proof.
   { constructor; intros p1 p2 R12; destruct R12; split; assumption_semi_refl. }
   { intros p1 p2 p3 R12 R23; destruct R12; destruct R23; split;
       [ transitivity (fst p2) | transitivity (snd p2) ]; assumption. }
+Qed.
+
+(* LRPair itself is Proper w.r.t. subrelations *)
+Instance LRPair_Proper_subrelation {A B} :
+  Proper (subrelation ==> subrelation ==> subrelation) (@LR_Op_pair A B).
+Proof.
+  intros R1 R2 subR S1 S2 subS p1 p2 Rp; destruct Rp.
+  split; first [ apply subR | apply subS ]; assumption.
 Qed.
 
 (* fst is a Proper morphism *)
@@ -323,6 +341,7 @@ Ltac build_lr_fun :=
  in Coq.Classes.Morphisms, except that we do not use rewriting or reflexivity
  because lr_leq and lr_eq are not necessarily reflexive. *)
 Ltac prove_lr :=
+  autorewrite with LR;
   match goal with
   | |- (?f _) <~ (?g _) => apply apply_lr_leq; [ change (f <~ g) | ]; prove_lr
   | |- (?f _) ~~ (?g _) => apply apply_lr_eq; prove_lr
@@ -333,15 +352,15 @@ Ltac prove_lr :=
   | |- ?f <~ ?g =>
     first [ change (Proper lr_leq f); solve [ auto with typeclass_instances ]
           | change (f <~ f); assumption_semi_refl
-          | assumption
-          | autorewrite with LR ]
+          | assumption ]
   | |- ?f ~~ ?g =>
     first [ change (Proper lr_eq f); solve [ auto with typeclass_instances ]
           | split; change (Proper lr_leq f);
             solve [ auto with typeclass_instances ]
           | change (f ~~ f); assumption_semi_refl
-          | assumption
-          | autorewrite with LR ]
+          | assumption ]
+  | |- Proper lr_leq _ => unfold Proper; prove_lr
+  | |- _ => first [ assumption | auto with typeclass_instances ]
  end.
 
 
@@ -386,9 +405,15 @@ Qed.
 
 (* Tactic to prove Proper lr_leq f from Proper (lr_leq ==> ... ==> lr_leq) f *)
 Ltac prove_lr_proper :=
-  repeat (first [ solve [ auto with typeclass_instances ]
-                | progress (apply fun_Proper_lr_leq)
-                | apply fun_Proper_lr_leq_adjoint
-                | apply fun_Proper_arrow_pair_commute
-                | apply fun_Proper_arrow_adjoint
-                | repeat (intro; intros); prove_lr ]).
+  lazymatch goal with
+  | |- Proper lr_leq ?f =>
+    first [ solve [ auto with typeclass_instances ]
+          | progress (apply fun_Proper_lr_leq); prove_lr_proper
+          | unfold Proper; prove_lr ]
+  | |- Proper (lr_leq ==> _) ?f =>
+    first [ apply fun_Proper_lr_leq_adjoint; prove_lr_proper
+          | apply fun_Proper_arrow_pair_commute; prove_lr_proper
+          | apply fun_Proper_arrow_adjoint; prove_lr_proper
+          | repeat (intro; intros); prove_lr ]
+  | |- _ => idtac
+  end.
