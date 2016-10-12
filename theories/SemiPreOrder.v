@@ -98,12 +98,17 @@ Proof. apply PER_SemiPreOrder. Qed.
 with the form x <~ y or y <~ x *)
 Ltac assumption_semi_refl :=
   match goal with
+  | |- Proper lr_leq _ => unfold Proper; assumption_semi_refl
+  | |- Proper lr_eq _ => unfold Proper; assumption_semi_refl
   | H : ?x <~ ?y |- ?x <~ ?x => apply (semi_reflexivity_l _ _ H)
   | H : ?y <~ ?x |- ?x <~ ?x => apply (semi_reflexivity_r _ _ H)
+  | H : Proper lr_leq ?x |- ?x <~ ?x => apply H
   | H : ?x ~~ ?y |- ?x <~ ?x => destruct H; assumption_semi_refl
   | H : ?y ~~ ?x |- ?x <~ ?x => destruct H; assumption_semi_refl
   | H : ?x ~~ ?y |- ?x ~~ ?x => apply (semi_reflexivity_l _ _ H)
   | H : ?y ~~ ?x |- ?x ~~ ?x => apply (semi_reflexivity_r _ _ H)
+  | H : Proper lr_leq ?x |- ?x ~~ ?x => split; apply H
+  | H : Proper lr_eq ?x |- ?x ~~ ?x => apply H
   (*
   | |- ?f ?z <~ ?f ?z =>
     apply semi_reflexivity_apply_Proper_leq; semi_reflexivity
