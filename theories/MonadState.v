@@ -1,5 +1,5 @@
-Require Import PredMonad.SemiPreOrder.
-Require Import PredMonad.Monad.
+Require Export PredMonad.Monad.
+
 
 (***
  *** Monads with State Effects
