@@ -1,0 +1,30 @@
+
+%%%
+%%% for repetitive commands that just set the font face
+%%%
+
+\newcommand{\definermcommand}[2]{\newcommand{#1}{\ensuremath{\mathrm{#2}}}}
+\newcommand{\definesfcommand}[2]{\newcommand{#1}{\ensuremath{\mathsf{#2}}}}
+\newcommand{\definebfcommand}[2]{\newcommand{#1}{\ensuremath{\mathbf{#2}}}}
+
+
+%%%
+%%% Monadic operations
+%%%
+
+\newcommand{\lamabs}[3]{\lambda\,#1 \! : \! #2 \,.\, #3}
+\newcommand{\lamabsnot}[2]{\lambda #1.\,#2}
+
+\definesfcommand{\returnM}{returnM}
+\newcommand{\bind}{>\!\!>\!\!=}
+\newcommand{\bindU}{>\!\!>}
+\definesfcommand{\getM}{getM}
+\definesfcommand{\putM}{putM}
+\definesfcommand{\unit}{unit}
+\definesfcommand{\Tt}{tt}
+\definesfcommand{\fail}{fail}
+
+%%% Local Variables:
+%%% mode: latex
+%%% TeX-master: "coqpl-2017"
+%%% End:
