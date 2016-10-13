@@ -216,7 +216,7 @@ Qed.
 
 
 (***
- *** Logical Relation for Common Types
+ *** The Logical Relation for Functions
  ***)
 
 (* The LR for functions is the pointwise relation on all the outputs, restricted
@@ -263,6 +263,10 @@ Lemma apply_lr_eq {A B} `{LR_Op A} `{LR_Op B} (f g : A -> B) :
     [ apply Rfg1 | apply Rfg2 ]; assumption.
 Qed.
 
+
+(***
+ *** The Logical Relation for Pairs
+ ***)
 
 (* The LR for pairs is just the pointwise relation on the components *)
 Record LRPair {A B} `{LR_Op A} `{LR_Op B} (p1 p2 : A * B) : Prop :=
@@ -319,20 +323,8 @@ Qed.
 Hint Rewrite @LRPair_eta : LR.
 
 
-(* The LR for the unit type is the obvious one *)
-Definition LRUnit : relation unit := fun _ _ => True.
-Instance LR_Op_unit : LR_Op unit := LRUnit.
-
-Instance LR_unit : LR unit.
-Proof. repeat constructor. Qed.
-
-(* tt is a Proper morphism *)
-Instance Proper_LRUnit_tt : Proper lr_leq tt.
-Proof. constructor. Qed.
-
-
 (***
- *** Automation
+ *** Automation (which uses the LRs for functions and pairs)
  ***)
 
 (* Helper tactic for prove_lr: proves f <~ g by the Build_LRFun constructor *)
@@ -357,11 +349,13 @@ Ltac prove_lr :=
   | |- (fun _ => _) ~~ _ => split; build_lr_fun; prove_lr
   | |- _ ~~ (fun _ => _) => split; build_lr_fun; prove_lr
   | |- ?f <~ ?g =>
-    first [ change (Proper lr_leq f); solve [ auto with typeclass_instances ]
+    first [ change (Proper lr_leq f);
+            solve [ assumption | auto with typeclass_instances ]
           | change (f <~ f); assumption_semi_refl
           | assumption ]
   | |- ?f ~~ ?g =>
-    first [ change (Proper lr_eq f); solve [ auto with typeclass_instances ]
+    first [ change (Proper lr_eq f);
+            solve [ assumption | auto with typeclass_instances ]
           | split; change (Proper lr_leq f);
             solve [ auto with typeclass_instances ]
           | change (f ~~ f); assumption_semi_refl
@@ -424,3 +418,67 @@ Ltac prove_lr_proper :=
           | repeat (intro; intros); prove_lr ]
   | |- _ => idtac
   end.
+
+
+(***
+ *** The Discrete Logical Relation
+ ***)
+
+(* The discrete LR for a type A, making every element of A related to itself and
+nothing else; this is the same as Liebniz equality *)
+Definition LRDiscrete {A} : relation A := eq.
+
+(* LRDiscrete is a valid LR. Note that we do not make this an Instance, since we
+do not want Coq using this unless we tell it to. *)
+Lemma LR_LRDiscrete {A} : @LR A LRDiscrete.
+  repeat constructor.
+  intros x y z Rxy Ryz; transitivity y; assumption.
+Qed.
+
+(* In the discrete LR, everything is related to itself. Again, we do not make
+this an Instance, so that Coq doesn't use it unless we tell it to. *)
+Lemma Proper_LRDiscrete_any {A} (a:A) : Proper (lr_leq (LR_Op:= LRDiscrete)) a.
+  reflexivity.
+Qed.
+
+(* The LR for the unit type is the discrete one *)
+Instance LR_Op_unit : LR_Op unit := LRDiscrete.
+Instance LR_unit : LR unit := LR_LRDiscrete.
+Instance Proper_LR_unit_tt : Proper lr_leq tt := Proper_LRDiscrete_any tt.
+
+(* The LR for bool is also the discrete one *)
+Instance LR_Op_bool : LR_Op bool := LRDiscrete.
+Instance LR_bool : LR bool := LR_LRDiscrete.
+Instance Proper_LR_bool_any b : Proper lr_leq b := Proper_LRDiscrete_any b.
+
+(* We want prove_lr, below, to always replace pattern-matches, including if,
+with applications of an elimination combinator that we prove once and for all is
+Proper. This is the version of that for bool. *)
+Definition elimBool {A} (b:bool) (x y:A) := if b then x else y.
+
+Instance Proper_elimBool `{LR} : Proper lr_leq elimBool.
+Proof.
+ unfold elimBool; prove_lr_proper. rewrite H0; destruct y; assumption.
+Qed.
+
+Lemma rewrite_if_elimBool `{LR} (b:bool) x y :
+  Proper lr_leq x -> Proper lr_leq y ->
+  (if b then x else y) ~~ elimBool b x y.
+  intros Px Py; destruct b; unfold elimBool; assumption_semi_refl.
+Qed.
+
+Hint Rewrite @rewrite_if_elimBool : LR.
+
+
+(***
+ *** The Logical Relation for Prop
+ ***)
+
+(* P1 <~ P2 is defined as P1 -> P2 *)
+Instance LR_Op_Prop : LR_Op Prop := impl.
+
+Instance LR_Prop : LR Prop.
+Proof.
+  constructor; apply @PreOrder_SemiPreOrder; constructor;
+    auto with typeclass_instances.
+Qed.
