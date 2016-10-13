@@ -1,6 +1,7 @@
 \documentclass[preprint]{sigplanconf}
 
 \usepackage{amsmath}
+\usepackage{amssymb}
 
 \begin{document}
 \input{definitions.tex}
@@ -77,7 +78,8 @@ supports a wide variety of different sorts of effects, including mutable state,
 continuations, errors and exceptions, non-determinism, and many more
 \cite{moggi91}.  These effects are defined in a given monad $M$ by exposing a
 set of \emph{monadic operations} to implement these effects in $M$. For
-instance, if $M$ supports mutable state it often exposes it through the following type signature:
+instance, if $M$ supports mutable state it often exposes it through the
+following type signature:
 \[
 \begin{array}{lcl}
   \returnM & :: & \forall A. A \to M\;A \\
@@ -92,7 +94,7 @@ while $\getM$ and $\putM$ define operations for reading and writing,
 respectively, the current value of the mutable state of type $S$. Note that
 we also use the standard abbreviation
 \[
-m_1 \bindU m_2 = m_1 \bind \lamabs{x:\unit}{m_2}
+m_1 \bindU m_2 \triangleq m_1 \bind \lamabs{x:\unit}{m_2}
 \]
 to sequecne a computation $m_1$ followed by a computation $m_2$ that does not
 inspect the return value of $m_1$.
@@ -106,17 +108,22 @@ supports mutable state will generally satisfy the following \emph{state monad
   laws}, stating that $\getM$ and $\putM$ behave as expected:
 \[
 \begin{array}{lcl}
-  \putM\;s \bindU \putM\;s' & = & \putM\;s'\\
-  \putM\;s \bind \getM & = & \putM\;s \bindU \returnM\;s \\
-  \getM\bind\putM & = & \returnM\;\Tt \\
-  \getM\bind \lamabsnot{s}{\getM\bind f\;s} & = & \getM\bind\lamabsnot{s}{f\;s\;s}
+  \putM\;s \bindU \putM\;s' & \approx & \putM\;s'\\
+  \putM\;s \bind \getM & \approx & \putM\;s \bindU \returnM\;s \\
+  \getM\bind\putM & \approx & \returnM\;\Tt \\
+  \getM\bind \lamabsnot{s}{\getM\bind f\;s} & \approx & \getM\bind\lamabsnot{s}{f\;s\;s}
 \end{array}
 \]
+Note that, in our formulation, each monad comes equipped with its own
+equivalence relation, written $\approx$ here, which may be different from the
+built-in intensional equality of the meta-logic (i.e., Coq) in which we are
+defining these notions.
+%
 A monad that supports multiple effects will additionally include monad laws for
 how those effects interact; e.g., a monad with mutable state and errors might
 include the law
 \[
-\putM\;s \bindU \fail = \fail
+\putM\;s \bindU \fail \approx \fail
 \]
 to indicate that a failure eradicates all mutable state modifications.  A
 similar monad with these effects, however, might not satisfy this law, if, for
@@ -159,16 +166,56 @@ powerful and compositional way to build monads \cite{liang95}, then $P_M$ can be
 built using the same monad transformers. This allows us to derive predicate
 monads for a wide variety of monads and effects in a straightforward manner.
 
-\section{$P_{\mathsf{Identity}} = \mathsf{Set}$}
-To make the ideas above precise, we describe the predicate monad for the identity monad.
+
+\section{Building Predicate Monads}
+
+To define predicate monads formally, we capture the notion as a new sort of
+computational effect, the ``logic over $M$'' effect. Just as with other sorts of
+effects, this means adding a number of monadic operations and a set of monad
+laws for those operations. The operations for predicate monads are:
+\[
+\begin{array}{lcl}
+  \forallP & :: & \forall A.\forall B.(A\to P_M\;B) \to P_M\;B\\
+  \existsP & :: & \forall A.\forall B.(A\to P_M\;B) \to P_M\;B\\
+  \existsP & :: & \forall A.P_M\;A \to P_M\;A \to P_M\;A\\
+  \singleP & :: & \forall A.M\;A \to P_M\;A\\
+  (\vdash) & :: & \forall A. P_ M\;A \to P_ M\;A \to \Prop
+\end{array}
+\]
+Intuitively, the first three operations build predicates corresponding to
+universal quantification, existential quantification, and implication. The
+fourth operation, $\singleP$, builds the singleton predicate, i.e., the least
+predicate containing a given monadic computation. The final operation is the
+entailment pre-order over predicates. Intuitively, $P_1\vdash P_2$ means that
+any computations which satisfy $P_1$ will always satisfy $P_2$. We require that
+the equivalence $\approx$ over $P_M$ be defined as the symmetric intersection of
+$\vdash$, i.e., such that $P_1\approx P_2$ iff $P_1\vdash P_2$ and
+$P_2\vdash P_1$. Using the final two operations above, we can then define
+\[
+m \vDash P \triangleq \singleP\;m \vdash P
+\]
+to capture the notion that computation $m$ of type $M\;A$ satisfies predicate
+$P$ of type $P_M\;A$.
 
 
+FIXME HERE: predicate monad laws
 \begin{itemize}
-\item Describe the $\mathsf{SetM}$ monad as a predicate monad for
-  $\mathsf{Identity}$
-\item Show how to define a pre-condition / post-condition predicate, and
-  how to prove it using rewriting
+\item $\singleP$ applied to each operation yields the corresponding operation in
+  $P_M$; same with effectful operations such as get and put
+\item Introduction and elimination laws (just give examples for forall)
 \end{itemize}
+
+
+FIXME HERE: describe the set predicate monad, and explain that
+transformers can be used to build up predicate monads
+
+
+\section{Proving Properties using Predicate Monads}
+
+FIXME HERE: define HoareP in predicate monads
+
+FIXME HERE: briefly explain how rewriting will prove it for a given computation
+
 
 
 \bibliographystyle{abbrvnat}
