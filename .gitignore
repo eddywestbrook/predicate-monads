@@ -6,3 +6,9 @@
 Makefile.coq
 Makefile.coq.bak
 #*#
+*.pdf
+*.log
+*.aux
+*.bbl
+*.blg
+*.gz
