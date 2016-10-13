@@ -1,4 +1,3 @@
-
 \documentclass[preprint]{sigplanconf}
 
 \usepackage{amsmath}
@@ -37,7 +36,7 @@
            {Galois Inc.}
            {westbrook@galois.com}
 \authorinfo{Gregory Malecha}
-           {FIXME}
+           {UCSD}
            {gmalecha@gmail.com}
 
 \maketitle
@@ -78,8 +77,7 @@ supports a wide variety of different sorts of effects, including mutable state,
 continuations, errors and exceptions, non-determinism, and many more
 \cite{moggi91}.  These effects are defined in a given monad $M$ by exposing a
 set of \emph{monadic operations} to implement these effects in $M$. For
-instance, the fact that $M$ supports mutable state is generally specified with
-operations that satisfy the following type signature:
+instance, if $M$ supports mutable state it often exposes it through the following type signature:
 \[
 \begin{array}{lcl}
   \returnM & :: & \forall A. A \to M\;A \\
@@ -148,18 +146,21 @@ In this talk, we will present ongoing work on a general framework, called
 overcomes these difficulties. The goal of this approach is to leverage the power
 and elegance of the monad laws, but apply them not to monadic programs
 themselves but to predicates over monadic computations.  More technically, in
-our approach, each monad $M$ is associated with a so-called predicate monad $PM$
+our approach, each monad $M$ is associated with a so-called predicate monad $P_M$
 which is, intuitively, a monad of predicates on computations in $M$.
-If we view $M$ as a domain-specific semantics, then $PM$ is a
+If we view $M$ as a domain-specific semantics, then $P_M$ is a
 \emph{domain-specific logic}.
 % FIXME: make this point better
-The predicate monad $PM$ supports predicates over all of the monadic operations
+The predicate monad $P_M$ supports predicates over all of the monadic operations
 of $M$, allowing it to reason about arbitrary effects. This reasoning comes in
 the form of \emph{predicate monad laws}, which allow predicates to be proved
 using rewriting. Additionally, if $M$ is defined using monad transformers, a
-powerful and compositional way to build monads \cite{liang95}, then $PM$ can be
+powerful and compositional way to build monads \cite{liang95}, then $P_M$ can be
 built using the same monad transformers. This allows us to derive predicate
 monads for a wide variety of monads and effects in a straightforward manner.
+
+\section{$P_{\mathsf{Identity}} = \mathsf{Set}$}
+To make the ideas above precise, we describe the predicate monad for the identity monad.
 
 
 \begin{itemize}
