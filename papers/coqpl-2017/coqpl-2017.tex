@@ -130,7 +130,7 @@ A monad that supports multiple effects will additionally include monad laws for
 how those effects interact; e.g., a monad with mutable state and errors might
 include the law
 \[
-\putM\;s \bindU \fail \lreq \fail
+\putM\;s \bindU \failM \lreq \failM
 \]
 to indicate that a failure eradicates all mutable state modifications.  A
 similar monad with these effects, however, might not satisfy this law, if, for
@@ -191,9 +191,14 @@ laws for those operations. The operations for predicate monads are:
 Intuitively, the first three operations build predicates corresponding to
 universal quantification, existential quantification, and implication. Note that
 conjunction and disjunction operators $\andP$ and $\orP$ can be defined from
-$\forallP$ and $\existsP$, respectively.  The fourth operation, $\singleP$,
-builds the singleton predicate, i.e., the least predicate containing a given
-monadic computation.
+$\forallP$ and $\existsP$, respectively, as can the greatest predicate $\trueP$
+and the least predicate $\falseP$. We define
+\[
+\assertP\;(P:\Prop) : P_M\;A \triangleq \existsP (\lamabs{p}{P}{\trueP})
+\]
+as the predicate that holds iff $P$ is provable.  Finally, the fourth operation
+above, $\singleP$, builds the singleton predicate, i.e., the least predicate
+containing a given monadic computation.
 
 Leastness here is with respect to the pre-order $\lrleq$ of $P_M$, which can be
 viewed as entailment over predicates; i.e., $p_1\lrleq p_2$ means that any
@@ -237,9 +242,10 @@ The predicate monad laws are then given as follows:
 The first two laws state that applying $\singleP$ to a monadic operation in $M$
 always yields an application of the same monadic operation in $P_M$. That is,
 $\returnM\;x$ in $P_M$ builds a predicate for recognizing the computation
-$\returnM\;x$ in $M$, while $P\bind q$ in $P_M$ builds a predicate for
-recognizing computations that are equivalent to $m\bind f$ in $M$ for some
-$M\vDash P$ and some $f$ such that $\forall x.f x \vDash P x$.
+$\returnM\;x$ in $M$, while $p\bind q$ in $P_M$ builds a predicate for
+recognizing computations that are equivalent, modulo the monad laws, to
+$m\bind f$ in $M$ for some $m\vDash p$ and some $f$ such that
+$\forall x.f x \vDash P x$.
 %
 The second set of laws state that $\forallP$, $\existsP$, and $\impliesP$
 satisfy usual introduction and elimination rules for the corresponding
@@ -249,6 +255,11 @@ law for $\impliesP$ states that $\lrleq$ is a Heyting algebra.
 %
 Finally, the third set of rules express monotonicity constraints, also known in
 Coq as $\mathsf{Proper}$ constraints, on the predicate monad operators.
+%
+Not shown, for space reasons, are laws stating that the logical connectives
+commute with $\bind$; e.g.,
+$(\forallP\;f)\bind\;g\lreq\forallP\;(\lamabsnot{x}{f\;x\bind g})$.
+
 
 In order to build predicate monads with this structure, we start by defining the
 predicate monad $P_{\mathsf{Identity}}$ for the simplest possible monad, the
@@ -272,14 +283,56 @@ used to build the underlying monad.
 
 \section{Proving Properties using Predicate Monads}
 
-As discussed above, predicate monads come equipped with the standard
-introduction and elimination rules for logical connectives, the real power
-comes from what we can prove just with rewriting.
+We now briefly consider how to formulate and prove Hoare-style pre- and
+post-conditions using predicate monads, as an illustrative example. We
+start with this definition:
+\[
+\begin{array}{@{}l@{}}
+  \HoareP (\phi:S\!\to\!\Prop) (\psi:S\!\to\!A\!\to\!S\!\to\!\Prop) (p:P_M\,A)\triangleq\\
+  \ind
+  \mathbf{do}\;
+  \begin{array}[t]{@{}l@{}}
+    s \leftarrow \getM\\
+    \impliesP\;(\assertP\;(\phi\;s))\\
+    \ind (\mathbf{do}\;
+    \begin{array}[t]{@{}l@{}}
+      x \leftarrow \catchM\;p\;(\lamabsnot{e}{\falseP})\\
+      s' \leftarrow \getM\\
+      \andP\;\assertP\;(\psi\;s\;x\;s')\;(\returnM\;x)
+      )
+    \end{array}
+  \end{array}
+\end{array}
+\]
+If we pass $\trueP$ for the argument $p$, then this intuitively captures total
+correctness for pre-condition $\phi$ and post-condition $\psi$. It is satisfied
+by computations equivalent to one that first reads the input state $s$, and, if
+$\phi\;s$ holds, performs any computation $m$ with return value(s) $x$ such that
+$\catchM\;m\;f\lreq m$ --- i.e., any computation with no errors --- and then
+gets the output state $s'$ and returns $x$, such that $\psi\;s\;x\;s'$ holds.
+%
+Note that this definition says nothing about the internals of either $M$ or
+$P_M$, as long as $M$ and $P_M$ have the expected operations for mutable state
+and error effects. This allows us to define Hoare-style pre- and post-conditions
+generically, and also to prove properties --- such as the transitivity rule for
+Hoare logic --- without reference to the definition of $M$.
 
 
-FIXME HERE: define HoareP in predicate monads
+FIXME: still writing the last paragraph or two\ldots
 
-FIXME HERE: briefly explain how rewriting will prove it for a given computation
+The reason to have the $p$, rather than always just using $\trueP$ for $p$, is
+that $\HoareP$ is monotonic in $p$. Thus we can prove
+$m\vDash\HoareP\;\phi\;\psi\;\trueP$ by proving that $m$ entails
+$\HoareP\;\phi\;\psi\;(\singleP\;m)$, which we can do by rewriting both sides
+and by applying the predicate monad laws for the logical connectives.
+
+
+
+
+As a sanity check, note that if we set $\phi$ and $\psi$ to always return the
+$\mathsf{True}$ proposition, then both $\assertP$ statements can be simplified
+to $\trueP$, the $\impliesP$ and $\andP$ can be simplified away, and the whole
+term can be rewritten to $\catchM\;p\;(\lamabsnot{e}{\falseP})$.
 
 
 
