@@ -183,34 +183,81 @@ laws for those operations. The operations for predicate monads are:
 \end{array}
 \]
 Intuitively, the first three operations build predicates corresponding to
-universal quantification, existential quantification, and implication. The
-fourth operation, $\singleP$, builds the singleton predicate, i.e., the least
-predicate containing a given monadic computation. The final operation is the
-entailment pre-order over predicates. Intuitively, $P_1\vdash P_2$ means that
-any computations which satisfy $P_1$ will always satisfy $P_2$. We require that
-the equivalence $\approx$ over $P_M$ be defined as the symmetric intersection of
-$\vdash$, i.e., such that $P_1\approx P_2$ iff $P_1\vdash P_2$ and
-$P_2\vdash P_1$. Using the final two operations above, we can then define
+universal quantification, existential quantification, and implication. Note that
+conjunction and disjunction operators $\andP$ and $\orP$ can be defined from
+$\forallP$ and $\existsP$, respectively.  The fourth operation, $\singleP$,
+builds the singleton predicate, i.e., the least predicate containing a given
+monadic computation. The final operation is the entailment pre-order over
+predicates. Intuitively, $P_1\vdash P_2$ means that any computations which
+satisfy $P_1$ will always satisfy $P_2$. We require that the equivalence
+$\approx$ over $P_M$ be defined as the symmetric intersection of $\vdash$, i.e.,
+such that $P_1\approx P_2$ iff $P_1\vdash P_2$ and $P_2\vdash P_1$. Using the
+final two operations above, we can then define
 \[
 m \vDash P \triangleq \singleP\;m \vdash P
 \]
 to capture the notion that computation $m$ of type $M\;A$ satisfies predicate
 $P$ of type $P_M\;A$.
 
+The predicate monad laws are as follows:
+\[
+\begin{array}{@{}r@{\hspace{5pt}}c@{\hspace{5pt}}l@{}}
+  \singleP\;(\returnM\;x) & \approx & \returnM\;x\\
+  \singleP\;(m \bind f) & \approx
+  & (\singleP\;m)\bind (\lamabsnot{x}{\singleP\;(f\;x)})
+  \\ \\
+  \forallP\;P & \vdash & P\;x\\
+  (\forall x. P \vdash Q\;x) & \to & P \vdash \forallP\;Q\\
+  P\;x & \vdash & \existsP\;P\\
+  (\forall x. P\;x \vdash Q) & \to & \existsP\;P \vdash Q\\
+  \andP\;P_1\;P_2 \vdash P_3 & \leftrightarrow & P_1 \vdash \impliesP\;P_2\;P_3
+  \\ \\
+  (\forall x. P\;x \vdash Q\;x) & \to & \forallP\;P \vdash \forallP\;Q\\
+  (\forall x. P\;x \vdash Q\;x) & \to & \existsP\;P \vdash \existsP\;Q\\
+  (P_1'\vdash P_1 \wedge P_2\vdash P_2') & \to
+  & \impliesP\;P_1\;P_2 \vdash \impliesP\;P_1'\;P_2'
+\end{array}
+\]
+The first two laws state that applying $\singleP$ to a monadic operation in $M$
+always yields an application of the same monadic operation in $P_M$. That is,
+$\returnM\;x$ in $P_M$ builds a predicate for recognizing the computation
+$\returnM\;x$ in $M$, while $P\bind Q$ in $P_M$ builds a predicate for
+recognizing computations that are equivalent to $m\bind f$ in $M$ for some
+$M\vDash P$ and some $f$ such that $\forall x.f x \vDash P x$.
+%
+The second set of laws state that $\forallP$, $\existsP$, and $\impliesP$
+satisfy usual introduction and elimination rules for the corresponding
+connectives in first-order logic. Note that, viewed differently, the laws for
+$\forallP$ and $\existsP$ state that $\vdash$ is a complete lattice, while the
+law for $\impliesP$ states that $\vdash$ is a Heyting algebra.
+%
+Finally, the third set of rules express monotonicity constraints, also known in
+Coq as $\mathsf{Proper}$ constraints, on the predicate monad operators. (In our
+actual implementation, these constraints include orders on the input types of
+the $\forallP$ and $\existsP$ operations, as well as montonicity constraints on
+the other monadic operations, but we ignore this detail here.)
 
-FIXME HERE: predicate monad laws
-\begin{itemize}
-\item $\singleP$ applied to each operation yields the corresponding operation in
-  $P_M$; same with effectful operations such as get and put
-\item Introduction and elimination laws (just give examples for forall)
-\end{itemize}
-
-
-FIXME HERE: describe the set predicate monad, and explain that
-transformers can be used to build up predicate monads
+In order to build predicate monads with this structure, we start by defining the
+predicate monad $P_{\mathsf{Identity}}$ for the simplest possible monad, the
+$\mathsf{Identity}$ monad. It turns out the the $\mathsf{Set}$ monad, defined as
+$\mathsf{Set}\;A\triangleq\;A\to\Prop$ has the desired structure, by defining
+$\forallP$, $\existsP$, and $\impliesP$ to be the straightforward application of
+the corresponding combinators in $\Prop$, and if we use subset for $\vdash$.  We
+omit the details here for the sake of brevity.
+%
+It also turns out that, for many standard monad transformers $\mathcal{T}$, we
+can define $P_{\mathcal{T}(M)}\triangleq\mathcal{T}(P_M)$, though, again, we
+omit the details here. This means that, we can build up predicate monads for a
+wide variety of different sorts of effects, using the same ``transformer stack''
+used to build the underlying monad.
 
 
 \section{Proving Properties using Predicate Monads}
+
+As discussed above, predicate monads come equipped with the standard
+introduction and elimination rules for logical connectives, the real power
+comes from what we can prove just with rewriting.
+
 
 FIXME HERE: define HoareP in predicate monads
 
