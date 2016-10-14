@@ -108,22 +108,29 @@ supports mutable state will generally satisfy the following \emph{state monad
   laws}, stating that $\getM$ and $\putM$ behave as expected:
 \[
 \begin{array}{lcl}
-  \putM\;s \bindU \putM\;s' & \approx & \putM\;s'\\
-  \putM\;s \bind \getM & \approx & \putM\;s \bindU \returnM\;s \\
-  \getM\bind\putM & \approx & \returnM\;\Tt \\
-  \getM\bind \lamabsnot{s}{\getM\bind f\;s} & \approx & \getM\bind\lamabsnot{s}{f\;s\;s}
+  \putM\;s \bindU \putM\;s' & \lreq & \putM\;s'\\
+  \putM\;s \bind \getM & \lreq & \putM\;s \bindU \returnM\;s \\
+  \getM\bind\putM & \lreq & \returnM\;\Tt \\
+  \getM\bind \lamabsnot{s}{\getM\bind f\;s} & \lreq & \getM\bind\lamabsnot{s}{f\;s\;s}
 \end{array}
 \]
-Note that, in our formulation, each monad comes equipped with its own
-equivalence relation, written $\approx$ here, which may be different from the
-built-in intensional equality of the meta-logic (i.e., Coq) in which we are
-defining these notions.
-%
+The notation $\lreq$ denotes the equality relation for the monad $M$, which may
+or may not correspond with the built-in equality of the meta-logic (i.e., with
+intensional equality in Coq); we assume every type comes equipped with a
+pre-order, which we formalize in Coq with a type class, and we write $\lrleq$
+for this pre-order and $(\lreq)\triangleq(\lrleq)\cap(\lrleq)^{-1}$ as the
+equivalence relation derived from $\lrleq$. Technically speaking, we formalize
+monads as functors over types plus orders, and the versions of the monad laws
+in our formulation include monotonicity constraints, i.e., they require that
+the various components be $\mathsf{Proper}$, but we ignore this detail here
+for space reasons.
+
+
 A monad that supports multiple effects will additionally include monad laws for
 how those effects interact; e.g., a monad with mutable state and errors might
 include the law
 \[
-\putM\;s \bindU \fail \approx \fail
+\putM\;s \bindU \fail \lreq \fail
 \]
 to indicate that a failure eradicates all mutable state modifications.  A
 similar monad with these effects, however, might not satisfy this law, if, for
@@ -179,7 +186,6 @@ laws for those operations. The operations for predicate monads are:
   \existsP & :: & \forall A.\forall B.(A\to P_M\;B) \to P_M\;B\\
   \existsP & :: & \forall A.P_M\;A \to P_M\;A \to P_M\;A\\
   \singleP & :: & \forall A.M\;A \to P_M\;A\\
-  (\vdash) & :: & \forall A. P_ M\;A \to P_ M\;A \to \Prop
 \end{array}
 \]
 Intuitively, the first three operations build predicates corresponding to
@@ -187,63 +193,75 @@ universal quantification, existential quantification, and implication. Note that
 conjunction and disjunction operators $\andP$ and $\orP$ can be defined from
 $\forallP$ and $\existsP$, respectively.  The fourth operation, $\singleP$,
 builds the singleton predicate, i.e., the least predicate containing a given
-monadic computation. The final operation is the entailment pre-order over
-predicates. Intuitively, $P_1\vdash P_2$ means that any computations which
-satisfy $P_1$ will always satisfy $P_2$. We require that the equivalence
-$\approx$ over $P_M$ be defined as the symmetric intersection of $\vdash$, i.e.,
-such that $P_1\approx P_2$ iff $P_1\vdash P_2$ and $P_2\vdash P_1$. Using the
-final two operations above, we can then define
+monadic computation.
+
+Leastness here is with respect to the pre-order $\lrleq$ of $P_M$, which can be
+viewed as entailment over predicates; i.e., $p_1\lrleq p_2$ means that any
+computations which satisfy $p_1$ will always satisfy $p_2$. The equality $\lreq$
+associated with $P_M$ thus denotes logical equivalence of two predicates, so
+that $p_1\lreq p_2$ means that $p_1$ and $p_2$ hold for the same computation in
+$M$. To define the notion of which computations in $M$ satisfy a predicate in
+$P_M$, we define
 \[
-m \vDash P \triangleq \singleP\;m \vdash P
+m \vDash p \triangleq \singleP\;m \vdash p
 \]
 to capture the notion that computation $m$ of type $M\;A$ satisfies predicate
 $P$ of type $P_M\;A$.
-
-The predicate monad laws are as follows:
+%
+The predicate monad laws are then given as follows:
 \[
+\begin{array}{@{}c@{}}
 \begin{array}{@{}r@{\hspace{5pt}}c@{\hspace{5pt}}l@{}}
-  \singleP\;(\returnM\;x) & \approx & \returnM\;x\\
-  \singleP\;(m \bind f) & \approx
+  \singleP\;(\returnM\;x) & \lreq & \returnM\;x\\
+  \singleP\;(m \bind f) & \lreq
   & (\singleP\;m)\bind (\lamabsnot{x}{\singleP\;(f\;x)})
   \\ \\
-  \forallP\;P & \vdash & P\;x\\
-  (\forall x. P \vdash Q\;x) & \to & P \vdash \forallP\;Q\\
-  P\;x & \vdash & \existsP\;P\\
-  (\forall x. P\;x \vdash Q) & \to & \existsP\;P \vdash Q\\
-  \andP\;P_1\;P_2 \vdash P_3 & \leftrightarrow & P_1 \vdash \impliesP\;P_2\;P_3
+  \forallP\;p & \lrleq & p\;x\\
+  (\forall x. p \lrleq q\;x) & \to & p \lrleq \forallP\;q\\
+  p\;x & \lrleq & \existsP\;p\\
+  (\forall x. p\;x \lrleq q) & \to & \existsP\;p \lrleq q\\
+  \andP\;p_1\;p_2 \lrleq p_3 & \leftrightarrow & p_1 \lrleq \impliesP\;p_2\;p_3
+\end{array}
   \\ \\
-  (\forall x. P\;x \vdash Q\;x) & \to & \forallP\;P \vdash \forallP\;Q\\
-  (\forall x. P\;x \vdash Q\;x) & \to & \existsP\;P \vdash \existsP\;Q\\
-  (P_1'\vdash P_1 \wedge P_2\vdash P_2') & \to
-  & \impliesP\;P_1\;P_2 \vdash \impliesP\;P_1'\;P_2'
+\begin{array}{@{}r@{\hspace{5pt}}c@{\hspace{5pt}}l@{}}
+  (\forall x.\forall y. x\lrleq y \to p\;x \lrleq q\;x)
+  & \to & \forallP\;p \lrleq \forallP\;q\\
+  (\forall x.\forall y. x\lrleq y \to p\;x \lrleq q\;x)
+  & \to & \existsP\;p \lrleq \existsP\;q
+\end{array}
+  \\
+  (p_1'\lrleq p_1 \wedge p_2\lrleq p_2') \to
+  \impliesP\;p_1\;p_2 \lrleq \impliesP\;p_1'\;p_2'
 \end{array}
 \]
 The first two laws state that applying $\singleP$ to a monadic operation in $M$
 always yields an application of the same monadic operation in $P_M$. That is,
 $\returnM\;x$ in $P_M$ builds a predicate for recognizing the computation
-$\returnM\;x$ in $M$, while $P\bind Q$ in $P_M$ builds a predicate for
+$\returnM\;x$ in $M$, while $P\bind q$ in $P_M$ builds a predicate for
 recognizing computations that are equivalent to $m\bind f$ in $M$ for some
 $M\vDash P$ and some $f$ such that $\forall x.f x \vDash P x$.
 %
 The second set of laws state that $\forallP$, $\existsP$, and $\impliesP$
 satisfy usual introduction and elimination rules for the corresponding
 connectives in first-order logic. Note that, viewed differently, the laws for
-$\forallP$ and $\existsP$ state that $\vdash$ is a complete lattice, while the
-law for $\impliesP$ states that $\vdash$ is a Heyting algebra.
+$\forallP$ and $\existsP$ state that $\lrleq$ is a complete lattice, while the
+law for $\impliesP$ states that $\lrleq$ is a Heyting algebra.
 %
 Finally, the third set of rules express monotonicity constraints, also known in
-Coq as $\mathsf{Proper}$ constraints, on the predicate monad operators. (In our
-actual implementation, these constraints include orders on the input types of
-the $\forallP$ and $\existsP$ operations, as well as montonicity constraints on
-the other monadic operations, but we ignore this detail here.)
+Coq as $\mathsf{Proper}$ constraints, on the predicate monad operators.
 
 In order to build predicate monads with this structure, we start by defining the
 predicate monad $P_{\mathsf{Identity}}$ for the simplest possible monad, the
-$\mathsf{Identity}$ monad. It turns out the the $\mathsf{Set}$ monad, defined as
+$\mathsf{Identity}$ monad. It turns out that the $\mathsf{Set}$ monad, defined as
 $\mathsf{Set}\;A\triangleq\;A\to\Prop$ has the desired structure, by defining
 $\forallP$, $\existsP$, and $\impliesP$ to be the straightforward application of
-the corresponding combinators in $\Prop$, and if we use subset for $\vdash$.  We
-omit the details here for the sake of brevity.
+the corresponding combinators in $\Prop$, and by defining
+\[
+p \lrleq q \triangleq \forall x. p\;x \to \exists y. x\lrleq y \wedge q\;y
+\]
+meaning that entailment in the $\mathsf{Set}$ predicate monad corresponds to
+a ``covering'' property, where each element of the lesser set has a greater
+element in the greater set.
 %
 It also turns out that, for many standard monad transformers $\mathcal{T}$, we
 can define $P_{\mathcal{T}(M)}\triangleq\mathcal{T}(P_M)$, though, again, we
