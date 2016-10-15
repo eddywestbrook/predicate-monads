@@ -208,12 +208,12 @@ that $p_1\lreq p_2$ means that $p_1$ and $p_2$ hold for the same computations in
 $M$. To define the notion of which computations in $M$ satisfy a predicate in
 $P_M$, we define
 \[
-m \vDash p \triangleq \singleP\;m \vdash p
+m \vDash p \triangleq \singleP\;m \lrleq p
 \]
-to capture the notion that computation $m$ of type $M\;A$ satisfies predicate
-$P$ of type $P_M\;A$.
+to capture the notion that computation $m$ of type $M\,A$ satisfies predicate
+$p$ of type $P_M\;A$.
 
-The predicate monad laws are then given as follows:
+When we reason about predicate monads, we use the following laws which are stated in terms of the ordering relation on the predicate monad.
 \[
 \begin{array}{@{}c@{}}
 \begin{array}{@{}r@{\hspace{5pt}}c@{\hspace{5pt}}l@{}}
