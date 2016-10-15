@@ -318,22 +318,24 @@ generically, and also to prove properties --- such as the transitivity rule for
 Hoare logic --- without reference to the definition of $M$.
 
 
-FIXME: still writing the last paragraph or two\ldots
-
 The reason to have the $p$, rather than always just using $\trueP$ for $p$, is
-that $\HoareP$ is monotonic in $p$. Thus we can prove
-$m\vDash\HoareP\;\phi\;\psi\;\trueP$ by proving that $m$ entails
-$\HoareP\;\phi\;\psi\;(\singleP\;m)$, which we can do by rewriting both sides
-and by applying the predicate monad laws for the logical connectives.
+that $\HoareP$ is monotonic in $p$, so we can prove
+$m\vDash\HoareP\;\phi\;\psi\;\trueP$ by proving
+$m\lrleq\HoareP\;\phi\;\psi\;(\singleP\;m)$, which we can do by rewriting via
+both the monad and the predicate monad laws. For instance, if $m$ has the form
+$\getM\bind\lamabsnot{s}{\putM\;(f\;s)\bindU\returnM\;(g\;s)}$, then rewriting
+this formula and then applying the $\mathsf{Proper}$-ness rules for $\bind$
+yields
+\[
+\forall s.\phi\;s \to \psi\;s\;(g\;s)\;(f\;s)
+\]
+which is exactly what we would expect; e.g.,
+$\catchM\;m\;(\lamabsnot{e}{\falseP})$ in this case rewrites to $m$.
 
-
-
-
-As a sanity check, note that if we set $\phi$ and $\psi$ to always return the
-$\mathsf{True}$ proposition, then both $\assertP$ statements can be simplified
-to $\trueP$, the $\impliesP$ and $\andP$ can be simplified away, and the whole
-term can be rewritten to $\catchM\;p\;(\lamabsnot{e}{\falseP})$.
-
+% As a sanity check, note that if we set $\phi$ and $\psi$ to always return the
+% $\mathsf{True}$ proposition, then both $\assertP$ statements can be simplified
+% to $\trueP$, the $\impliesP$ and $\andP$ can be simplified away, and the whole
+% term can be rewritten to $\catchM\;p\;(\lamabsnot{e}{\falseP})$.
 
 
 \bibliographystyle{abbrvnat}
