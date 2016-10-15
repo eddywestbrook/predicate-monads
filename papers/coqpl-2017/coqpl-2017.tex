@@ -37,7 +37,7 @@
            {Galois Inc.}
            {westbrook@galois.com}
 \authorinfo{Gregory Malecha}
-           {UCSD}
+           {}
            {gmalecha@gmail.com}
 
 \maketitle
@@ -184,7 +184,7 @@ laws for those operations. The operations for predicate monads are:
 \begin{array}{lcl}
   \forallP & :: & \forall A.\forall B.(A\to P_M\;B) \to P_M\;B\\
   \existsP & :: & \forall A.\forall B.(A\to P_M\;B) \to P_M\;B\\
-  \existsP & :: & \forall A.P_M\;A \to P_M\;A \to P_M\;A\\
+  \impliesP & :: & \forall A.P_M\;A \to P_M\;A \to P_M\;A\\
   \singleP & :: & \forall A.M\;A \to P_M\;A\\
 \end{array}
 \]
@@ -204,16 +204,16 @@ Leastness here is with respect to the pre-order $\lrleq$ of $P_M$, which can be
 viewed as entailment over predicates; i.e., $p_1\lrleq p_2$ means that any
 computations which satisfy $p_1$ will always satisfy $p_2$. The equality $\lreq$
 associated with $P_M$ thus denotes logical equivalence of two predicates, so
-that $p_1\lreq p_2$ means that $p_1$ and $p_2$ hold for the same computation in
+that $p_1\lreq p_2$ means that $p_1$ and $p_2$ hold for the same computations in
 $M$. To define the notion of which computations in $M$ satisfy a predicate in
 $P_M$, we define
 \[
-m \vDash p \triangleq \singleP\;m \vdash p
+m \vDash p \triangleq \singleP\;m \lrleq p
 \]
-to capture the notion that computation $m$ of type $M\;A$ satisfies predicate
-$P$ of type $P_M\;A$.
-%
-The predicate monad laws are then given as follows:
+to capture the notion that computation $m$ of type $M\,A$ satisfies predicate
+$p$ of type $P_M\;A$.
+
+When we reason about predicate monads, we use the following laws which are stated in terms of the ordering relation on the predicate monad.
 \[
 \begin{array}{@{}c@{}}
 \begin{array}{@{}r@{\hspace{5pt}}c@{\hspace{5pt}}l@{}}
@@ -221,7 +221,7 @@ The predicate monad laws are then given as follows:
   \singleP\;(m \bind f) & \lreq
   & (\singleP\;m)\bind (\lamabsnot{x}{\singleP\;(f\;x)})
   \\ \\
-  \forallP\;p & \lrleq & p\;x\\
+  \forallP\;p & \lrleq & p\;x \qquad\qquad\qquad\textrm{forall}\,x\\
   (\forall x. p \lrleq q\;x) & \to & p \lrleq \forallP\;q\\
   p\;x & \lrleq & \existsP\;p\\
   (\forall x. p\;x \lrleq q) & \to & \existsP\;p \lrleq q\\
