@@ -2,6 +2,7 @@
 
 ./theories/SemiPreOrder/SemiPreOrder.v
 ./theories/SemiPreOrder/Monad.v
-./theories/SemiPreOrder/MonadState.v
+# MonadState is really slow!
+#./theories/SemiPreOrder/MonadState.v
 ./theories/SemiPreOrder/PredMonad.v
 ./theories/SemiPreOrder/PredMonadState.v
