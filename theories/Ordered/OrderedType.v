@@ -10,34 +10,25 @@ Import ListNotations.
 
 
 (***
- *** Semi-Transitive Relations
+ *** Ordered Types = Types with a PreOrder
  ***)
 
-(* Semi-Transitivity is to PERs as pre-orders are to equivalence relations *)
-Class SemiTransitive {A} (R:relation A) : Prop :=
-  {
-    semitransitivity :
-      forall x y z, R x x -> R y y -> R z z -> R x y -> R y z -> R x z
-  }.
-
-(* Restrict a semi-transitive relation to the "valid" elements, i.e., those that
-are related to themselves *)
-Inductive validR {A} (R:relation A) (x:A) (y:A) : Prop :=
-| mkValidR : R x x -> R y y -> R x y -> validR R x y.
-
-(* FIXME: validR R is transitive when R is semi-transitive *)
-
-
-(***
- *** Ordered Types = Types with a Semi-PreOrder
- ***)
-
-Record OrderedType : Type :=
+Record OType : Type :=
   {
     ot_Type : Type;
     ot_R :> relation ot_Type;
-    ot_PreOrder :> SemiTransitive ot_R
+    ot_PreOrder :> PreOrder ot_R
   }.
+
+Instance OType_Reflexive (A:OType) : Reflexive (ot_R A).
+Proof.
+  destruct A; auto with typeclass_instances.
+Qed.
+
+Instance OType_Transitive (A:OType) : Transitive (ot_R A).
+Proof.
+  destruct A; auto with typeclass_instances.
+Qed.
 
 
 (***
@@ -45,100 +36,62 @@ Record OrderedType : Type :=
  ***)
 
 (* The ordered type of propositions *)
-Program Definition OTProp : OrderedType :=
+Program Definition OTProp : OType :=
   {|
     ot_Type := Prop;
     ot_R := Basics.impl;
   |}.
 Next Obligation.
-  constructor.
-  { intros. transitivity y; assumption. }
+  constructor; auto with typeclass_instances.
 Qed.
 
-(* The ordered type of natural numbers *)
-Program Definition OTnat : OrderedType :=
+(* The discrete ordered type, where things are only related to themselves *)
+Program Definition OTdiscrete (A:Type) : OType :=
+  {|
+    ot_Type := A;
+    ot_R := eq;
+  |}.
+
+(* The only ordered type over unit is the discrete one *)
+Definition OTunit : OType := OTdiscrete unit.
+
+(* The ordered type of natural numbers using <= *)
+Program Definition OTnat : OType :=
   {|
     ot_Type := nat;
     ot_R := le;
   |}.
-Next Obligation.
-  constructor.
-  { intros. transitivity y; assumption. }
-Qed.
 
-(* NOTE: the following definition requires everything above to be polymorphic *)
-(* NOTE: The definition we choose for OTType is actually deep: instead of
-requiring ot_Type A = ot_Type B, we could just require a coercion function from
-ot_Type A to ot_Type B, which would yield something more like HoTT... though
-maybe it wouldn't work unless we assumed the HoTT axiom? As it is, we might need
-UIP to hold if we want to use the definition given here... *)
-(*
-Program Definition OTType : OrderedType :=
-  {|
-    ot_Type := OrderedType;
-    ot_R := (fun A B =>
-               exists (e:ot_Type A = ot_Type B),
-                 forall (x y:A),
-                   ot_R A x y ->
-                   ot_R B (rew [fun A => A] e in x)
-                        (rew [fun A => A] e in y));
-  |}.
-*)
-
-(* The non-dependent function ordered type *)
-Program Definition OTArrow
-            (A:OrderedType) (B: OrderedType) : OrderedType :=
-  {|
-    ot_Type := ot_Type A -> ot_Type B;
-    ot_R := fun f g =>
-              forall x y, validR (ot_R A) x y -> ot_R B (f x) (g y);
-  |}.
-Next Obligation.
-  constructor; intros f g h; intros; destruct H4.
-  apply (semitransitivity (SemiTransitive:=B) _ (g y)).
-  { apply H; split; assumption. }
-  { apply H0; split; assumption. }
-  { apply H1; split; assumption. }
-  { apply H2; split; assumption. }
-  { apply H3; split; assumption. }
-Qed.
-
-(* FIXME: could also do a forall type, but need the second type argument, B, to
-itself be proper, i.e., to be an element of OTArrow A OType. Would also need a
-dependent version of OTContext, below. *)
-
-
-(* Flip the ordering of an OrderedType *)
-Program Definition OTFlip (A:OrderedType) : OrderedType :=
+(* Flip the ordering of an OType *)
+Program Definition OTflip (A:OType) : OType :=
   {|
     ot_Type := ot_Type A;
     ot_R := fun x y => ot_R A y x
   |}.
 Next Obligation.
-  constructor. intros p1 p2 p3; intros.
-  apply (semitransitivity (SemiTransitive:=A) _ p2); assumption.
+  constructor.
+  { intro x. reflexivity. }
+  { intros x y z; transitivity y; assumption. }
 Qed.
 
-(* The non-dependent product ordered type *)
-Program Definition OTProd
-            (A:OrderedType) (B: OrderedType) : OrderedType :=
+(* The non-dependent product ordered type, where pairs are related pointwise *)
+Program Definition OTprod (A:OType) (B: OType) : OType :=
   {|
     ot_Type := ot_Type A * ot_Type B;
     ot_R := fun p1 p2 =>
               ot_R A (fst p1) (fst p2) /\ ot_R B (snd p1) (snd p2)
   |}.
 Next Obligation.
-  constructor. intros p1 p2 p3; intros.
-  destruct H; destruct H0; destruct H1; destruct H2; destruct H3.
-  split.
-  { apply (semitransitivity (SemiTransitive:=A) _ (fst p2)); assumption. }
-  { apply (semitransitivity (SemiTransitive:=B) _ (snd p2)); assumption. }
+  constructor.
+  { intro p; split; reflexivity. }
+  { intros p1 p2 p3 R12 R23; destruct R12; destruct R23; split.
+    - transitivity (fst p2); assumption.
+    - transitivity (snd p2); assumption. }
 Qed.
 
-
-(* The non-dependent sum ordered type *)
-Program Definition OTSum
-            (A:OrderedType) (B: OrderedType) : OrderedType :=
+(* The non-dependent sum ordered type, where objects are only related if they
+are both "left"s or both "right"s *)
+Program Definition OTsum (A:OType) (B: OType) : OType :=
   {|
     ot_Type := ot_Type A + ot_Type B;
     ot_R := fun sum1 sum2 =>
@@ -151,25 +104,84 @@ Program Definition OTSum
   |}.
 Next Obligation.
   constructor.
-  intros sum1 sum2 sum3; destruct sum1; destruct sum2; destruct sum3; intros.
-  { apply (semitransitivity (SemiTransitive:=A) _ o0); assumption. }
-  { assumption. }
-  { elimtype False; assumption. }
-  { elimtype False; assumption. }
-  { assumption. }
-  { elimtype False; assumption. }
-  { assumption. }
-  { apply (semitransitivity (SemiTransitive:=B) _ o0); assumption. }
+  { intro s; destruct s; reflexivity. }
+  { intros s1 s2 s3 R12 R23.
+    destruct s1; destruct s2; destruct s3; try (elimtype False; assumption).
+    - transitivity o0; assumption.
+    - transitivity o0; assumption. }
 Qed.
 
 
+(* NOTE: the following definition requires everything above to be polymorphic *)
+(* NOTE: The definition we choose for OTType is actually deep: instead of
+requiring ot_Type A = ot_Type B, we could just require a coercion function from
+ot_Type A to ot_Type B, which would yield something more like HoTT... though
+maybe it wouldn't work unless we assumed the HoTT axiom? As it is, we might need
+UIP to hold if we want to use the definition given here... *)
+(*
+Program Definition OTType : OType :=
+  {|
+    ot_Type := OType;
+    ot_R := (fun A B =>
+               exists (e:ot_Type A = ot_Type B),
+                 forall (x y:A),
+                   ot_R A x y ->
+                   ot_R B (rew [fun A => A] e in x)
+                        (rew [fun A => A] e in y));
+  |}.
+*)
+
+
+(* The type of continuous, i.e. Proper, functions between ordered types *)
+Record Pfun (A:OType) (B: OType) :=
+  {
+    pfun_app : ot_Type A -> ot_Type B;
+    pfun_Proper :> Proper (ot_R A ==> ot_R B) pfun_app
+  }.
+
+Arguments pfun_app [_ _] _ _.
+Arguments pfun_Proper [_ _] _ _ _ _.
+
+(* Infix "@" := pfun_app (at level 50). *)
+
+(* The non-dependent function ordered type *)
+Program Definition OTarrow (A:OType) (B: OType) : OType :=
+  {|
+    ot_Type := Pfun A B;
+    ot_R := fun f g =>
+              forall a1 a2, ot_R A a1 a2 -> ot_R B (pfun_app f a1) (pfun_app g a2);
+  |}.
+Next Obligation.
+  constructor.
+  { intros f; apply (pfun_Proper f). }
+  { intros f g h Rfg Rgh a1 a2 Ra. transitivity (pfun_app g a1).
+    - apply (Rfg a1 a1). reflexivity.
+    - apply Rgh; assumption. }
+Qed.
+
+(* FIXME: could also do a forall type, but need the second type argument, B, to
+itself be proper, i.e., to be an element of OTArrow A OType. Would also need a
+dependent version of OTContext, below. *)
+
 
 (***
- *** Types-in-Context
+ *** Ordered Terms in Context
  ***)
 
+(* An ordered term in context is a pair of related proper functions *)
+Record OTermInCtx ctx A : Type :=
+  {
+    oterm_1 : Pfun ctx A;
+    oterm_2 : Pfun ctx A;
+    oterm_pf : ot_R (OTarrow ctx A) oterm_1 oterm_2
+  }.
+
+
+FIXME HERE NOW: Can the above be just a single Pfun, instead of a pair?
+
+
 (* An ordered type context is a list of ordered types *)
-Definition OTContext := list OrderedType.
+Definition OTContext := list OType.
 
 (* An element of an ordered type context is an element of each ordered type *)
 Fixpoint ctx_elem (ctx:OTContext) : Type :=
@@ -200,7 +212,7 @@ Lemma ctx_elem_lt_cons ctx A celem1 celem2 a1 a2
 Qed.
 
 (* The ordered type of context elements *)
-Program Definition OTCtxElem (ctx:OTContext) : OrderedType :=
+Program Definition OTCtxElem (ctx:OTContext) : OType :=
   {|
     ot_Type := ctx_elem ctx;
     ot_R := ctx_elem_lt ctx;
@@ -218,7 +230,7 @@ Next Obligation.
 Qed.
 
 (* The ordered type of objects-in-context *)
-Definition OTInCtx (ctx:OTContext) (A:OrderedType) : OrderedType :=
+Definition OTInCtx (ctx:OTContext) (A:OType) : OType :=
   OTArrow (OTCtxElem ctx) A.
 
 
@@ -404,10 +416,10 @@ Qed.
  ***)
 
 (* A "proper term" is an OTPairInCtx in the empty context *)
-Definition ProperTerm (A:OrderedType) := OTPairInCtx [] A.
+Definition ProperTerm (A:OType) := OTPairInCtx [] A.
 
-(* ProperTerm is "the" way to view an OrderedType as a Type *)
-Coercion ProperTerm : OrderedType >-> Sortclass.
+(* ProperTerm is "the" way to view an OType as a Type *)
+Coercion ProperTerm : OType >-> Sortclass.
 
 (* We can coerce a ProperTerm A to an element of ot_Type A by just taking the
 first projection of the pair in the ProperTerm *)
@@ -432,12 +444,12 @@ Definition ProperProp := ProperTerm OTProp.
 Definition get_prop : ProperProp -> Prop := get_proper_term.
 Coercion get_prop : ProperProp >-> Sortclass.
 
-(* Lifting the ordering of an OrderedType to an ordering on ProperTerms *)
+(* Lifting the ordering of an OType to an ordering on ProperTerms *)
 Definition OT_leq {A} : relation (ProperTerm A) :=
   fun x y => ot_R A (get_proper_term x) (get_proper_term y).
 
 (* Equivalence on ProperTerms *)
-Definition OT_equiv {A:OrderedType} : relation (ProperTerm A) :=
+Definition OT_equiv {A:OType} : relation (ProperTerm A) :=
   fun x y => OT_leq x y /\ OT_leq y x.
 
 
@@ -484,7 +496,7 @@ Next Obligation.
   repeat split; assumption.
 Qed.
 
-(* Helper to build a ProperProp for the leq relation of an OrderedType *)
+(* Helper to build a ProperProp for the leq relation of an OType *)
 Program Definition proper_leq {ctx} {A}
         (x: OTPairInCtx ctx (OTFlip A))
         (y: OTPairInCtx ctx A) : OTPairInCtx ctx OTProp :=
