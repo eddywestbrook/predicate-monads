@@ -1,4 +1,4 @@
-Require Export PredMonad.Monad.
+Require Export PredMonad.SemiPreOrder.Monad.
 
 
 (***

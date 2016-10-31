@@ -1,4 +1,4 @@
-Require Export PredMonad.Monad.
+Require Export PredMonad.SemiPreOrder.Monad.
 
 
 (***
@@ -529,6 +529,8 @@ Proof.
   { admit. }
 Admitted.
 
+
+(*
 FIXME HERE NOW
 
 Instance SetM_PredMonadOps : PredMonadOps Identity SetM :=
@@ -638,5 +640,6 @@ Proof.
       (* anti-symmetry of Equals *)
       admit. } }
 Admitted.
+ *)
 
 End IdentityPredMonad.
