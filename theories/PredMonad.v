@@ -5,66 +5,63 @@ Require Export PredMonad.Monad.
  *** The Predicate Monad Class
  ***)
 
-(* FIXME: the universe constraints on M and PM could be different...? *)
-Class PredMonadOps
-            (M: Type -> Type) (PM : Type -> Type) :=
-  { forallP: forall {A B: Type}, (A -> PM B) -> PM B;
-    existsP: forall {A B: Type}, (A -> PM B) -> PM B;
-    impliesP: forall {A: Type}, PM A -> PM A -> PM A;
-    liftP: forall {A: Type}, M A -> PM A;
-    entailsP: forall {A: Type} `{OrderOp A}, relation (PM A)
-  }.
+Section PredMonad.
+  Context {M : Type -> Type} {PM : Type -> Type} `{MonadOps PM}.
 
-Definition andP
-            {M: Type -> Type} {PM : Type -> Type}
-            `{PredMonadOps M PM} {A:Type} (P1 P2: PM A) : PM A :=
-  forallP (fun b:bool => if b then P1 else P2).
+  (* FIXME: the universe constraints on M and PM could be different...? *)
+  Class PredMonadOps `{MonadOps M} `{MonadOps PM} :=
+    { forallP: forall {A B: Type}, (A -> PM B) -> PM B;
+      existsP: forall {A B: Type}, (A -> PM B) -> PM B;
+      impliesP: forall {A: Type}, PM A -> PM A -> PM A;
+      liftP: forall {A: Type}, M A -> PM A
+    }.
 
-Class PredMonad
-            (M: Type -> Type) (PM : Type -> Type)
-            `{PredMonadOps M PM} `{MonadOps M} `{MonadOps PM} : Prop :=
+  Context `{PredMonadOps}.
+
+  Definition andP {A:Type} (P1 P2: PM A) : PM A :=
+    forallP (fun b:bool => elimBool b P1 P2).
+
+  Class PredMonad : Prop :=
   {
     (* Both M and PM must be monads *)
     predmonad_monad_M :> Monad M;
     predmonad_monad_PM :> Monad PM;
 
-    (* Entailment should be a preorder whose symmetric closure is the
-    distinguished equality on PM *)
-    (* NOTE(gmalecha): Neither of these are provable! *)
-    predmonad_entailsP_preorder
-      (A:Type) `{Order A} :> PreOrder (entailsP (A:=A));
-    predmonad_entailsP_equalsM {A:Type} `{Order A} (P1 P2: PM A) :
-      P1 == P2 <-> (entailsP P1 P2 /\ entailsP P2 P1);
-
     (* forallP is a complete meet operator. The laws for it being a lower bound
     and the greatest lower bound actually correspond to forall-elimination and
     forall-introduction rules, respectively. *)
     predmonad_forallP_elim :
-      forall {A B:Type} `{Order B} (f: A -> PM B) a,
-        entailsP (forallP f) (f a);
+      forall {A B} `{LR A} `{LR B} (f: A -> PM B) a,
+        Proper lr_leq f -> Proper lr_leq a ->
+        forallP f <~ f a;
     predmonad_forallP_intro :
-      forall {A B:Type} `{Order B} (f: A -> PM B) P,
-        (forall a, entailsP P (f a)) -> entailsP P (forallP f);
+      forall {A B} `{LR A} `{LR B} (f: A -> PM B) P,
+        Proper lr_leq f -> Proper lr_leq P ->
+        (forall a, P <~ f a) -> P <~ forallP f;
 
     (* existsP is a complete join operator. The laws for it being an upper bound
     and the least upper bound actually correspond to exists-introduction and
     exists-elimination rules, respectively. *)
     predmonad_existsP_intro :
-      forall {A B:Type} `{Order B} (f: A -> PM B) a,
-        entailsP (f a) (existsP f);
+      forall {A B} `{LR A} `{LR B} (f: A -> PM B) a,
+        Proper lr_leq f -> Proper lr_leq a ->
+        f a <~ existsP f;
     predmonad_existsP_elim :
-      forall {A B:Type} `{Order B} (f: A -> PM B) P,
-        (forall a, entailsP (f a) P) -> entailsP (existsP f) P;
+      forall {A B} `{LR A} `{LR B} (f: A -> PM B) P,
+        Proper lr_leq f -> Proper lr_leq P ->
+        (forall a, f a <~ P) -> existsP f <~ P;
 
     (* impliesP is a right adjoint to andP, the laws for which correspond to
     implication introduction and generalization of implication elimination
     (where taking P1 = (impliesP P2 P3) yields the standard elimination rule) *)
     predmonad_impliesP_intro :
-      forall {A:Type} `{Order A} (P1 P2 P3: PM A),
-        entailsP (andP P1 P2) P3 -> entailsP P1 (impliesP P2 P3);
+      forall {A} `{LR A} (P1 P2 P3: PM A),
+        Proper lr_leq P1 -> Proper lr_leq P2 -> Proper lr_leq P3 ->
+        andP P1 P2 <~ P3 -> P1 <~ impliesP P2 P3;
     predmonad_impliesP_elim :
-      forall {A:Type} `{Order A} (P1 P2 P3: PM A),
-        entailsP P1 (impliesP P2 P3) -> entailsP (andP P1 P2) P3;
+      forall {A} `{LR A} (P1 P2 P3: PM A),
+        Proper lr_leq P1 -> Proper lr_leq P2 -> Proper lr_leq P3 ->
+        P1 <~ impliesP P2 P3 -> andP P1 P2 <~ P3;
 
     (* Introduction and elimination rules for assertP *)
 (*
@@ -79,24 +76,29 @@ Class PredMonad
 
     (* laws about liftP *)
     predmonad_liftP_return :
-      forall {A:Type} `{Order A} (x:A),
-        liftP (returnM x) == returnM x;
+      forall {A} `{LR A} (a:A),
+        Proper lr_leq a ->
+        liftP (returnM a) ~~ returnM a;
     predmonad_liftP_bind :
-      forall {A B:Type} `{Order A} `{Order B} m (f:A -> M B),
-        liftP (bindM m f) == bindM (liftP m) (fun x => liftP (f x));
+      forall {A B} `{LR A} `{LR B} m (f:A -> M B),
+        Proper lr_leq m -> Proper lr_leq f ->
+        liftP (bindM m f) ~~ bindM (liftP m) (fun x => liftP (f x));
 
     (* FIXME: need laws about how the combinators interact *)
 
     (* Laws about the operators being proper *)
-    predmonad_forallP_proper {A B:Type} `{Order B} :
-      Proper ((@eq A ==> entailsP) ==> entailsP) forallP;
-    predmonad_existsP_proper {A B:Type} `{Order B} :
-      Proper ((@eq A ==> entailsP) ==> entailsP) existsP;
-    predmonad_impliesP_proper {A:Type} `{Order A} :
-      Proper (Basics.flip entailsP ==> entailsP ==> entailsP) impliesP;
-    predmonad_liftP_proper {A:Type} `{Equals A} :
-      Proper (equalsM ==> equalsM) liftP;
+    predmonad_forallP_proper {A B} `{LR A} `{LR B} :
+      Proper lr_leq (forallP : (A -> PM B) -> PM B);
+    predmonad_existsP_proper {A B} `{LR A} `{LR B} :
+      Proper lr_leq (existsP : (A -> PM B) -> PM B);
+    predmonad_impliesP_proper {A} `{LR A} :
+      Proper lr_leq (impliesP : PM A -> PM A -> PM A);
   }.
+
+End PredMonad.
+
+Arguments PredMonadOps M PM {_} {_} : clear implicits.
+Arguments PredMonad M PM {_} {_} {_} : clear implicits.
 
 
 (***
@@ -104,15 +106,15 @@ Class PredMonad
  ***)
 
 (* We define m |= P as holding iff (liftP m) entails P *)
-Definition satisfiesP `{PredMonad} `{Order} (m:M A) (P:PM A) :=
-  entailsP (liftP m) P.
+Definition satisfiesP `{PredMonadOps} `{LR_Op} (m:M A) (P:PM A) :=
+  liftP m <~ P.
 
 (* Notation for satisfaction *)
 Infix "|=" := satisfiesP (at level 80).
 
 (* Disjunction is definable in terms of the existential *)
 Definition orP `{PredMonadOps} {A} (P1 P2: PM A) : PM A :=
-  existsP (fun b:bool => if b then P1 else P2).
+  existsP (fun b:bool => elimBool b P1 P2).
 
 (* True and false, which correspond to top and bottom, respectively *)
 Definition trueP `{PredMonadOps} {A} : PM A :=
@@ -137,66 +139,71 @@ Section PredMonad_thms.
 
 Context `{PredMonad}.
 
-(** entailsP is proper w.r.t. equalsM **)
-Global Instance predmonad_entailsP_proper_iff `{Order} :
-  Proper (equals ==> equals ==> iff) (entailsP (A:=A)).
-intros P1 P1' e1 P2 P2' e2.
-destruct (predmonad_entailsP_equalsM P1 P1'). destruct (H4 e1).
-destruct (predmonad_entailsP_equalsM P2 P2'). destruct (H8 e2).
-split.
-transitivity P1; [ assumption | transitivity P2; assumption ].
-transitivity P1'; [ assumption | transitivity P2'; assumption ].
-Qed.
-
 (** True is the top element **)
-Lemma predmonad_trueP_intro `{Order} (P: PM A) :
-  entailsP P trueP.
-apply (predmonad_existsP_intro (fun pm => pm) P).
+Lemma predmonad_trueP_intro `{LR} (P: PM A) : Proper lr_leq P -> P <~ trueP.
+  intro; apply (predmonad_existsP_intro (fun pm => pm) P);
+    prove_lr_proper.
 Qed.
 
 (** False is the bottom element **)
-Lemma predmonad_falseP_elim `{Order} (P: PM A) :
-  entailsP falseP P.
-apply (predmonad_forallP_elim (fun pm => pm) P).
+Lemma predmonad_falseP_elim `{LR} (P: PM A) : Proper lr_leq P -> falseP <~ P.
+  intro; apply (predmonad_forallP_elim (fun pm => pm) P); prove_lr_proper.
 Qed.
 
 (** Conjunction satisfies the usual rules **)
-Lemma predmonad_andP_intro `{Order} (P1 P2 P: PM A) :
-  entailsP P P1 -> entailsP P P2 -> entailsP P (andP P1 P2).
-intros.
-apply predmonad_forallP_intro; intro x; destruct x; assumption.
+Lemma predmonad_andP_intro `{LR} (P1 P2 P: PM A) :
+  Proper lr_leq P1 -> Proper lr_leq P2 -> Proper lr_leq P ->
+  P <~ P1 -> P <~ P2 -> P <~ andP P1 P2.
+  intros; apply predmonad_forallP_intro; try prove_lr_proper.
+  (* FIXME HERE: why is this not applied by the prove_lr tactic? *)
+  apply Proper_elimBool.
+  intro b; destruct b; prove_lr.
 Qed.
 
-Lemma predmonad_andP_elim1 `{Order} (P1 P2: PM A) :
-  entailsP (andP P1 P2) P1.
-apply (predmonad_forallP_elim (fun b : bool => if b then P1 else P2) true).
+Lemma predmonad_andP_elim1 `{LR} (P1 P2: PM A) :
+  Proper lr_leq P1 -> Proper lr_leq P2 -> andP P1 P2 <~ P1.
+  intros; apply (predmonad_forallP_elim (fun b => elimBool b P1 P2) true);
+    prove_lr_proper.
+  apply Proper_elimBool.
 Qed.
 
-Lemma predmonad_andP_elim2 `{Order} (P1 P2: PM A) :
-  entailsP (andP P1 P2) P2.
-apply (predmonad_forallP_elim (fun b : bool => if b then P1 else P2) false).
+Lemma predmonad_andP_elim2 `{LR} (P1 P2: PM A) :
+  Proper lr_leq P1 -> Proper lr_leq P2 -> andP P1 P2 <~ P2.
+  intros; apply (predmonad_forallP_elim (fun b => elimBool b P1 P2) false);
+    prove_lr_proper.
+  apply Proper_elimBool.
 Qed.
 
 (** Disjunction satisfies the usual rules **)
-Lemma predmonad_orP_intro1 `{Order} (P1 P2: PM A) :
-  entailsP P1 (orP P1 P2).
-apply (predmonad_existsP_intro (fun b : bool => if b then P1 else P2) true).
+Lemma predmonad_orP_intro1 `{LR} (P1 P2: PM A) :
+  Proper lr_leq P1 -> Proper lr_leq P2 -> P1 <~ orP P1 P2.
+  intros; apply (predmonad_existsP_intro (fun b => elimBool b P1 P2) true);
+    prove_lr_proper.
+  apply Proper_elimBool.
 Qed.
 
-Lemma predmonad_orP_intro2 `{Order} (P1 P2: PM A) :
-  entailsP P2 (orP P1 P2).
-apply (predmonad_existsP_intro (fun b : bool => if b then P1 else P2) false).
+Lemma predmonad_orP_intro2 `{LR} (P1 P2: PM A) :
+  Proper lr_leq P1 -> Proper lr_leq P2 -> P2 <~ orP P1 P2.
+  intros; apply (predmonad_existsP_intro (fun b => elimBool b P1 P2) false);
+    prove_lr_proper.
+  apply Proper_elimBool.
 Qed.
 
-Lemma predmonad_orP_elim `{Order} (P1 P2 P: PM A) :
-  entailsP P1 P -> entailsP P2 P -> entailsP (orP P1 P2) P.
-intros.
-apply predmonad_existsP_elim; intro x; destruct x; assumption.
+Lemma predmonad_orP_elim `{LR} (P1 P2 P: PM A) :
+  Proper lr_leq P1 -> Proper lr_leq P2 -> Proper lr_leq P ->
+  P1 <~ P -> P2 <~ P -> orP P1 P2 <~ P.
+  intros; apply predmonad_existsP_elim;
+    prove_lr_proper; [ apply Proper_elimBool | ].
+  intro x; destruct x; assumption.
 Qed.
 
+
+(*
+
+FIXME HERE NOW: prove all these!
 
 (** Nested foralls combine **)
-Lemma predmonad_forallP_forallP {A B C} `{Order C}
+Lemma predmonad_forallP_forallP {A B C} `{LR C}
             (Q : A -> B -> PM C) :
   forallP (fun x => forallP (fun y => Q x y)) ==
   forallP (fun xy => Q (fst xy) (snd xy)).
@@ -212,7 +219,7 @@ apply (predmonad_forallP_elim (fun xy => _) (x,y)).
 Qed.
 
 (** Nested exists combine **)
-Lemma predmonad_existsP_existsP {A B C} `{Order C}
+Lemma predmonad_existsP_existsP {A B C} `{LR C}
             (Q : A -> B -> PM C) :
   existsP (fun x => existsP (fun y => Q x y)) ==
   existsP (fun xy => Q (fst xy) (snd xy)).
@@ -229,14 +236,14 @@ Qed.
 
 
 (** Commutativity and Associativity of andP and orP **)
-Lemma predmonad_andP_commutative `{Order}
+Lemma predmonad_andP_commutative `{LR}
             (P1 P2: PM A) : andP P1 P2 == andP P2 P1.
 apply predmonad_entailsP_equalsM; split;
 repeat (first [ apply predmonad_andP_intro | apply predmonad_andP_elim1
                 | apply predmonad_andP_elim2 ]).
 Qed.
 
-Lemma predmonad_andP_associative `{Order}
+Lemma predmonad_andP_associative `{LR}
             (P1 P2 P3: PM A) : andP P1 (andP P2 P3) == andP (andP P1 P2) P3.
 apply predmonad_entailsP_equalsM; split;
 repeat (apply predmonad_andP_intro);
@@ -247,14 +254,14 @@ first [ apply predmonad_andP_elim1 | apply predmonad_andP_elim2
         first [ apply predmonad_andP_elim1 | apply predmonad_andP_elim2 ]].
 Qed.
 
-Lemma predmonad_orP_commutative `{Order}
+Lemma predmonad_orP_commutative `{LR}
             (P1 P2: PM A) : orP P1 P2 == orP P2 P1.
 apply predmonad_entailsP_equalsM; split;
 repeat (first [ apply predmonad_orP_elim | apply predmonad_orP_intro1
                 | apply predmonad_orP_intro2 ]).
 Qed.
 
-Lemma predmonad_orP_associative `{Order}
+Lemma predmonad_orP_associative `{LR}
             (P1 P2 P3: PM A) : orP P1 (orP P2 P3) == orP (orP P1 P2) P3.
 apply predmonad_entailsP_equalsM; split;
 repeat (apply predmonad_orP_elim);
@@ -267,7 +274,7 @@ Qed.
 
 
 (** Theorems that the combinators mostly mean what we expect for satisfiesP **)
-Theorem forallP_forall {A B} `{Order B} m (Q: A -> PM B) :
+Theorem forallP_forall {A B} `{LR B} m (Q: A -> PM B) :
   m |= forallP Q <-> forall x, m |= Q x.
 unfold satisfiesP; split; intros.
 transitivity (forallP Q); [ assumption | ].
@@ -275,7 +282,7 @@ apply predmonad_forallP_elim.
 apply predmonad_forallP_intro; assumption.
 Qed.
 
-Theorem andP_and `{Order} m (P1 P2: PM A) :
+Theorem andP_and `{LR} m (P1 P2: PM A) :
   m |= andP P1 P2 <-> m |= P1 /\ m |= P2.
 unfold andP.
 transitivity (forall b:bool, m |= if b then P1 else P2).
@@ -288,7 +295,7 @@ Qed.
 
 (* NOTE: the converse does not hold; e.g., a stateful computation that satisfies
 existsP Q might satisfy Q x for different x depending on the input state *)
-Theorem existsP_exists {A B} `{Order B} m (Q: A -> PM B) x :
+Theorem existsP_exists {A B} `{LR B} m (Q: A -> PM B) x :
   m |= Q x -> m |= existsP Q.
   unfold satisfiesP.
   intro.
@@ -297,7 +304,7 @@ Qed.
 
 (* NOTE: the converse does not hold; e.g., a stateful computation that satisfies
 orP P1 P2 might satisfy P1 for some inputs and P2 for others *)
-Theorem orP_or `{Order} m (P1 P2: PM A) :
+Theorem orP_or `{LR} m (P1 P2: PM A) :
   m |= P1 \/ m |= P2 -> m |= orP P1 P2.
   unfold satisfiesP.
   intros; destruct H4.
@@ -308,7 +315,7 @@ Qed.
 (** Distributivity lemmas **)
 
 (* andP distributes over existsP *)
-Lemma predmonad_andP_existsP {A B} `{Order B}
+Lemma predmonad_andP_existsP {A B} `{LR B}
             (P: PM B) (Q: A -> PM B) :
   andP P (existsP Q) == existsP (fun x => andP P (Q x)).
 apply predmonad_entailsP_equalsM; split.
@@ -327,7 +334,7 @@ apply (predmonad_existsP_intro).
 Qed.
 
 (* Implication commutes with forall *)
-Theorem predmonad_forallP_impliesP {A B} `{Order B}
+Theorem predmonad_forallP_impliesP {A B} `{LR B}
       P (Q: A -> PM B) :
   impliesP P (forallP Q) == forallP (fun x => impliesP P (Q x)).
   rewrite predmonad_entailsP_equalsM; split.
@@ -345,7 +352,7 @@ Qed.
 
 (* impliesP reverse-distributes over orP (the implication only goes one way) *)
 Theorem predmonad_existsP_impliesP
-            `{Order} P (Q1 Q2: PM A) :
+            `{LR} P (Q1 Q2: PM A) :
   entailsP (orP (impliesP P Q1) (impliesP P Q2)) (impliesP P (orP Q1 Q2)).
 apply predmonad_orP_elim.
 apply predmonad_impliesP_proper.
@@ -366,6 +373,8 @@ Lemma predmonad_commute_existsP_impliesP {A B} P (Q: A -> PM B) :
   destruct (H0 H1).
 *)
 
+ *)
+
 (* FIXME HERE: can we prove that bind commutes with forall? *)
 
 End PredMonad_thms.
@@ -377,82 +386,150 @@ End PredMonad_thms.
 
 Section IdentityPredMonad.
 
-Definition SetM (X:Type) : Type := X -> Prop.
+(* The type of sets over a carrier type X *)
+Inductive SetM (X:Type) : Type := setM_compr (F:X -> Prop).
+Arguments setM_compr {X} _.
+
+(* Element of a SetM = elimination of SetM *)
+Definition setM_elem {X} (m:SetM X) : X -> Prop :=
+  let (F) := m in F.
+
+(* The subset relation *)
+Definition setM_subset {X} : relation (SetM X) :=
+  fun m1 m2 => forall x, setM_elem m1 x -> setM_elem m2 x.
+
+(* The union of two SetMs *)
+Definition setM_union {A} (m1 m2 : SetM A) : SetM A :=
+  setM_compr (fun x => setM_elem m1 x \/ setM_elem m2 x).
+
+(* The intersection of two SetMs *)
+Definition setM_intersect {A} (m1 m2 : SetM A) : SetM A :=
+  setM_compr (fun x => setM_elem m1 x /\ setM_elem m2 x).
+
+(* Build a SetM from an existential, i.e., the set of all z such that there
+exists a y such that z is in (f y) *)
+Definition setM_exists {A B} (f:A -> SetM B) : SetM B :=
+  setM_compr (fun z => exists y, setM_elem (f y) z).
+
+(* Build a SetM from an universal, i.e., the set of all z such that, for all y,
+z is in (f y) *)
+Definition setM_forall {A B} (f:A -> SetM B) : SetM B :=
+  setM_compr (fun z => forall y, setM_elem (f y) z).
+
+(* The set that is complete or empty depending on whether P holds *)
+Definition setM_assert A (P:Prop) : SetM A :=
+  setM_compr (fun z => P).
+
+(* The downward closure of a set, i.e., the set of all objects x <~ z for some z
+in the set *)
+Definition downward_closure `{LR_Op} (m:SetM A) : SetM A :=
+  setM_compr (fun x => exists2 z, x <~ z & setM_elem m z).
+
+(* Elements of the downward closure are Proper *)
+Lemma downward_closure_Proper `{LR} m x :
+  setM_elem (downward_closure m) x -> Proper lr_leq x.
+  intro x_elem; destruct x_elem; assumption_semi_refl.
+Qed.
+
+(* Valid elements of a set are in the downward closure *)
+Lemma elem_downward_closure `{LR} m x :
+  Proper lr_leq x -> setM_elem m x -> setM_elem (downward_closure m) x.
+  intros Px x_elem; exists x; assumption.
+Qed.
+
+(* The LR for SetM says that the greater set, m2, has to "cover" all elements of
+m1 with greater elements, and that m2 only contains "valid" elements (the fact
+that m1 only contains valid elements follows from the first property) *)
+Record LRSetM `{LR_Op} (m1 m2: SetM A) : Prop :=
+  { LRSetM_subset : setM_subset m1 (downward_closure m2);
+    LRSetM_Proper : forall x, setM_elem m2 x -> Proper lr_leq x }.
+
+Instance LR_Op_SetM `{LR_Op} : LR_Op (SetM A) := LRSetM.
+
+(* If a SetM is Proper then all its elements are Proper *)
+Lemma setM_elem_Proper `{LR} m x :
+  Proper lr_leq m -> setM_elem m x -> Proper lr_leq x.
+  intros Pm x_elem; apply (LRSetM_Proper m m); assumption.
+Qed.
+
+(* If a SetM is <~ any other set then all its elements are Proper *)
+Lemma setM_elem_Proper_l `{LR} m1 m2 x :
+  m1 <~ m2 -> setM_elem m1 x -> Proper lr_leq x.
+  intros Rm x_elem; destruct (LRSetM_subset _ _ Rm _ x_elem); assumption_semi_refl.
+Qed.
+
+(* If a SetM is ~> any other set then all its elements are Proper *)
+Lemma setM_elem_Proper_r `{LR} m1 m2 x :
+  m1 <~ m2 -> setM_elem m2 x -> Proper lr_leq x.
+  intros Pm x_elem; apply (LRSetM_Proper m1 m2); assumption.
+Qed.
+
+
+(* The logical relation for SetM is a valid logical relation *)
+Instance LR_SetM `{LR} : LR (SetM A).
+Proof.
+  constructor; constructor; unfold lr_leq, LR_Op_SetM.
+  - constructor; intros m1 m2 Rm; constructor; intros x elem;
+      try apply elem_downward_closure; try assumption;
+        try (apply (setM_elem_Proper_l m1 m2); assumption);
+        apply (setM_elem_Proper_r m1 m2); assumption.
+  - intros m1 m2 m3 R12 R23; constructor; intros x x_elem.
+    + destruct (LRSetM_subset _ _ R12 _ x_elem) as [ y Rxy y_elem ].
+      destruct (LRSetM_subset _ _ R23 _ y_elem) as [ z Ryz z_elem ].
+      exists z; [ transitivity y | ]; assumption.
+    + apply (setM_elem_Proper_r m2 m3); assumption.
+Qed.
 
 Instance SetM_MonadOps : MonadOps SetM :=
-  { returnM := fun A x z => x = z;
-    bindM := fun A B m f z => exists z', m z' /\ f z' z;
-    equalsM := fun A e m1 m2 =>
-                 forall z1,
-                   (m1 z1 -> exists z2, e z1 z2 /\ m2 z2) /\
-                   (m2 z1 -> exists z2, e z1 z2 /\ m1 z2) }.
+  { returnM := fun {A} x => setM_compr (fun z => x = z);
+    bindM := fun {A B} m f =>
+               setM_compr (fun z => exists2 y, setM_elem m y & setM_elem (f y) z);
+    lrM := fun _ _ => LR_Op_SetM }.
 
 Instance SetM_Monad : Monad SetM.
 Proof.
-  constructor; unfold returnM, bindM, equalsM, SetM_MonadOps; intros.
-  { split; intros.
-    destruct H1; destruct H1.
-    exists z1; split.
-    apply Equivalence_Reflexive.
-    rewrite H1; assumption.
-    exists z1; split.
-    apply Equivalence_Reflexive.
-    exists x; split; [ reflexivity | assumption ]. }
-  { split; intros.
-    destruct H0; destruct H0.
-    exists x; split.
-    rewrite H1; apply Equivalence_Reflexive.
-    assumption.
-    exists z1; split.
-    apply Equivalence_Reflexive.
-    exists z1; split; [ assumption | reflexivity ]. }
-  { split; intros.
-    repeat (destruct H2).
-    exists z1; split.
-    apply Equivalence_Reflexive.
-    exists x0; split; [ assumption | ].
-    exists x; split; assumption.
-    repeat (destruct H2); repeat (destruct H3).
-    exists z1; split; [ apply Equivalence_Reflexive | ].
-    exists x0; split; [ | assumption ].
-    exists x; split; assumption. }
-  { repeat constructor; intros.
-    exists z1; split; [ apply Equivalence_Reflexive | assumption ].
-    exists z1; split; [ apply Equivalence_Reflexive | assumption ].
-    destruct (H0 z1). destruct (H3 H1); destruct H4.
-    exists x0; split; assumption.
-    destruct (H0 z1). destruct (H2 H1); destruct H4.
-    exists x0; split; assumption.
-    destruct (H0 z1). destruct (H3 H2). destruct H5.
-    destruct (H1 x0). destruct (H7 H6). destruct H9.
-    exists x1; split.
-    apply (Equivalence_Transitive _ x0); assumption.
-    assumption.
-    destruct (H1 z1). destruct (H4 H2). destruct H5.
-    destruct (H0 x0). destruct (H8 H6). destruct H9.
-    exists x1; split.
-    apply (Equivalence_Transitive _ x0); assumption.
-    assumption. }
-  { intros x y e_xy z1; split; intros.
-    exists y. rewrite <- H0. split; [ assumption | reflexivity ].
-    exists x. rewrite <- H0.
-    split; [ apply Equivalence_Symmetric; assumption | reflexivity ]. }
-  { intros m1 m2 e_m f1 f2 e_f z1.
-    split; intros; repeat (destruct H1).
-    destruct (e_m x). destruct (H3 H1). destruct H5.
-    destruct (e_f x x0 H5 z1). destruct (H7 H2). destruct H9.
-    exists x1; split; [ assumption | exists x0; split; assumption ].
-    destruct (e_m x). destruct (H4 H1). destruct H5.
-    assert (x0 == x); [ apply Equivalence_Symmetric; assumption | ].
-    destruct (e_f x0 x H7 z1). destruct (H9 H2). destruct H10.
-    exists x1; split; [ assumption | exists x0; split; assumption ]. }
-  { red. red. unfold subrelation; intros.
-    destruct (H0 z1); clear H0.
-    split.
-    + intros. destruct H1; eauto. exists x1. destruct H1; split; eauto.
-    + intros; destruct H2; eauto. exists x1. destruct H2; split; eauto. }
-Qed.
+  constructor; unfold returnM, bindM, lrM, SetM_MonadOps; intros.
+  { auto with typeclass_instances. }
+  { apply fun_Proper_lr_leq. intros x y Rxy.
+    constructor; intros z elem_z; rewrite <- elem_z.
+    - exists y; [ assumption | reflexivity ].
+    - assumption_semi_refl. }
+  { apply fun_Proper_lr_leq; intros m1 m2 Rm.
+    constructor; intros f g Rfg; constructor; intros y y_elem; destruct y_elem.
+    - edestruct (LRSetM_subset (f x) (g x)) as [ z Ryz z_elem ]; try eassumption.
+      apply apply_lr_leq; try assumption.
+      apply (setM_elem_Proper_l _ _ _ Rm); assumption.
+      exists z; try assumption.
+      exists x; assumption.
+    - apply (setM_elem_Proper_r (f x) (g x)); [ | assumption ].
+      apply apply_lr_leq; [ assumption
+                          | apply (setM_elem_Proper_l m1 m2); assumption ].
+    - edestruct (LRSetM_subset (f x) (g x)) as [ z Ryz z_elem ]; try eassumption.
+      apply apply_lr_leq; try assumption.
+      apply (setM_elem_Proper_r _ _ _ Rm); assumption.
+      exists z; try assumption.
+      exists x; assumption.
+    - apply (setM_elem_Proper_r (f x) (g x)); [ | assumption ].
+      apply apply_lr_leq; [ assumption
+                          | apply (setM_elem_Proper_r m1 m2); assumption ].
+    - destruct (LRSetM_subset _ _ Rm _ H1) as [ x' Rx x'_elem ].
+      edestruct (LRSetM_subset (f x) (g x')) as [ z Ryz z_elem ]; try eassumption.
+      apply apply_lr_leq; try assumption.
+      exists z; try assumption.
+      exists x'; assumption.
+    - apply (setM_elem_Proper_r (f x) (g x)); [ | assumption ].
+      apply apply_lr_leq; [ assumption
+                          | apply (setM_elem_Proper_r m1 m2); assumption ]. }
+  { intros R1 R2 subR m1 m2 Rm1; constructor; intros x x_elem.
+    - destruct (LRSetM_subset _ _ Rm1 x x_elem) as [ y Rxy y_elem ].
+      exists y; [ apply subR; assumption | apply y_elem ].
+    - apply subR. apply (LRSetM_Proper _ _ Rm1 _ x_elem). }
+  { admit. }
+  { admit. }
+  { admit. }
+Admitted.
 
+FIXME HERE NOW
 
 Instance SetM_PredMonadOps : PredMonadOps Identity SetM :=
   {
