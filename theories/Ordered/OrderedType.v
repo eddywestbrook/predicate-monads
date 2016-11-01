@@ -75,7 +75,7 @@ Next Obligation.
 Qed.
 
 (* The non-dependent product ordered type, where pairs are related pointwise *)
-Program Definition OTprod (A:OType) (B: OType) : OType :=
+Program Definition OTpair (A:OType) (B: OType) : OType :=
   {|
     ot_Type := ot_Type A * ot_Type B;
     ot_R := fun p1 p2 =>
@@ -165,19 +165,54 @@ dependent version of OTContext, below. *)
 
 
 (***
+ *** Ordered Types as Contexts of Nested Pairs
+ ***)
+
+(* FIXME HERE: documentation! *)
+
+Inductive ContextExtends : OType -> OType -> Type :=
+| ContextExtends_refl ctx : ContextExtends ctx ctx
+| ContextExtends_cons_both {ctx1 ctx2} A :
+    ContextExtends ctx1 ctx2 ->
+    ContextExtends (OTpair ctx1 A) (OTpair ctx2 A)
+| ContextExtends_cons_right {ctx1 ctx2} A :
+    ContextExtends ctx1 ctx2 -> ContextExtends ctx1 (OTpair ctx2 A)
+.
+
+(* Context extension as a type class *)
+Class OTCtxExtends ctx1 ctx2 : Type :=
+  context_extends : ContextExtends ctx1 ctx2.
+
+Arguments context_extends {_ _ _}.
+
+(* The rules for context extension, as type class instances *)
+Instance OTCtxExtends_refl ctx : OTCtxExtends ctx ctx :=
+  ContextExtends_refl _.
+
+Instance OTCtxExtends_cons_both ctx1 ctx2
+         {ext:OTCtxExtends ctx1 ctx2} {B}
+  : OTCtxExtends (OTpair ctx1 B) (OTpair ctx2 B) :=
+  ContextExtends_cons_both _ context_extends.
+
+Instance OTCtxExtends_cons_right ctx1 ctx2
+         {ext:OTCtxExtends ctx1 ctx2} {B} : OTCtxExtends ctx1 (OTpair ctx2 B) :=
+  ContextExtends_cons_right _ context_extends.
+
+
+(***
  *** Ordered Terms in Context
  ***)
 
-(* An ordered term in context is a pair of related proper functions *)
-Record OTermInCtx ctx A : Type :=
-  {
-    oterm_1 : Pfun ctx A;
-    oterm_2 : Pfun ctx A;
-    oterm_pf : ot_R (OTarrow ctx A) oterm_1 oterm_2
-  }.
+(* An ordered term in context is just a proper function *)
+Inductive OTermInCtx ctx A : Type :=
+  | mkOTermInCtx (pfun: Pfun ctx A).
+
+Definition elimOTermInCtx {ctx A} (oterm: OTermInCtx ctx A) : Pfun ctx A :=
+  let (pfun) := oterm in pfun.
 
 
-FIXME HERE NOW: Can the above be just a single Pfun, instead of a pair?
+FIXME HERE NOW: apply a OTCtxtExtends proof to a variable, and then do
+proper_fun!
 
 
 (* An ordered type context is a list of ordered types *)
