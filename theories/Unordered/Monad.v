@@ -1,6 +1,6 @@
 Require Import Coq.Setoids.Setoid.
 Require Export Coq.Classes.Morphisms.
-Require Export PredMonad.SemiPreOrder.SemiPreOrder.
+Require Export PredMonad.Unordered.SemiPreOrder.
 
 
 (***

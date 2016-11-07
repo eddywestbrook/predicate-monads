@@ -1,4 +1,4 @@
-Require Import PredMonad.SemiPreOrder.PredMonad.
+Require Import PredMonad.Unordered.PredMonad.
 
 (*
 Class PredMonadState S M PM
