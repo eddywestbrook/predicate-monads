@@ -281,7 +281,7 @@ Definition elimOTermInCtx {ctx A} (oterm: OTermInCtx ctx A) : Pfun ctx A :=
   let (pfun) := oterm in pfun.
 
 (* Weakening the context of an OTermInCtx *)
-Program Definition weaken_context {ctx1 ctx2} {ext: OTCtxExtends ctx1 ctx2}
+Program Definition ot_weaken {ctx1 ctx2} {ext: OTCtxExtends ctx1 ctx2}
            {A} (p: OTermInCtx ctx1 A) : OTermInCtx ctx2 A :=
   match p with
   | mkOTermInCtx pfun =>
@@ -295,7 +295,7 @@ Next Obligation.
 Qed.
 
 (* Helper to build a "variable" for the top of the context as an OTermInCtx *)
-Program Definition top_var_in_context ctx A : OTermInCtx (OTpair ctx A) A :=
+Program Definition ot_top_var ctx A : OTermInCtx (OTpair ctx A) A :=
   mkOTermInCtx {| pfun_app := fun celem => snd celem;
                   pfun_Proper := _ |}.
 Next Obligation.
@@ -304,59 +304,105 @@ Qed.
 
 
 (* Build an OTerm for a function *)
-Definition pfun_lambda {ctx} {A} {B} (f: OTermInCtx (OTpair ctx A) A ->
+(*
+Definition ot_lambda {ctx} {A} {B} (f: OTermInCtx (OTpair ctx A) A ->
                                          OTermInCtx (OTpair ctx A) B)
   : OTermInCtx ctx (OTarrow A B) :=
-  mkOTermInCtx (pfun_curry (elimOTermInCtx (f (top_var_in_context ctx A)))).
+  mkOTermInCtx (pfun_curry (elimOTermInCtx (f (ot_top_var ctx A)))).
+ *)
 
-(* Build an OTerm for a function, with weaken_context already pre-applied *)
-Definition pfun_lambda' {ctx} {A} {B}
-        (f: (forall {ctx'} `{ext: OTCtxExtends (OTpair ctx A) ctx'},
+(* Build an OTerm for a function, with ot_weaken already pre-applied *)
+Definition ot_lambda {ctx} {A} {B}
+        (f: (forall {ctx'} {ext: OTCtxExtends (OTpair ctx A) ctx'},
                 OTermInCtx ctx' A) -> OTermInCtx (OTpair ctx A) B) :
   OTermInCtx ctx (OTarrow A B) :=
   mkOTermInCtx
     (pfun_curry
-       (elimOTermInCtx (f (fun {ctx' ext} =>
-                             weaken_context (top_var_in_context ctx A))))).
+       (elimOTermInCtx (f (fun {ctx' ext} => ot_weaken (ot_top_var ctx A))))).
+
+(* Lifting pre-orders to ordered terms *)
+Definition ot_leq {ctx A} (x y : OTermInCtx ctx A) : Prop :=
+  forall celem,
+    ot_R _ (pfun_app (elimOTermInCtx x) celem)
+         (pfun_app (elimOTermInCtx y) celem).
+
+Instance ot_leq_PreOrder {ctx A} : PreOrder (@ot_leq ctx A).
+Proof.
+  constructor; intro; intros; intro; intros.
+  reflexivity.
+  transitivity ((pfun_app (elimOTermInCtx y) celem)); [ apply H | apply H0 ].
+Qed.
+
+(* The equivalence relation for an OrderedType *)
+Definition ot_equiv {ctx A} (x y : OTermInCtx ctx A) : Prop :=
+  ot_leq x y /\ ot_leq y x.
+
+Instance ot_equiv_Equivalence {ctx A} : Equivalence (@ot_equiv ctx A).
+Proof.
+  constructor; intro; intros.
+  { split; reflexivity. }
+  { destruct H; split; assumption. }
+  { destruct H; destruct H0; split; transitivity y; assumption. }
+Qed.
+
+(* By default, an "ordered term" is an ordered term in the empty context *)
+Definition OTerm A := OTermInCtx OTunit A.
+
+(* OTerm is "the" way to view an OrderedType as a Type *)
+Coercion OTerm : OType >-> Sortclass.
+
+(* Build an OTerm from an element of its type *)
+Program Definition mkOTerm {A} (a:ot_Type A) : OTerm A :=
+  mkOTermInCtx {| pfun_app := fun _ => a; pfun_Proper := _ |}.
+
+(* Eliminate an OTerm *)
+Definition elimOTerm {A} (trm: OTerm A) : ot_Type A :=
+  pfun_app (elimOTermInCtx trm) tt.
 
 
-Definition ex1 : OTermInCtx OTunit (OTarrow OTnat OTnat) :=
-  pfun_lambda'
-    (fun (x : forall {ctx' ext}, _) => x).
+(***
+ *** Substitutions into ordered terms
+ ***)
+
+
 
 
 (***
  *** Notations
  ***)
 
-Module ProperTermNotations.
+Module OTermNotations.
 
   Notation "A '-o>' B" :=
-    (OTArrow A B) (right associativity, at level 99).
+    (OTarrow A B) (right associativity, at level 99).
   Notation "A '*o*' B" :=
-    (OTProd A B) (left associativity, at level 40).
+    (OTpair A B) (left associativity, at level 40).
   Notation "A '+o+' B" :=
-    (OTSum A B) (left associativity, at level 50).
+    (OTsum A B) (left associativity, at level 50).
   Notation "'~o~' A" :=
-    (OTFlip A) (right associativity, at level 35).
+    (OTflip A) (right associativity, at level 35).
 
   Delimit Scope pterm_scope with pterm.
-  Bind Scope pterm_scope with OTPairInCtx.
-  Bind Scope pterm_scope with ProperTerm.
+  Bind Scope pterm_scope with OTermInCtx.
+  Bind Scope pterm_scope with OTerm.
 
   Notation "x <o= y" :=
-    (OT_leq x%pterm y%pterm) (no associativity, at level 70).
+    (ot_R x%pterm y%pterm) (no associativity, at level 70).
   Notation "x =o= y" :=
-    (OT_equiv x%pterm y%pterm) (no associativity, at level 70).
+    (ot_equiv x%pterm y%pterm) (no associativity, at level 70).
 
   Notation "'pfun' ( x ::: T ) ==> y" :=
-    (proper_fun (A:=T) (fun x => y%pterm))
+    (ot_lambda (A:=T) (fun (x : forall {ctx' ext}, _) => y%pterm))
       (at level 100, right associativity, x at level 99) : pterm_scope.
 
-  Notation "'pvar' x" := (proper_var x) (no associativity, at level 10) : pterm_scope.
+  Notation "'pfun' x ==> y" :=
+    (ot_lambda (fun (x : forall {ctx' ext}, _) => y%pterm))
+      (at level 100, right associativity, x at level 99) : pterm_scope.
 
-  Notation "'!' x" := (weaken_context (ctx2:=_) (ext:=_) x) (no associativity, at level 10) : pterm_scope.
+  Notation "'pvar' x" :=
+    (x _ _) (no associativity, at level 10, only parsing) : pterm_scope.
 
+  (*
   Notation "x @ y" :=
     (proper_apply x y) (left associativity, at level 20) : pterm_scope.
 
@@ -381,50 +427,50 @@ Module ProperTermNotations.
   Notation "'pmap1' ( f ::: A --> B ) x" :=
     (map_OTPairInCtx (A:=A) (B:=B) f _ x)
       (right associativity, at level 80) : pterm_scope.
+   *)
 
-End ProperTermNotations.
+End OTermNotations.
 
 
 (***
  *** Examples
  ***)
 
-Module ProperTermExamples.
-
-Import ProperTermNotations.
+Module OTermExamples.
+Import OTermNotations.
 
 (* Example: the identity on Prop *)
-Definition proper_id_Prop_fun : ProperTerm (OTProp -o> OTProp) :=
+Definition proper_id_Prop_fun : OTerm (OTProp -o> OTProp) :=
   pfun ( x ::: OTProp ) ==> pvar x.
 
 (* You can see that it yields the identity function *)
-Eval compute in (get_proper_term proper_id_Prop_fun : Prop -> Prop).
+Eval compute in (pfun_app (elimOTerm proper_id_Prop_fun) : Prop -> Prop).
 
 (* The proof of Proper-ness is automatic by typeclass instances *)
-Goal (Proper (OTProp -o> OTProp) (get_proper_term proper_id_Prop_fun)).
+Goal (Proper (OTProp -o> OTProp) (elimOTerm proper_id_Prop_fun)).
 auto with typeclass_instances.
 Qed.
 
 (* Example 2: the first projection function on 2 Props *)
-Definition proper_proj1_Prop_fun : ProperTerm (OTProp -o> OTProp -o> OTProp) :=
+Definition proper_proj1_Prop_fun : OTerm (OTProp -o> OTProp -o> OTProp) :=
   pfun ( P1 ::: OTProp ) ==>
     pfun ( P2 ::: OTProp ) ==>
       pvar P1.
 
 (* Example 3: apply each of a pair of functions to an argument *)
 Definition proper_example3 {A B C} :
-  ProperTerm ((A -o> B) *o* (A -o> C) -o> A -o> (B *o* C)) :=
+  OTerm ((A -o> B) *o* (A -o> C) -o> A -o> (B *o* C)) :=
   pfun ( p ::: (A -o> B) *o* (A -o> C)) ==>
     pfun ( x ::: A ) ==>
       (((ofst (pvar p)) @ pvar x) ,o, ((osnd (pvar p)) @ pvar x)).
 
 (* Example 4: match a sum of two A's and return an A *)
 Definition proper_example4 {A} :
-  ProperTerm (A +o+ A -o> A) :=
+  OTerm (A +o+ A -o> A) :=
   pfun ( sum ::: A +o+ A) ==>
     pmatch_sum (pvar sum) with
       | inl x => pvar x
       | inr y => pvar y
     end.
 
-End ProperTermExamples.
+End OTermExamples.
