@@ -209,18 +209,103 @@ dependent version of OTContext, below. *)
 
 
 (***
- *** Ordered Types as Contexts of Nested Pairs
+ *** Contexts of Ordered Types
  ***)
 
-(* FIXME HERE: documentation! *)
+(* An ordered type context is just a list *)
+Definition OTCtx : Type := list OType.
 
-Inductive ContextExtends : OType -> OType -> Type :=
+(* The ordered type of elements of an ordered context *)
+Fixpoint OTCtxElem (ctx:OTCtx) : OType :=
+  match ctx with
+  | [] => OTunit
+  | A::ctx' => OTpair (OTCtxElem ctx') A
+  end.
+
+(* Helper to cons an element to a context *)
+Definition context_cons {ctx A} (a:ot_Type A) (celem: ot_Type (OTCtxElem ctx)) :
+  ot_Type (OTCtxElem (A::ctx)) :=
+  (celem, a).
+
+(* context_cons is Proper *)
+Instance context_cons_Proper {ctx A} :
+  Proper (ot_R A ==> ot_R (OTCtxElem ctx) ==>
+               ot_R (OTCtxElem (A::ctx))) context_cons.
+Proof.
+  intros a1 a2 Ra celem1 celem2 Rc; split; assumption.
+Qed.
+
+(* Append two context elements *)
+Fixpoint context_append {ctx1 ctx2} :
+  ot_Type (OTCtxElem ctx1) -> ot_Type (OTCtxElem ctx2) ->
+  ot_Type (OTCtxElem (ctx1 ++ ctx2)) :=
+  match ctx1 return
+        ot_Type (OTCtxElem ctx1) -> ot_Type (OTCtxElem ctx2) ->
+        ot_Type (OTCtxElem (ctx1 ++ ctx2))
+  with
+  | [] => fun celem1 celem2 => celem2
+  | A::ctx1' =>
+    fun celem1 celem2 =>
+      context_cons (snd celem1) (context_append (fst celem1) celem2)
+  end.
+
+(* context_append preserves ordering *)
+Instance context_append_Proper {ctx1 ctx2} :
+  Proper (ot_R (OTCtxElem ctx1) ==> ot_R (OTCtxElem ctx2) ==>
+               ot_R (OTCtxElem (ctx1 ++ ctx2))) context_append.
+Proof.
+  induction ctx1; simpl; intros celem1 celem1' R1 celem2 celem2' R2.
+  { assumption. }
+  { destruct R1. split; [ apply IHctx1 | ]; assumption. }
+Qed.
+
+(* Take the prefix of a context element *)
+Fixpoint context_prefix {ctx1 ctx2} :
+  ot_Type (OTCtxElem (ctx1 ++ ctx2)) -> ot_Type (OTCtxElem ctx1) :=
+  match ctx1 return
+        ot_Type (OTCtxElem (ctx1 ++ ctx2)) -> ot_Type (OTCtxElem ctx1)
+  with
+  | [] => fun _ => tt
+  | A::ctx1' =>
+    fun celem =>
+      context_cons (snd celem) (context_prefix (ctx1:=ctx1') (fst celem))
+  end.
+
+(* context_prefix preserves ordering *)
+Instance context_prefix_Proper {ctx1 ctx2} :
+  Proper (ot_R (OTCtxElem (ctx1 ++ ctx2)) ==>
+               ot_R (OTCtxElem ctx1)) context_prefix.
+Proof.
+  induction ctx1; simpl; intros celem1 celem2 R12.
+  { reflexivity. }
+  { destruct R12. split; [ apply IHctx1 | ]; assumption. }
+Qed.
+
+(* Take the suffix of a context element *)
+Fixpoint context_suffix {ctx1 ctx2} :
+  ot_Type (OTCtxElem (ctx1 ++ ctx2)) -> ot_Type (OTCtxElem ctx2) :=
+  match ctx1 return
+        ot_Type (OTCtxElem (ctx1 ++ ctx2)) -> ot_Type (OTCtxElem ctx2)
+  with
+  | [] => fun celem => celem
+  | A::ctx1' => fun celem => context_suffix (ctx1:=ctx1') (fst celem)
+  end.
+
+(* context_suffix preserves ordering *)
+Instance context_suffix_Proper {ctx1 ctx2} :
+  Proper (ot_R (OTCtxElem (ctx1 ++ ctx2)) ==>
+               ot_R (OTCtxElem ctx2)) context_suffix.
+Proof.
+  induction ctx1; simpl; intros celem1 celem2 R12.
+  { assumption. }
+  { destruct R12. apply IHctx1. assumption. }
+Qed.
+
+(* A context extends another iff the latter is a suffix of the former *)
+Inductive ContextExtends : OTCtx -> OTCtx -> Type :=
 | ContextExtends_refl ctx : ContextExtends ctx ctx
-| ContextExtends_cons_both {ctx1 ctx2} A :
-    ContextExtends ctx1 ctx2 ->
-    ContextExtends (OTpair ctx1 A) (OTpair ctx2 A)
-| ContextExtends_cons_right {ctx1 ctx2} A :
-    ContextExtends ctx1 ctx2 -> ContextExtends ctx1 (OTpair ctx2 A)
+| ContextExtends_cons {ctx1 ctx2} A :
+    ContextExtends ctx1 ctx2 -> ContextExtends ctx1 (A::ctx2)
 .
 
 (* Context extension as a type class *)
@@ -232,37 +317,28 @@ Arguments context_extends {_ _ _}.
 (* The rules for context extension, as type class instances *)
 Instance OTCtxExtends_refl ctx : OTCtxExtends ctx ctx :=
   ContextExtends_refl _.
+Instance OTCtxExtends_cons ctx1 ctx2
+         {ext:OTCtxExtends ctx1 ctx2} {A} : OTCtxExtends ctx1 (A::ctx2) :=
+  ContextExtends_cons _ context_extends.
 
-Instance OTCtxExtends_cons_both ctx1 ctx2
-         {ext:OTCtxExtends ctx1 ctx2} {B}
-  : OTCtxExtends (OTpair ctx1 B) (OTpair ctx2 B) :=
-  ContextExtends_cons_both _ context_extends.
-
-Instance OTCtxExtends_cons_right ctx1 ctx2
-         {ext:OTCtxExtends ctx1 ctx2} {B} : OTCtxExtends ctx1 (OTpair ctx2 B) :=
-  ContextExtends_cons_right _ context_extends.
-
-(* Context extension induces a mapping from the bigger to the smaller context *)
+(* Map elements of an extended context to the unextended context *)
 Fixpoint unextend_context {ctx1 ctx2} (ext: ContextExtends ctx1 ctx2) :
-  ot_Type ctx2 -> ot_Type ctx1 :=
-  match ext in ContextExtends ctx1 ctx2 return ot_Type ctx2 -> ot_Type ctx1 with
+  ot_Type (OTCtxElem ctx2) -> ot_Type (OTCtxElem ctx1) :=
+  match ext in ContextExtends ctx1 ctx2
+        return ot_Type (OTCtxElem ctx2) -> ot_Type (OTCtxElem ctx1) with
   | ContextExtends_refl ctx => fun celem => celem
-  | ContextExtends_cons_both A ext' =>
-    fun celem =>
-      (unextend_context ext' (fst celem), snd celem)
-  | ContextExtends_cons_right A ext' =>
-    fun celem =>
-      unextend_context ext' (fst celem)
+  | ContextExtends_cons A ext' =>
+    fun celem => unextend_context ext' (fst celem)
   end.
 
 (* unextend_context preserves ordering *)
 Instance unextend_context_Proper {ctx1 ctx2} ext :
-  Proper (ot_R ctx2 ==> ot_R ctx1) (unextend_context ext).
+  Proper (ot_R (OTCtxElem ctx2) ==>
+               ot_R (OTCtxElem ctx1)) (unextend_context ext).
 Proof.
-  induction ext; simpl; intros celem1 celem2 R12.
+  induction ext; intros celem1 celem2 R12.
   { assumption. }
-  { destruct R12; split; [ apply IHext | ]; assumption. }
-  { destruct R12. apply IHext. assumption. }
+  { apply IHext. destruct R12. assumption. }
 Qed.
 
 
@@ -271,70 +347,44 @@ Qed.
  ***)
 
 (* An ordered term in context is just a proper function *)
-Inductive OTermInCtx ctx A : Type :=
-  | mkOTermInCtx (pfun: Pfun ctx A).
+Inductive OTerm ctx A : Type :=
+  | mkOTerm (pfun: Pfun (OTCtxElem ctx) A).
 
-Arguments mkOTermInCtx {ctx A} pfun.
+Arguments mkOTerm {ctx A} pfun.
 
-(* Helper to eliminate an OTermInCtx *)
-Definition elimOTermInCtx {ctx A} (oterm: OTermInCtx ctx A) : Pfun ctx A :=
+(* Helper to eliminate an OTerm *)
+Definition elimOTerm {ctx A} (oterm: OTerm ctx A) :=
   let (pfun) := oterm in pfun.
 
-(* Weakening the context of an OTermInCtx *)
-Program Definition ot_weaken {ctx1 ctx2} {ext: OTCtxExtends ctx1 ctx2}
-           {A} (p: OTermInCtx ctx1 A) : OTermInCtx ctx2 A :=
-  match p with
-  | mkOTermInCtx pfun =>
-    mkOTermInCtx
-      {| pfun_app := fun celem => pfun_app pfun (unextend_context ext celem);
-         pfun_Proper := _ |}
-  end.
-Next Obligation.
-  intros celem1 celem2 R12. apply pfun_Proper.
-  apply unextend_context_Proper. assumption.
-Qed.
+(* An OTerm in the empty context *)
+Definition TopOTerm A := OTerm [] A.
 
-(* Helper to build a "variable" for the top of the context as an OTermInCtx *)
-Program Definition ot_top_var ctx A : OTermInCtx (OTpair ctx A) A :=
-  mkOTermInCtx {| pfun_app := fun celem => snd celem;
-                  pfun_Proper := _ |}.
-Next Obligation.
-  intros celem1 celem2 R12. destruct R12. assumption.
-Qed.
+(* TopOTerm is "the" way to view an OrderedType as a Type *)
+Coercion TopOTerm : OType >-> Sortclass.
 
+(* Build a TopOTerm from an element of its type *)
+Program Definition mkTopOTerm {A} (a:ot_Type A) : TopOTerm A :=
+  mkOTerm {| pfun_app := fun _ => a; pfun_Proper := _ |}.
 
-(* Build an OTerm for a function *)
-(*
-Definition ot_lambda {ctx} {A} {B} (f: OTermInCtx (OTpair ctx A) A ->
-                                         OTermInCtx (OTpair ctx A) B)
-  : OTermInCtx ctx (OTarrow A B) :=
-  mkOTermInCtx (pfun_curry (elimOTermInCtx (f (ot_top_var ctx A)))).
- *)
-
-(* Build an OTerm for a function, with ot_weaken already pre-applied *)
-Definition ot_lambda {ctx} {A} {B}
-        (f: (forall {ctx'} {ext: OTCtxExtends (OTpair ctx A) ctx'},
-                OTermInCtx ctx' A) -> OTermInCtx (OTpair ctx A) B) :
-  OTermInCtx ctx (OTarrow A B) :=
-  mkOTermInCtx
-    (pfun_curry
-       (elimOTermInCtx (f (fun {ctx' ext} => ot_weaken (ot_top_var ctx A))))).
+(* Eliminate a TopOTerm *)
+Definition elimTopOTerm {A} (trm: TopOTerm A) : ot_Type A :=
+  pfun_app (elimOTerm trm) tt.
 
 (* Lifting pre-orders to ordered terms *)
-Definition ot_leq {ctx A} (x y : OTermInCtx ctx A) : Prop :=
+Definition ot_leq {ctx A} (x y : OTerm ctx A) : Prop :=
   forall celem,
-    ot_R _ (pfun_app (elimOTermInCtx x) celem)
-         (pfun_app (elimOTermInCtx y) celem).
+    ot_R _ (pfun_app (elimOTerm x) celem)
+         (pfun_app (elimOTerm y) celem).
 
 Instance ot_leq_PreOrder {ctx A} : PreOrder (@ot_leq ctx A).
 Proof.
   constructor; intro; intros; intro; intros.
   reflexivity.
-  transitivity ((pfun_app (elimOTermInCtx y) celem)); [ apply H | apply H0 ].
+  transitivity ((pfun_app (elimOTerm y) celem)); [ apply H | apply H0 ].
 Qed.
 
 (* The equivalence relation for an OrderedType *)
-Definition ot_equiv {ctx A} (x y : OTermInCtx ctx A) : Prop :=
+Definition ot_equiv {ctx A} (x y : OTerm ctx A) : Prop :=
   ot_leq x y /\ ot_leq y x.
 
 Instance ot_equiv_Equivalence {ctx A} : Equivalence (@ot_equiv ctx A).
@@ -345,26 +395,83 @@ Proof.
   { destruct H; destruct H0; split; transitivity y; assumption. }
 Qed.
 
-(* By default, an "ordered term" is an ordered term in the empty context *)
-Definition OTerm A := OTermInCtx OTunit A.
 
-(* OTerm is "the" way to view an OrderedType as a Type *)
-Coercion OTerm : OType >-> Sortclass.
+(***
+ *** Building Functional Ordered Terms
+ ***)
 
-(* Build an OTerm from an element of its type *)
-Program Definition mkOTerm {A} (a:ot_Type A) : OTerm A :=
-  mkOTermInCtx {| pfun_app := fun _ => a; pfun_Proper := _ |}.
+(* Weaken the context of an OTerm *)
+Program Definition ot_weaken {ctx1 ctx2} {ext: OTCtxExtends ctx1 ctx2}
+           {A} (otrm: OTerm ctx1 A) : OTerm ctx2 A :=
+  let (pfun) := otrm in
+  mkOTerm
+    {| pfun_app :=
+         fun celem => pfun_app pfun (unextend_context context_extends celem);
+       pfun_Proper := _ |}.
+Next Obligation.
+  intros celem1 celem2 R12. apply pfun_Proper.
+  apply unextend_context_Proper. assumption.
+Qed.
 
-(* Eliminate an OTerm *)
-Definition elimOTerm {A} (trm: OTerm A) : ot_Type A :=
-  pfun_app (elimOTermInCtx trm) tt.
+(* Build a "variable" for the top of the context as an OTerm *)
+Program Definition ot_top_var ctx A : OTerm (A::ctx) A :=
+  mkOTerm {| pfun_app := fun celem => snd celem;
+                  pfun_Proper := _ |}.
+Next Obligation.
+  intros celem1 celem2 R12. destruct R12. assumption.
+Qed.
+
+
+(* Build an OTerm for a function *)
+(*
+Definition ot_lambda {ctx} {A} {B} (f: OTerm (OTpair ctx A) A ->
+                                         OTerm (OTpair ctx A) B)
+  : OTerm ctx (OTarrow A B) :=
+  mkOTerm (pfun_curry (elimOTerm (f (ot_top_var ctx A)))).
+ *)
+
+(* Build an OTerm for a function, with ot_weaken already pre-applied *)
+Definition ot_lambda {ctx} {A} {B}
+           (f: (forall {ctx'} {ext:OTCtxExtends (A::ctx) ctx'}, OTerm ctx' A) ->
+               OTerm (A::ctx) B) :
+  OTerm ctx (OTarrow A B) :=
+  mkOTerm
+    (pfun_curry
+       (elimOTerm (f (fun {ctx' ext} => ot_weaken (ot_top_var ctx A))))).
 
 
 (***
- *** Substitutions into ordered terms
+ *** Substitutions into Ordered Terms
  ***)
 
+(* Substitute for a variable in an ordered term *)
+Program Definition ot_subst {ctx1 A ctx2 B}
+        (otrm : OTerm (ctx1 ++ A::ctx2) B)
+        (s : OTerm ctx2 A) : OTerm (ctx1 ++ ctx2) B :=
+  mkOTerm
+    {| pfun_app :=
+         fun celem =>
+           pfun_app (elimOTerm otrm)
+                    (context_append
+                       (ctx2:=A::ctx2)
+                       (context_prefix celem)
+                       (context_suffix celem,
+                        pfun_app (elimOTerm s) (context_suffix celem)))
+       ; pfun_Proper := _ |}.
+Next Obligation.
+  intros otrm1 otrm2 R12.
+  apply pfun_Proper. apply context_append_Proper.
+  { apply context_prefix_Proper. assumption. }
+  { apply context_cons_Proper; [ apply pfun_Proper | ];
+      apply context_suffix_Proper; assumption. }
+Qed.
 
+(* Apply an ordered term *)
+Definition ot_apply {ctx A B} (f : OTerm ctx (OTarrow A B))
+           (arg : OTerm ctx A) : OTerm ctx B :=
+  ot_subst (ctx1:=[]) (mkOTerm (ctx:=A::ctx) (pfun_uncurry (elimOTerm f))) arg.
+
+(* FIXME HERE: define rewrite rules for ot_subst *)
 
 
 (***
@@ -383,8 +490,8 @@ Module OTermNotations.
     (OTflip A) (right associativity, at level 35).
 
   Delimit Scope pterm_scope with pterm.
-  Bind Scope pterm_scope with OTermInCtx.
   Bind Scope pterm_scope with OTerm.
+  Bind Scope pterm_scope with TopOTerm.
 
   Notation "x <o= y" :=
     (ot_R x%pterm y%pterm) (no associativity, at level 70).
@@ -402,10 +509,10 @@ Module OTermNotations.
   Notation "'pvar' x" :=
     (x _ _) (no associativity, at level 10, only parsing) : pterm_scope.
 
-  (*
-  Notation "x @ y" :=
-    (proper_apply x y) (left associativity, at level 20) : pterm_scope.
+  Notation "x @o@ y" :=
+    (ot_apply x y) (left associativity, at level 20) : pterm_scope.
 
+  (*
   Notation "( x ,o, y )" :=
     (proper_pair x%pterm y%pterm)
       (no associativity, at level 0) : pterm_scope.
@@ -440,29 +547,29 @@ Module OTermExamples.
 Import OTermNotations.
 
 (* Example: the identity on Prop *)
-Definition proper_id_Prop_fun : OTerm (OTProp -o> OTProp) :=
+Definition proper_id_Prop_fun : OTerm [] (OTProp -o> OTProp) :=
   pfun ( x ::: OTProp ) ==> pvar x.
 
 (* You can see that it yields the identity function *)
-Eval compute in (pfun_app (elimOTerm proper_id_Prop_fun) : Prop -> Prop).
+Eval compute in (pfun_app (elimTopOTerm proper_id_Prop_fun) : Prop -> Prop).
 
 (* The proof of Proper-ness is automatic by typeclass instances *)
-Goal (Proper (OTProp -o> OTProp) (elimOTerm proper_id_Prop_fun)).
+Goal (Proper (OTProp -o> OTProp) (elimTopOTerm proper_id_Prop_fun)).
 auto with typeclass_instances.
 Qed.
 
 (* Example 2: the first projection function on 2 Props *)
-Definition proper_proj1_Prop_fun : OTerm (OTProp -o> OTProp -o> OTProp) :=
+Definition proper_proj1_Prop_fun : TopOTerm (OTProp -o> OTProp -o> OTProp) :=
   pfun ( P1 ::: OTProp ) ==>
     pfun ( P2 ::: OTProp ) ==>
       pvar P1.
 
 (* Example 3: apply each of a pair of functions to an argument *)
 Definition proper_example3 {A B C} :
-  OTerm ((A -o> B) *o* (A -o> C) -o> A -o> (B *o* C)) :=
+  TopOTerm ((A -o> B) *o* (A -o> C) -o> A -o> (B *o* C)) :=
   pfun ( p ::: (A -o> B) *o* (A -o> C)) ==>
     pfun ( x ::: A ) ==>
-      (((ofst (pvar p)) @ pvar x) ,o, ((osnd (pvar p)) @ pvar x)).
+      (((ofst (pvar p)) @o@ pvar x) ,o, ((osnd (pvar p)) @o@ pvar x)).
 
 (* Example 4: match a sum of two A's and return an A *)
 Definition proper_example4 {A} :
