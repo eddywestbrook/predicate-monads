@@ -331,6 +331,12 @@ Instance OTCtxExtends_refl ctx : OTCtxExtends ctx ctx :=
 Instance OTCtxExtends_cons ctx1 ctx2
          {ext:OTCtxExtends ctx1 ctx2} {A} : OTCtxExtends ctx1 (A::ctx2) :=
   ContextExtends_cons _ context_extends.
+Instance OTCtxExtends_empty ctx : OTCtxExtends [] ctx.
+Proof.
+  induction ctx.
+  apply ContextExtends_refl.
+  apply ContextExtends_cons; assumption.
+Qed.
 
 (* Map elements of an extended context to the unextended context *)
 Fixpoint unextend_context {ctx1 ctx2} (ext: ContextExtends ctx1 ctx2) :
@@ -433,15 +439,13 @@ Qed.
 
 
 (* Build an OTerm for a function *)
-(*
-Definition ot_lambda {ctx} {A} {B} (f: OTerm (OTpair ctx A) A ->
-                                         OTerm (OTpair ctx A) B)
+Definition ot_lambda {ctx} {A} {B} (f: OTerm (A::ctx) A ->
+                                       OTerm (A::ctx) B)
   : OTerm ctx (OTarrow A B) :=
   mkOTerm (pfun_curry (elimOTerm (f (ot_top_var ctx A)))).
- *)
 
 (* Build an OTerm for a function, with ot_weaken already pre-applied *)
-Definition ot_lambda {ctx} {A} {B}
+Definition ot_lambda' {ctx} {A} {B}
            (f: (forall {ctx'} {ext:OTCtxExtends (A::ctx) ctx'}, OTerm ctx' A) ->
                OTerm (A::ctx) B) :
   OTerm ctx (OTarrow A B) :=
@@ -686,6 +690,19 @@ Module OTermNotations.
     (ot_equiv x%pterm y%pterm) (no associativity, at level 70).
 
   Notation "'pfun' ( x ::: T ) ==> y" :=
+    (ot_lambda (A:=T) (fun x => y%pterm))
+      (at level 100, right associativity, x at level 99) : pterm_scope.
+
+  Notation "'pfun' x ==> y" :=
+    (ot_lambda (fun x => y%pterm))
+      (at level 100, right associativity, x at level 99) : pterm_scope.
+
+  Notation "'!' x" :=
+    (ot_weaken x%pterm)
+      (no associativity, at level 10) : pterm_scope.
+
+  (*
+  Notation "'pfun' ( x ::: T ) ==> y" :=
     (ot_lambda (A:=T) (fun (x : forall {ctx' ext}, _) => y%pterm))
       (at level 100, right associativity, x at level 99) : pterm_scope.
 
@@ -695,6 +712,7 @@ Module OTermNotations.
 
   Notation "'pvar' x" :=
     (x _ _) (no associativity, at level 10, only parsing) : pterm_scope.
+   *)
 
   Notation "x @o@ y" :=
     (ot_apply x y) (left associativity, at level 20) : pterm_scope.
@@ -736,7 +754,7 @@ Import OTermNotations.
 
 (* Example: the identity on Prop *)
 Definition proper_id_Prop_fun : OTerm [] (OTProp -o> OTProp) :=
-  pfun ( x ::: OTProp ) ==> pvar x.
+  pfun ( x ::: OTProp ) ==> ! x.
 
 (* You can see that it yields the identity function *)
 Eval compute in (pfun_app (elimTopOTerm proper_id_Prop_fun) : Prop -> Prop).
@@ -750,14 +768,14 @@ Qed.
 Definition proper_proj1_Prop_fun : TopOTerm (OTProp -o> OTProp -o> OTProp) :=
   pfun ( P1 ::: OTProp ) ==>
     pfun ( P2 ::: OTProp ) ==>
-      pvar P1.
+      ! P1.
 
 (* Example 3: apply each of a pair of functions to an argument *)
 Definition proper_example3 {A B C} :
   TopOTerm ((A -o> B) *o* (A -o> C) -o> A -o> (B *o* C)) :=
   pfun ( p ::: (A -o> B) *o* (A -o> C)) ==>
     pfun ( x ::: A ) ==>
-      (((ot_fst @o@ (pvar p)) @o@ pvar x) ,o, ((ot_snd @o@ (pvar p)) @o@ pvar x)).
+      (((ot_fst @o@ (!p)) @o@ !x) ,o, ((ot_snd @o@ (!p)) @o@ !x)).
 
 (* Example 4: match a sum of two A's and return an A *)
 (*
