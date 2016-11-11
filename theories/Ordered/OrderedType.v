@@ -74,12 +74,15 @@ Next Obligation.
   { intros x y z; transitivity y; assumption. }
 Qed.
 
+(* The pointwise relation on pairs *)
+Definition pairR {A B} (RA:relation A) (RB:relation B) : relation (A*B) :=
+  fun p1 p2 => RA (fst p1) (fst p2) /\ RB (snd p1) (snd p2).
+
 (* The non-dependent product ordered type, where pairs are related pointwise *)
 Program Definition OTpair (A:OType) (B: OType) : OType :=
   {|
     ot_Type := ot_Type A * ot_Type B;
-    ot_R := fun p1 p2 =>
-              ot_R A (fst p1) (fst p2) /\ ot_R B (snd p1) (snd p2)
+    ot_R := pairR A B;
   |}.
 Next Obligation.
   constructor.
@@ -89,24 +92,29 @@ Next Obligation.
     - transitivity (snd p2); assumption. }
 Qed.
 
+(* The sort-of pointwise relation on sum types *)
+Definition sumR {A B} (RA:relation A) (RB:relation B) : relation (A+B) :=
+  fun sum1 sum2 =>
+    match sum1, sum2 with
+    | inl x, inl y => RA x y
+    | inl x, inr y => False
+    | inr x, inl y => False
+    | inr x, inr y => RB x y
+    end.
+
 (* The non-dependent sum ordered type, where objects are only related if they
 are both "left"s or both "right"s *)
-Program Definition OTsum (A:OType) (B: OType) : OType :=
+Program Definition OTsum (A B : OType) : OType :=
   {|
     ot_Type := ot_Type A + ot_Type B;
-    ot_R := fun sum1 sum2 =>
-              match sum1, sum2 with
-                | inl x, inl y => ot_R A x y
-                | inl x, inr y => False
-                | inr x, inl y => False
-                | inr x, inr y => ot_R B x y
-              end
+    ot_R := sumR A B
   |}.
 Next Obligation.
   constructor.
-  { intro s; destruct s; reflexivity. }
+  { intro s; destruct s; simpl; reflexivity. }
   { intros s1 s2 s3 R12 R23.
-    destruct s1; destruct s2; destruct s3; try (elimtype False; assumption).
+    destruct s1; destruct s2; destruct s3;
+      try (elimtype False; assumption); simpl.
     - transitivity o0; assumption.
     - transitivity o0; assumption. }
 Qed.
@@ -149,11 +157,14 @@ Arguments pfun_Proper [_ _] _ _ _ _.
 (* Infix "@" := pfun_app (at level 50). *)
 
 (* The non-dependent function ordered type *)
+Definition OTarrow_R (A B : OType) : relation (Pfun A B) :=
+  fun f g =>
+    forall a1 a2, ot_R A a1 a2 -> ot_R B (pfun_app f a1) (pfun_app g a2).
+
 Program Definition OTarrow (A:OType) (B: OType) : OType :=
   {|
     ot_Type := Pfun A B;
-    ot_R := fun f g =>
-              forall a1 a2, ot_R A a1 a2 -> ot_R B (pfun_app f a1) (pfun_app g a2);
+    ot_R := OTarrow_R A B;
   |}.
 Next Obligation.
   constructor.
@@ -204,7 +215,7 @@ isomorphism, mapping left-to-right. *)
 
 
 (* FIXME: could also do a forall type, but need the second type argument, B, to
-itself be proper, i.e., to be an element of OTArrow A OType. Would also need a
+itself be proper, i.e., to be an element of OTarrow A OType. Would also need a
 dependent version of OTContext, below. *)
 
 
@@ -333,8 +344,7 @@ Fixpoint unextend_context {ctx1 ctx2} (ext: ContextExtends ctx1 ctx2) :
 
 (* unextend_context preserves ordering *)
 Instance unextend_context_Proper {ctx1 ctx2} ext :
-  Proper (ot_R (OTCtxElem ctx2) ==>
-               ot_R (OTCtxElem ctx1)) (unextend_context ext).
+  Proper (OTCtxElem ctx2 ==> OTCtxElem ctx1) (unextend_context ext).
 Proof.
   induction ext; intros celem1 celem2 R12.
   { assumption. }
@@ -475,6 +485,183 @@ Definition ot_apply {ctx A B} (f : OTerm ctx (OTarrow A B))
 
 
 (***
+ *** Lifting Proper Functions to Ordered Terms
+ ***)
+
+(* Class stating that the Proper elements of AU can be lifted to AO *)
+Class OTLift (AU:Type) (R:relation AU) (AO:OType) : Type :=
+  {
+    ot_lift : forall (au:AU), Proper R au -> ot_Type AO;
+    ot_lift_Proper :
+      forall au1 au2 (Rau: R au1 au2) prp1 prp2,
+        ot_R AO (ot_lift au1 prp1) (ot_lift au2 prp2);
+  }.
+
+Arguments OTLift AU%type R%signature AO.
+
+(* Class stating that the lifting from AU to AO can be undone *)
+Class OTLiftInv AU R AO {otl:OTLift AU R AO} :=
+  {
+    ot_unlift : ot_Type AO -> AU;
+    ot_unlift_Proper : Proper (AO ==> R) ot_unlift;
+    (* FIXME: these don't work for functions, since R could be non-transitive...
+    ot_lift_iso1 : forall au prp, R (ot_unlift (ot_lift au prp)) au;
+    ot_lift_iso2 : forall au prp, R au (ot_unlift (ot_lift au prp));
+     *)
+    ot_unlift_iso1 : forall ao prp, ot_R AO (ot_lift (ot_unlift ao) prp) ao;
+    ot_unlift_iso2 : forall ao prp, ot_R AO ao (ot_lift (ot_unlift ao) prp);
+  }.
+(* FIXME: can we summarize the last 4 axioms above in a shorter way...? *)
+
+Arguments OTLiftInv AU%type R%signature AO {_}.
+
+(* Any PreOrder gets an OTLift instance *)
+Program Instance PreOrder_OTLift A R (po:@PreOrder A R) :
+  OTLift A R {| ot_Type := A; ot_R := R; ot_PreOrder := po |} :=
+  Build_OTLift
+    A R {| ot_Type := A; ot_R := R; ot_PreOrder := po |}
+    (fun a _ => a) _.
+
+(* Any PreOrder gets an OTLiftInv instance *)
+Program Instance PreOrder_OTLiftInv A R (po:@PreOrder A R) :
+  OTLiftInv A R {| ot_Type := A; ot_R := R; ot_PreOrder := po |} :=
+  {|
+    ot_unlift := fun a => a;
+  |}.
+Next Obligation.
+  intros a1 a2 Ra; assumption.
+Qed.
+
+(* Pairs can be lifted if their components can be lifted *)
+Program Instance pair_OTLift A RA AO B RB BO
+        `{OTLift A RA AO} `{OTLift B RB BO}
+  : OTLift (A*B) (pairR RA RB) (OTpair AO BO) :=
+  {|
+    ot_lift := fun p prp =>
+                 (ot_lift (fst p) (proj1 prp), ot_lift (snd p) (proj2 prp));
+  |}.
+Next Obligation.
+  destruct Rau; split; apply ot_lift_Proper; assumption.
+Qed.
+
+(* Pairs can be unlifted if their components can be unlifted *)
+Program Instance pair_OTLiftInv A RA AO B RB BO
+        `{OTLiftInv A RA AO} `{OTLiftInv B RB BO}
+  : OTLiftInv (A*B) (pairR RA RB) (OTpair AO BO) :=
+  {|
+    ot_unlift := fun p => (ot_unlift (fst p), ot_unlift (snd p));
+  |}.
+Next Obligation.
+  intros p1 p2 Rp; destruct Rp; split; apply ot_unlift_Proper; assumption.
+Qed.
+Next Obligation.
+  destruct prp; split; apply ot_unlift_iso1.
+Qed.
+Next Obligation.
+  destruct prp; split; apply ot_unlift_iso2.
+Qed.
+
+(* Functions can be lifted if their inputs can be unlifted *)
+Program Instance fun_OTLift A RA AO B RB BO
+        `{OTLiftInv A RA AO} `{OTLift B RB BO}
+  : OTLift (A -> B) (RA ==> RB) (OTarrow AO BO) :=
+  {|
+    ot_lift :=
+      fun f prp => {| pfun_app :=
+                        fun a => ot_lift (f (ot_unlift a)) _;
+                      pfun_Proper := _ |};
+  |}.
+Next Obligation.
+  apply prp. apply ot_unlift_Proper. reflexivity.
+Qed.
+Next Obligation.
+  intros a1 a2 Ra. apply ot_lift_Proper. apply prp.
+  apply ot_unlift_Proper. assumption.
+Qed.
+Next Obligation.
+  intros a1 a2 Ra. apply ot_lift_Proper. apply Rau.
+  apply ot_unlift_Proper. assumption.
+Qed.
+
+(* Anything is Proper w.r.t. a pre-order *)
+Instance Proper_PreOrder `{PreOrder} x : Proper R x :=
+  PreOrder_Reflexive x.
+
+(* Functions can be unlifted if their input types are PreOrders *)
+Program Instance fun_OTLiftInv A RA (po:@PreOrder A RA) B RB BO
+        `{OTLiftInv B RB BO}
+  : OTLiftInv (A -> B) (RA ==> RB)
+              (OTarrow (Build_OType A RA po) BO) :=
+  {|
+    ot_unlift := fun pf a => ot_unlift (pfun_app pf (ot_lift a _));
+  |}.
+Next Obligation.
+  unfold Proper. reflexivity.
+Qed.
+Next Obligation.
+  intros pf1 pf2 Rpf a1 a2 Ra. apply ot_unlift_Proper. apply Rpf. assumption.
+Qed.
+Next Obligation.
+  intros a1 a2 Ra. transitivity (pfun_app ao a1).
+  apply ot_unlift_iso1. apply pfun_Proper; assumption.
+Qed.
+Next Obligation.
+  intros a1 a2 Ra. simpl. transitivity (pfun_app ao a2).
+  apply pfun_Proper; assumption. apply ot_unlift_iso2.
+Qed.
+
+(* FIXME: are these what we want...? *)
+Program Instance OTLift_any_OType A : OTLift (ot_Type A) A A :=
+  {| ot_lift := fun a _ => a; |}.
+Program Instance OTLiftInv_any_OType A : OTLiftInv (ot_Type A) A A :=
+  {| ot_unlift := fun a => a; |}.
+Next Obligation.
+  intros a1 a2 Ra; assumption.
+Qed.
+
+
+(* Lift an operator to an ordered type *)
+Definition ot_op `{OTLift} (op:AU) {prp:Proper R op} {ctx} : OTerm ctx AO :=
+  mkOTerm {| pfun_app := fun _ => ot_lift op prp;
+             pfun_Proper := fun _ _ _ => ot_lift_Proper op op prp _ _ |}.
+
+
+(***
+ *** Some Examples of Proper Operations as Ordered Terms
+ ***)
+
+(* Proper instance for fst *)
+Instance fst_Proper A B : Proper (OTpair A B ==> A) fst.
+Proof.
+  intros p1 p2 Rp; destruct Rp. assumption.
+Qed.
+
+(* fst as an ordered term *)
+Definition ot_fst {A B ctx} : OTerm ctx (OTarrow (OTpair A B) A) :=
+  ot_op fst.
+
+(* Proper instance for snd *)
+Instance snd_Proper A B : Proper (OTpair A B ==> B) snd.
+Proof.
+  intros p1 p2 Rp; destruct Rp. assumption.
+Qed.
+
+(* snd as an ordered term *)
+Definition ot_snd {A B ctx} : OTerm ctx (OTarrow (OTpair A B) B) :=
+  ot_op snd.
+
+(* Proper instance for pair *)
+Instance pair_Proper (A B:OType) : Proper (A ==> B ==> OTpair A B) pair.
+Proof.
+  intros a1 a2 Ra b1 b2 Rb; split; assumption.
+Qed.
+
+(* pair as an ordered term *)
+Definition ot_pair {A B ctx} : OTerm ctx (OTarrow A (OTarrow B (OTpair A B))) :=
+  ot_op pair.
+
+
+(***
  *** Notations
  ***)
 
@@ -512,10 +699,11 @@ Module OTermNotations.
   Notation "x @o@ y" :=
     (ot_apply x y) (left associativity, at level 20) : pterm_scope.
 
-  (*
   Notation "( x ,o, y )" :=
-    (proper_pair x%pterm y%pterm)
+    (ot_apply (ot_apply ot_pair x%pterm) y%pterm)
       (no associativity, at level 0) : pterm_scope.
+
+  (*
   Notation "'ofst' x" :=
     (proper_proj1 x%pterm) (right associativity, at level 80) : pterm_scope.
   Notation "'osnd' x" :=
@@ -569,9 +757,10 @@ Definition proper_example3 {A B C} :
   TopOTerm ((A -o> B) *o* (A -o> C) -o> A -o> (B *o* C)) :=
   pfun ( p ::: (A -o> B) *o* (A -o> C)) ==>
     pfun ( x ::: A ) ==>
-      (((ofst (pvar p)) @o@ pvar x) ,o, ((osnd (pvar p)) @o@ pvar x)).
+      (((ot_fst @o@ (pvar p)) @o@ pvar x) ,o, ((ot_snd @o@ (pvar p)) @o@ pvar x)).
 
 (* Example 4: match a sum of two A's and return an A *)
+(*
 Definition proper_example4 {A} :
   OTerm (A +o+ A -o> A) :=
   pfun ( sum ::: A +o+ A) ==>
@@ -579,5 +768,6 @@ Definition proper_example4 {A} :
       | inl x => pvar x
       | inr y => pvar y
     end.
+ *)
 
 End OTermExamples.
