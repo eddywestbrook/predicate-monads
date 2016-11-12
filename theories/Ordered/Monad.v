@@ -44,9 +44,12 @@ Instance IdMonad_MonadOps : MonadOps Identity :=
   { returnM := fun A => (pfun (x:::_) ==> x)%pterm;
     bindM := fun A B => (pfun (m:::_) ==> pfun (f:::_) ==> f @o@ !m)%pterm; }.
 
+
 Instance IdMonad : Monad Identity.
 Proof.
   constructor.
   { intros. unfold bindM, returnM, IdMonad_MonadOps.
+    admit. }
+Admitted.
 
-FIXME HERE NOW: need rewrite rules for beta!
+(* FIXME HERE NOW: need rewrite rules for beta! *)
