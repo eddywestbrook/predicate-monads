@@ -340,7 +340,8 @@ Ltac build_lr_fun :=
  in Coq.Classes.Morphisms, except that we do not use rewriting or reflexivity
  because lr_leq and lr_eq are not necessarily reflexive. *)
 Ltac prove_lr :=
-  autorewrite with LR;
+  (* autorewrite with LR; *)
+  repeat (simpl; rewrite_strat (topdown (hints LR)));
   match goal with
   | |- (?f _) <~ (?g _) => apply apply_lr_leq; [ change (f <~ g) | ]; prove_lr
   | |- (?f _) ~~ (?g _) => apply apply_lr_eq; prove_lr

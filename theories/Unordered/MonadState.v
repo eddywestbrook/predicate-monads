@@ -73,7 +73,7 @@ Proof.
   - prove_lr.
   - transitivity (fun s => do s_x <- m s; returnM s_x).
     + split; build_lr_fun; apply monad_proper_bind; prove_lr.
-    + prove_lr.
+    + prove_lr; autorewrite with LR; prove_lr.
   - prove_lr.
 Qed.
 
@@ -91,29 +91,9 @@ Proof.
   - prove_lr_proper.
   - prove_lr_proper.
   - prove_lr.
-  - split; build_lr_fun.
-    (* NOTE: we write these out here so you can see the progress as they
-    run; this is really just the same as prove_lr *)
-    + autorewrite with LR; prove_lr_proper; prove_lr.
-    + autorewrite with LR; prove_lr_proper; prove_lr.
-    + autorewrite with LR; prove_lr_proper; prove_lr.
-    + autorewrite with LR; prove_lr_proper; prove_lr.
-    + autorewrite with LR; prove_lr_proper; prove_lr.
-    + autorewrite with LR; prove_lr_proper; prove_lr.
-  - split; build_lr_fun.
-    + autorewrite with LR; prove_lr_proper; prove_lr.
-    + autorewrite with LR; prove_lr_proper; prove_lr.
-    + autorewrite with LR; prove_lr_proper; prove_lr.
-    + autorewrite with LR; prove_lr_proper; prove_lr.
-    + autorewrite with LR; prove_lr_proper; prove_lr.
-    + autorewrite with LR; prove_lr_proper; prove_lr.
-  - split; build_lr_fun.
-    + autorewrite with LR; prove_lr_proper; prove_lr.
-    + autorewrite with LR; prove_lr_proper; prove_lr.
-    + autorewrite with LR; prove_lr_proper; prove_lr.
-    + autorewrite with LR; prove_lr_proper; prove_lr.
-    + autorewrite with LR; prove_lr_proper; prove_lr.
-    + autorewrite with LR; prove_lr_proper; prove_lr.
+  - prove_lr.
+  - prove_lr.
+  - prove_lr.
 Qed.
 
 End StateT.
