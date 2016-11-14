@@ -246,10 +246,13 @@ Module OTypeNotations.
   Notation "'~o~' A" :=
     (OTflip A) (right associativity, at level 35).
 
-  Notation "x <o= ( A ) y" :=
-    (ot_R A x y) (no associativity, at level 70).
-  Notation "x =o= ( A ) y" :=
-    (ot_equiv A x y) (no associativity, at level 70).
+  Notation "x <o= y" :=
+    (ot_R _ x y) (no associativity, at level 70).
+  Notation "x =o= y" :=
+    (ot_equiv _ x y) (no associativity, at level 70).
+
+  Notation "x @o@ y" :=
+    (pfun_app x y) (left associativity, at level 20).
 
 End OTypeNotations.
 
@@ -442,6 +445,14 @@ Proof.
   intros prp1 prp2. apply prp1. assumption.
 Qed.
 
+(* Proper-ness instance for pfun applications *)
+Instance ProperH_pfun_app {A B} (fL fR: OTarrow A B) argL argR :
+  ProperH (ot_R (OTarrow A B)) fL fR -> ProperH (ot_R A) argL argR ->
+  ProperH (ot_R B) (pfun_app fL argL) (pfun_app fR argR).
+Proof.
+  intros prp1 prp2. apply prp1. assumption.
+Qed.
+
 (* Helper wrapper for ot_lift *)
 Definition mkOTerm `{OTLift} (trm:AU)
            `{prp:ProperH _ R trm trm} : ot_Type AO :=
@@ -528,5 +539,54 @@ Eval compute in (ot_unlift (@ex3 OTProp OTProp) : Prop * Prop -> Prop).
 Definition ex4 {A B} : A *o* B -o> B *o* A :=
   mkOTerm (R:= _ ==> _) (fun p => (snd p, fst p)).
 Eval compute in (ot_unlift (@ex4 OTProp OTProp) : Prop * Prop -> Prop * Prop).
+
+Goal (ex2 <o= ex2). reflexivity. Qed.
+Goal (forall {A B}, ex4 (A:=A) (B:=B) <o= ex4). intros. reflexivity. Qed.
+
+
+Goal (OTLift ((OTProp -o> OTProp) -> OTProp -> OTProp)
+             (ot_R (OTProp -o> OTProp) ==> ot_R OTProp ==> ot_R OTProp)
+             ((OTProp -o> OTProp) -o> OTProp -o> OTProp)).
+  auto with typeclass_instances.
+Qed.
+
+
+Goal ({R:_
+         & OTLift ((OTProp -o> OTProp) -> OTProp -> OTProp)
+                  R ((OTProp -o> OTProp) -o> OTProp -o> OTProp)
+         & ProperH R (fun f a => f @o@ a) (fun f a => f @o@ a)
+          }).
+  eapply existT2.
+  auto with typeclass_instances.
+  auto with typeclass_instances.
+Qed.
+
+Goal (forall {A B},
+         {R:_
+            & OTLift ((A -o> B) -> A -> B)
+                     R ((A -o> B) -o> A -o> B)
+            & ProperH R (fun f a => f @o@ a) (fun f a => f @o@ a)
+          }).
+  intros; eapply existT2.
+  auto with typeclass_instances.
+  auto with typeclass_instances.
+Defined.
+Print Unnamed_thm8.
+
+Goal (forall {A B},
+         ProperH (ot_R (A -o> B) ==> ot_R A ==> ot_R B)
+                 (fun (f : A -o> B) (a : A) => f @o@ a)
+                 (fun (f : A -o> B) (a : A) => f @o@ a)).
+  intros. auto with typeclass_instances.
+Qed.
+Print Unnamed_thm9.
+
+Definition ex5 {A B} : (A -o> B) -o> A -o> B :=
+  mkOTerm 
+          (fun f a => f @o@ a)
+.
+
+Eval compute in (ot_unlift (@ex4 OTProp OTProp) : Prop * Prop -> Prop * Prop).
+
 
 End OTExamples.
