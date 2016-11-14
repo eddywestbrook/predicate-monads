@@ -15,8 +15,8 @@ Import ListNotations.
 
 Record OType : Type :=
   {
-    ot_Type : Type;
-    ot_R :> relation ot_Type;
+    ot_Type :> Type;
+    ot_R : relation ot_Type;
     ot_PreOrder :> PreOrder ot_R
   }.
 
@@ -94,7 +94,7 @@ Definition pairR {A B} (RA:relation A) (RB:relation B) : relation (A*B) :=
 Program Definition OTpair (A:OType) (B: OType) : OType :=
   {|
     ot_Type := ot_Type A * ot_Type B;
-    ot_R := pairR A B;
+    ot_R := pairR (ot_R A) (ot_R B);
   |}.
 Next Obligation.
   constructor.
@@ -119,7 +119,7 @@ are both "left"s or both "right"s *)
 Program Definition OTsum (A B : OType) : OType :=
   {|
     ot_Type := ot_Type A + ot_Type B;
-    ot_R := sumR A B
+    ot_R := sumR (ot_R A) (ot_R B)
   |}.
 Next Obligation.
   constructor.
@@ -274,7 +274,7 @@ Class OTLiftInv AU R AO :=
   {
     otLiftInv_Lift :> OTLift AU R AO;
     ot_unlift : ot_Type AO -> AU;
-    ot_unlift_Proper : Proper (AO ==> R) ot_unlift;
+    ot_unlift_Proper : Proper (ot_R AO ==> R) ot_unlift;
     (* FIXME: these don't work for functions, since R could be non-transitive...
     ot_lift_iso1 : forall au prp, R (ot_unlift (ot_lift au prp)) au;
     ot_lift_iso2 : forall au prp, R au (ot_unlift (ot_lift au prp));
@@ -291,9 +291,9 @@ Arguments OTLiftInv AU%type R%signature AO.
 
 (* Any ordered type can be lifted to itself *)
 (* FIXME: are these what we want...? *)
-Program Instance OTLift_any_OType A : OTLift (ot_Type A) A A :=
+Program Instance OTLift_any_OType A : OTLift (ot_Type A) (ot_R A) A :=
   {| ot_lift := fun a _ => a; |}.
-Program Instance OTLiftInv_any_OType A : OTLiftInv (ot_Type A) A A :=
+Program Instance OTLiftInv_any_OType A : OTLiftInv (ot_Type A) (ot_R A) A :=
   {| ot_unlift := fun a => a; |}.
 Next Obligation.
   intros a1 a2 Ra; assumption.
@@ -454,19 +454,20 @@ Arguments mkOTerm {AU%type} {R%signature} {AO H} trm {prp}.
  ***)
 
 (* Proper instance for fst *)
-Instance Proper_fst A B : Proper (OTpair A B ==> A) fst.
+Instance Proper_fst A B : Proper (ot_R (OTpair A B) ==> ot_R A) fst.
 Proof.
   intros p1 p2 Rp; destruct Rp. assumption.
 Qed.
 
 (* Proper instance for snd *)
-Instance Proper_snd A B : Proper (OTpair A B ==> B) snd.
+Instance Proper_snd A B : Proper (ot_R (OTpair A B) ==> ot_R B) snd.
 Proof.
   intros p1 p2 Rp; destruct Rp. assumption.
 Qed.
 
 (* Proper instance for pair *)
-Instance Proper_pair (A B:OType) : Proper (A ==> B ==> OTpair A B) pair.
+Instance Proper_pair (A B:OType) :
+  Proper (ot_R A ==> ot_R B ==> ot_R (OTpair A B)) pair.
 Proof.
   intros a1 a2 Ra b1 b2 Rb; split; assumption.
 Qed.
@@ -482,16 +483,20 @@ Import OTypeNotations.
 Definition ex1 : ot_Type (OTProp -o> OTProp) := mkOTerm (fun p => p).
 Print ex1.
 
-Goal (OTLift (ot_Type (OTProp -o> OTProp)) (OTProp -o> OTProp) (OTProp -o> OTProp)).
+Goal (OTLift (Prop -> Prop)
+             (ot_R OTProp ==> ot_R OTProp)
+             (OTProp -o> OTProp)).
   auto with typeclass_instances.
 Qed.
 
-Goal (OTLift (ot_Type (OTProp -o> OTProp -o> OTProp))
-             (OTProp -o> OTProp -o> OTProp) (OTProp -o> OTProp -o> OTProp)).
+Goal (OTLift (Prop -> Prop -> Prop)
+             (ot_R OTProp ==> ot_R OTProp ==> ot_R OTProp)
+             (OTProp -o> OTProp -o> OTProp)).
   auto with typeclass_instances.
 Qed.
 
-Goal (ProperH (OTProp ==> OTProp ==> OTProp) (fun p1 p2 => p1) (fun p1 p2 => p1)).
+Goal (ProperH (ot_R OTProp ==> ot_R OTProp ==> ot_R OTProp)
+              (fun p1 p2 => p1) (fun p1 p2 => p1)).
   auto with typeclass_instances.
 Qed.
 
@@ -502,7 +507,7 @@ Goal ({R:_ & OTLift (ot_Type OTProp -> ot_Type OTProp -> ot_Type OTProp)
 Qed.
 
 Goal ({R:_
-         & OTLift (forall (_ : ot_Type OTProp) (_ : ot_Type OTProp), ot_Type OTProp)
+         & OTLift (OTProp -> OTProp -> OTProp)
                   R (OTProp -o> OTProp -o> OTProp)
          & ProperH R (fun p1 p2 => p1) (fun p1 p2 => p1)
           }).
@@ -512,15 +517,15 @@ Goal ({R:_
 Qed.
 
 
-Definition ex2 : ot_Type (OTProp -o> OTProp -o> OTProp) :=
+Definition ex2 : OTProp -o> OTProp -o> OTProp :=
   mkOTerm (R:=_ ==> _ ==> _) (fun p1 p2 => p1).
 Eval compute in (ot_unlift ex2 : Prop -> Prop -> Prop).
 
-Definition ex3 {A B} : ot_Type (A *o* B -o> A) :=
+Definition ex3 {A B} : A *o* B -o> A :=
   mkOTerm (R:= _ ==> _) fst.
 Eval compute in (ot_unlift (@ex3 OTProp OTProp) : Prop * Prop -> Prop).
 
-Definition ex4 {A B} : ot_Type (A *o* B -o> B *o* A) :=
+Definition ex4 {A B} : A *o* B -o> B *o* A :=
   mkOTerm (R:= _ ==> _) (fun p => (snd p, fst p)).
 Eval compute in (ot_unlift (@ex4 OTProp OTProp) : Prop * Prop -> Prop * Prop).
 
