@@ -235,7 +235,7 @@ dependent version of OTContext, below. *)
  *** Notations for Ordered Types
  ***)
 
-Module OTypeNotations.
+Module OTNotations.
 
   Notation "A '-o>' B" :=
     (OTarrow A B) (right associativity, at level 99).
@@ -254,7 +254,7 @@ Module OTypeNotations.
   Notation "x @o@ y" :=
     (pfun_app x y) (left associativity, at level 20).
 
-End OTypeNotations.
+End OTNotations.
 
 
 (***
@@ -278,6 +278,9 @@ Program Instance OTEnrich_refl (A:OType) : OTEnrich A (ot_R A) :=
     ot_lift_Proper := _;
     ot_unlift := fun a => a;
   }.
+
+Hint Extern 0 (OTEnrich _ _) => apply OTEnrich_refl : typeclass_instances.
+
 
 Program Instance OTEnrich_fun (A:OType) B BU RB `{OTEnrich B BU RB} :
   OTEnrich (OTarrow A B) (ot_R A ==> RB) :=
@@ -366,13 +369,28 @@ Proof.
   intros p1 p2 Rp; destruct Rp; assumption.
 Defined.
 
+Instance OTHasType_snd A B :
+  OTHasType (OTarrow (OTpair A B) B) (ot_R (OTpair A B) ==> ot_R B) snd snd.
+Proof.
+  constructor. auto with typeclass_instances.
+  intros p1 p2 Rp; destruct Rp; assumption.
+Defined.
+
+Instance OTHasType_pair A B :
+  OTHasType (OTarrow A (OTarrow B (OTpair A B)))
+            (ot_R A ==> ot_R B ==> ot_R (OTpair A B)) pair pair.
+Proof.
+  constructor. auto with typeclass_instances.
+  intros a1 a2 Ra b1 b2 Rb; split; assumption.
+Defined.
+
 
 (***
  *** Examples of Ordered Terms
  ***)
 
 Module OTExamples.
-Import OTypeNotations.
+Import OTNotations.
 
 Definition ex1 := mkOTerm (OTProp -o> OTProp) (fun p => p).
 Eval compute in (ot_unlift ex1 : OTProp -> OTProp).
@@ -384,8 +402,46 @@ Definition ex3 {A} :=
   mkOTerm (A -o> A -o> A -o> A -o> A) (fun (p1 p2 p3 p4:A) => p1).
 Eval simpl in (fun A:OType => ot_unlift ex3 : A -> A  -> A -> A -> A).
 
-Definition ex4 {A B} := mkOTerm (A *o* B -o> A) (fun p => fst p).
+Definition ex4 {A B} : (A *o* B -o> A) := mkOTerm _ (fun p => fst p).
 Eval simpl in (fun (A B:OType) => ot_unlift ex4 : A * B -> A).
+
+Typeclasses eauto := debug.
+
+(*
+Hint Extern 3 (OTHasType _ _ (_ _) (_ _)) =>
+first [ eapply OTHasType_pfun_app | eapply OTHasType_app ] : typeclass_instances.
+ *)
+
+Set Printing All.
+Goal (forall A B,
+         { R:_ & OTHasType (A *o* B -o> B *o* A) R
+                           (fun p : A*B => (snd p, fst p))
+                           (fun p => (snd p, fst p))}).
+  intros; econstructor.
+  auto with typeclass_instances.
+  apply OTHasType_lambda; eauto with typeclass_instances.
+  intros.
+  eapply OTHasType_app; eauto with typeclass_instances.
+  eapply OTHasType_app; eauto with typeclass_instances.
+  Print OTHasType_pair.
+  lazymatch goal with
+  | |- OTHasType _ _ (?f _) (_ _) => idtac f
+  end.
+  eauto with typeclass_instances.
+  
+  eapply @OTHasType_app.
+  apply OTHasType_pair.
+  eapply OTHasType_app; eauto with typeclass_instances.
+  apply OTHasType_snd.
+  eapply OTHasType_app; eauto with typeclass_instances.
+  apply OTHasType_fst.
+Qed.
+
+Definition ex5 {A B} : A *o* B -o> B *o* A :=
+  mkOTerm _ (fun p => (snd p, fst p)).
+
+Definition ex6 {A B C} : A *o* B *o* C -o> C *o* A :=
+  mkOTerm _ (fun triple => (snd triple, fst (fst triple))).
 
 End OTExamples.
 
