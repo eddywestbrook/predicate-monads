@@ -1,6 +1,7 @@
 -Q theories PredMonad
 
-./theories/Ordered3/OrderedType.v
+./theories/Ordered4/OrderedType.v
+./theories/Ordered4/Monad.v
 
 #./theories/Ordered/OrderedType.v
 #./theories/Ordered/Monad.v
