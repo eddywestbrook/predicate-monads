@@ -261,6 +261,20 @@ End OTNotations.
  *** Building Proper Functions
  ***)
 
+Class OTEnrichEq (A:OType) AU : Prop :=
+  ot_enrich_eq : AU = ot_Type A.
+
+Instance OTEnrichEq_refl (A:OType) : OTEnrichEq A A := eq_refl.
+
+Instance OTEnrichEq_prod A B AU BU `{OTEnrichEq A AU} `{OTEnrichEq B BU} :
+  OTEnrichEq (OTpair A B) (AU * BU).
+Proof.
+  rewrite (ot_enrich_eq (A:=A) (AU:=AU)).
+  rewrite (ot_enrich_eq (A:=B) (AU:=BU)).
+  reflexivity.
+Qed.
+
+
 Class OTEnrich (A:OType) {AU} (RA:relation AU) : Type :=
   {
     ot_lift : forall a, Proper RA a -> A;
@@ -272,20 +286,18 @@ Class OTEnrich (A:OType) {AU} (RA:relation AU) : Type :=
 
 Arguments OTEnrich A {AU%type} RA%signature.
 
-Program Instance OTEnrich_refl (A:OType) : OTEnrich A (ot_R A) :=
+Program Instance OTEnrich_refl A : OTEnrich A (ot_R A) :=
   {
     ot_lift := fun a _ => a;
     ot_lift_Proper := _;
     ot_unlift := fun a => a;
   }.
 
-Hint Extern 0 (OTEnrich _ _) => apply OTEnrich_refl : typeclass_instances.
-
-
-Program Instance OTEnrich_fun (A:OType) B BU RB `{OTEnrich B BU RB} :
+Program Instance OTEnrich_fun A B BU RB `{OTEnrich B BU RB} :
   OTEnrich (OTarrow A B) (ot_R A ==> RB) :=
   {
-    ot_lift := fun f prp => Build_Pfun A B (fun a => ot_lift (f a) _) _;
+    ot_lift := fun f prp =>
+                 Build_Pfun A B (fun a => ot_lift (f a) _) _;
     ot_lift_Proper := _;
     ot_unlift := fun pfun a => ot_unlift (pfun_app pfun a);
   }.
@@ -300,6 +312,38 @@ Next Obligation.
 Qed.
 
 
+(* Tactic to use OTEnrichEq to unify A AU before applying OTEnrich_refl *)
+Ltac apply_OTEnrich_refl :=
+  lazymatch goal with
+  | |- @OTEnrich ?A ?AU ?R =>
+    assert (OTEnrichEq A AU); [ solve [ eauto with typeclass_instances ]
+                              | apply OTEnrich_refl ]
+  end.
+
+Hint Extern 0 (OTEnrich _ _) => apply_OTEnrich_refl : typeclass_instances.
+
+(* Tactic to use OTEnrichEq to unify A AU before applying OTEnrich_fun *)
+Ltac apply_OTEnrich_fun :=
+  lazymatch goal with
+  | |- @OTEnrich (OTarrow ?A _) (?AU -> _) _ =>
+    assert (OTEnrichEq A AU); [ solve [ eauto with typeclass_instances ]
+                              | apply (OTEnrich_fun A) ]
+  end.
+
+Hint Extern 0 (@OTEnrich (OTarrow _ _) (_ -> _) _) =>
+apply_OTEnrich_fun : typeclass_instances.
+
+
+(*
+Ltac apply_OTEnrich_fun :=
+  lazymatch goal with
+  | |- OTEnrich (OTarrow ?A ?B) ?RA => apply (OTEnrich_fun A B)
+  end.
+
+Hint Extern 0 (@OTEnrich _ _ _) => apply OTEnrich_refl : typeclass_instances.
+Hint Extern 1 (OTEnrich (OTarrow _ _) _) => apply_OTEnrich_fun.
+ *)
+
 Class OTHasType (A:OType) {AU} (R:relation AU) (x y:AU) : Type :=
   {
     ot_wf_type : OTEnrich A R;
@@ -308,11 +352,11 @@ Class OTHasType (A:OType) {AU} (R:relation AU) (x y:AU) : Type :=
 
 Arguments OTHasType A {AU%type} R%signature x y.
 
-Instance OTHasType_lambda (A B:OType) BU RB `{OTEnrich B BU RB}
+Definition OTHasType_lambda (A B:OType) BU RB `{OTEnrich B BU RB}
          (fl fr:A -> BU)
          (pf: forall xl xr (pf:OTHasType A (ot_R A) xl xr),
              OTHasType B RB (fl xl) (fr xr)) :
-  OTHasType (OTarrow A B) (ot_R A ==> RB) fl fr | 4.
+  OTHasType (OTarrow A B) (ot_R A ==> RB) fl fr.
 Proof.
   constructor.
   auto with typeclass_instances.
@@ -362,28 +406,52 @@ Program Definition mkOTerm2 A {AU RA BU RB} (x:AU -> BU)
  *** OT Typing Rules for Common Operations
  ***)
 
-Instance OTHasType_fst A B :
-  OTHasType (OTarrow (OTpair A B) A) (ot_R (OTpair A B) ==> ot_R A) fst fst.
+Instance OTHasType_Proper A AU R (x:AU)
+           {ote:OTEnrich A R} {prp:Proper R x} :
+  OTHasType A R x x.
+  constructor; assumption.
+Qed.
+
+Instance Proper_fst A B : Proper (ot_R (OTpair A B) ==> ot_R A) fst.
 Proof.
-  constructor. auto with typeclass_instances.
+  intros p1 p2 Rp; destruct Rp; assumption.
+Qed.
+
+Instance Proper_snd A B : Proper (ot_R (OTpair A B) ==> ot_R B) snd.
+Proof.
+  intros p1 p2 Rp; destruct Rp; assumption.
+Qed.
+
+Instance Proper_pair A B : Proper (ot_R A ==> ot_R B ==> ot_R (OTpair A B)) pair.
+Proof.
+  intros a1 a2 Ra b1 b2 Rb; split; assumption.
+Qed.
+
+(*
+Instance OTHasType_fst A B :
+  OTHasType (OTarrow (OTpair A B) A) (pairR (ot_R A) (ot_R B) ==> ot_R A) fst fst.
+Proof.
+  constructor.
+  apply OTEnrich_fun; eauto with typeclass_instances.
   intros p1 p2 Rp; destruct Rp; assumption.
 Defined.
 
 Instance OTHasType_snd A B :
-  OTHasType (OTarrow (OTpair A B) B) (ot_R (OTpair A B) ==> ot_R B) snd snd.
+  OTHasType (OTarrow (OTpair A B) B) (pairR (ot_R A) (ot_R B) ==> ot_R B) snd snd.
 Proof.
-  constructor. auto with typeclass_instances.
+  constructor.
+  apply OTEnrich_fun; eauto with typeclass_instances.
   intros p1 p2 Rp; destruct Rp; assumption.
 Defined.
 
 Instance OTHasType_pair A B :
   OTHasType (OTarrow A (OTarrow B (OTpair A B)))
-            (ot_R A ==> ot_R B ==> ot_R (OTpair A B)) pair pair.
+            (ot_R A ==> ot_R B ==> pairR (ot_R A) (ot_R B)) pair pair.
 Proof.
   constructor. auto with typeclass_instances.
   intros a1 a2 Ra b1 b2 Rb; split; assumption.
 Defined.
-
+*)
 
 (***
  *** Examples of Ordered Terms
@@ -402,27 +470,47 @@ Definition ex3 {A} :=
   mkOTerm (A -o> A -o> A -o> A -o> A) (fun (p1 p2 p3 p4:A) => p1).
 Eval simpl in (fun A:OType => ot_unlift ex3 : A -> A  -> A -> A -> A).
 
-Definition ex4 {A B} : (A *o* B -o> A) := mkOTerm _ (fun p => fst p).
+Typeclasses eauto := debug.
+Set Printing All.
+Definition ex4 {A B} : (A *o* B -o> A) := mkOTerm _ (fun p : A * _ => fst p).
 Eval simpl in (fun (A B:OType) => ot_unlift ex4 : A * B -> A).
 
-Typeclasses eauto := debug.
+
+Goal (forall A B,
+         { T : _ &
+         { R : _ &
+               (@OTEnrich (OTarrow (OTpair A B) A)
+                       (forall _ : prod (ot_Type A) T, ot_Type A) 
+                       R)}}).
+  intros; econstructor; econstructor.
+  auto with typeclass_instances.
+Qed.
 
 (*
 Hint Extern 3 (OTHasType _ _ (_ _) (_ _)) =>
 first [ eapply OTHasType_pfun_app | eapply OTHasType_app ] : typeclass_instances.
- *)
+*)
 
+Definition blah {A B:OType} {R}
+           `{OTHasType (A *o* B -o> B *o* A) _ R
+                       (fun p : A * B => (snd p, fst p))
+                       (fun p => (snd p, fst p))} : Prop := True.
+Definition blah2 {A B} : Prop := blah (A:=A) (B:=B).
+
+(*
 Set Printing All.
 Goal (forall A B,
          { R:_ & OTHasType (A *o* B -o> B *o* A) R
-                           (fun p : A*B => (snd p, fst p))
+                           (fun p : A * B => (snd p, fst p))
                            (fun p => (snd p, fst p))}).
   intros; econstructor.
-  auto with typeclass_instances.
   apply OTHasType_lambda; eauto with typeclass_instances.
   intros.
   eapply OTHasType_app; eauto with typeclass_instances.
   eapply OTHasType_app; eauto with typeclass_instances.
+  simpl. eauto with typeclass_instances.
+  eapply OTHasType_app; eauto with typeclass_instances.
+  simpl. eauto with typeclass_instances.
   Print OTHasType_pair.
   lazymatch goal with
   | |- OTHasType _ _ (?f _) (_ _) => idtac f
@@ -436,12 +524,15 @@ Goal (forall A B,
   eapply OTHasType_app; eauto with typeclass_instances.
   apply OTHasType_fst.
 Qed.
+ *)
 
 Definition ex5 {A B} : A *o* B -o> B *o* A :=
-  mkOTerm _ (fun p => (snd p, fst p)).
+  mkOTerm _ (fun p: A * B => (snd p, fst p)).
+
+Set Printing All.
 
 Definition ex6 {A B C} : A *o* B *o* C -o> C *o* A :=
-  mkOTerm _ (fun triple => (snd triple, fst (fst triple))).
+  mkOTerm _ (fun triple : (A * B) * C => (snd triple, fst (fst triple))).
 
 End OTExamples.
 
