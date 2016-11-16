@@ -406,6 +406,7 @@ Program Definition mkOTerm2 A {AU RA BU RB} (x:AU -> BU)
  *** OT Typing Rules for Common Operations
  ***)
 
+(*
 Instance OTHasType_Proper A AU R (x:AU)
            {ote:OTEnrich A R} {prp:Proper R x} :
   OTHasType A R x x.
@@ -426,32 +427,42 @@ Instance Proper_pair A B : Proper (ot_R A ==> ot_R B ==> ot_R (OTpair A B)) pair
 Proof.
   intros a1 a2 Ra b1 b2 Rb; split; assumption.
 Qed.
+*)
 
-(*
+(* NOTE: this is not an instance because it is used as a helper to build
+instances of OTHasType *)
+Definition OTHasType_Proper `{OTEnrich} (x:AU) :
+  Proper RA x -> OTHasType A RA x x.
+  intros; constructor; assumption.
+Qed.
+
 Instance OTHasType_fst A B :
-  OTHasType (OTarrow (OTpair A B) A) (pairR (ot_R A) (ot_R B) ==> ot_R A) fst fst.
+  OTHasType (OTarrow (OTpair A B) A) (ot_R (OTpair A B) ==> ot_R A) fst fst.
 Proof.
-  constructor.
-  apply OTEnrich_fun; eauto with typeclass_instances.
+  apply OTHasType_Proper.
   intros p1 p2 Rp; destruct Rp; assumption.
 Defined.
 
 Instance OTHasType_snd A B :
-  OTHasType (OTarrow (OTpair A B) B) (pairR (ot_R A) (ot_R B) ==> ot_R B) snd snd.
+  OTHasType (OTarrow (OTpair A B) B) (ot_R (OTpair A B) ==> ot_R B) snd snd.
 Proof.
-  constructor.
-  apply OTEnrich_fun; eauto with typeclass_instances.
+  apply OTHasType_Proper.
   intros p1 p2 Rp; destruct Rp; assumption.
 Defined.
 
 Instance OTHasType_pair A B :
   OTHasType (OTarrow A (OTarrow B (OTpair A B)))
-            (ot_R A ==> ot_R B ==> pairR (ot_R A) (ot_R B)) pair pair.
+            (ot_R A ==> ot_R B ==> ot_R (OTpair A B)) pair pair.
 Proof.
-  constructor. auto with typeclass_instances.
+  apply OTHasType_Proper.
   intros a1 a2 Ra b1 b2 Rb; split; assumption.
 Defined.
-*)
+
+Hint Extern 0 (OTHasType _ _ fst fst) => apply OTHasType_fst : typeclass_instances.
+Hint Extern 0 (OTHasType _ _ snd snd) => apply OTHasType_snd : typeclass_instances.
+Hint Extern 0 (OTHasType _ _ pair pair) => apply OTHasType_pair : typeclass_instances.
+
+
 
 (***
  *** Examples of Ordered Terms
