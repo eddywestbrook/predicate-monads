@@ -58,7 +58,7 @@ Notation "'do' x <- m1 ; m2" :=
 
 Definition Identity `(A:OType) : OType (ot_Type A) (ot_R A) := A.
 
-Program Instance IdMonad_MonadOps :
+Instance IdMonad_MonadOps :
   MonadOps (fun `(A:OType) => T) (fun `(A:OType) => R) (@Identity) :=
   { returnM := fun `(A:OType) => mkOTerm (A -o> Identity A) (fun x => x);
     bindM := fun `(A:OType) `(B:OType) => mkOTerm _ (fun m f => f @o@ m) }.
