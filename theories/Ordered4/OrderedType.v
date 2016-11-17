@@ -278,7 +278,7 @@ Arguments OTHasType {_ _} A {AU%type} RA%signature x y.
 (* NOTE: We only want this to apply to terms that are syntactically lambdas, so
 we use an Extern hint, below. *)
 Definition OTHasType_lambda `(A:OType) `(B:OType) BU RB `{@OTEnrich _ _ B BU RB}
-         (fl fr:A -> BU)
+         (fl fr:T -> BU)
          (pf: forall xl xr (pf:OTHasType A (ot_R A) xl xr),
              OTHasType B RB (fl xl) (fr xr)) :
   OTHasType (OTarrow A B) (R ==> RB) fl fr.
@@ -317,6 +317,20 @@ Proof.
   apply (ot_wf_term (OTHasType:=H0)).
 Defined.
 
+
+(* NOTE: this is not an instance because it is not syntax-driven, like our other
+rules for OTHasType. Instead, this definition is used as a helper to build
+other instances of OTHasType. *)
+Definition OTHasType_Proper `{OTEnrich} (x:AU) :
+  Proper RA x -> OTHasType A RA x x.
+  intros; constructor; assumption.
+Qed.
+
+Instance OTHasType_refl `(A:OType) (x : T) : OTHasType A R x x.
+Proof.
+  apply OTHasType_Proper. unfold Proper. reflexivity.
+Qed.
+
 Program Definition mkOTerm `(A:OType) {AU RA} (x:AU)
         `{@OTHasType _ _ A _ RA x x} : A :=
   ot_lift (OTEnrich:=ot_wf_type) x ot_wf_term.
@@ -350,13 +364,6 @@ Proof.
   intros a1 a2 Ra b1 b2 Rb; split; assumption.
 Qed.
 *)
-
-(* NOTE: this is not an instance because it is used as a helper to build
-instances of OTHasType *)
-Definition OTHasType_Proper `{OTEnrich} (x:AU) :
-  Proper RA x -> OTHasType A RA x x.
-  intros; constructor; assumption.
-Qed.
 
 Instance OTHasType_fst `(A:OType) `(B:OType) :
   OTHasType (OTarrow (OTpair A B) A) (pairR R R0 ==> R) fst fst.
