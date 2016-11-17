@@ -200,6 +200,22 @@ dependent version of OTContext, below. *)
 
 
 (***
+ *** Ordered Type Functions
+ ***)
+
+Class OTypeF (TF: forall `(A:OType), Type)
+      (RF: forall `(A:OType), relation (TF A)) : Prop :=
+  otypef_otype : forall `(A:OType), OType (TF A) (RF A).
+
+Definition OTypeF_app `(F:OTypeF) `(A:OType) : OType (TF _ _ A) (RF _ _ A) :=
+  otypef_otype A.
+
+Instance OType_OTypeF_app `(F:OTypeF) `(A:OType) :
+  OType (ot_Type (OTypeF_app F A)) (RF _ _ A) :=
+  otypef_otype A.
+
+
+(***
  *** Notations for Ordered Types
  ***)
 
@@ -221,6 +237,9 @@ Module OTNotations.
 
   Notation "x @o@ y" :=
     (pfun_app x y) (left associativity, at level 20).
+
+  Notation "F @t@ A" :=
+    (OTypeF_app F A) (left associativity, at level 20).
 
 End OTNotations.
 
@@ -279,7 +298,7 @@ Arguments OTHasType {_ _} A {AU%type} RA%signature x y.
 we use an Extern hint, below. *)
 Definition OTHasType_lambda `(A:OType) `(B:OType) BU RB `{@OTEnrich _ _ B BU RB}
          (fl fr:T -> BU)
-         (pf: forall xl xr (pf:OTHasType A (ot_R A) xl xr),
+         (pf: forall xl xr (pf:OTHasType A R xl xr),
              OTHasType B RB (fl xl) (fr xr)) :
   OTHasType (OTarrow A B) (R ==> RB) fl fr.
 Proof.

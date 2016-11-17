@@ -9,21 +9,20 @@ Import OTNotations.
  *** The monad typeclass
  ***)
 
-Class MonadOps (MF: forall `(A:OType), Type)
-      (MR: forall `(A:OType), relation (MF A))
-      (M: forall `(A:OType), OType (MF A) (MR A)) : Type :=
-  { returnM : forall `{A:OType}, A -o> M A;
-    bindM : forall `{A:OType} `{B:OType}, M A -o> (A -o> M B) -o> M B }.
+Class MonadOps `(M: OTypeF) : Type :=
+  { returnM : forall `{A:OType}, A -o> M @t@ A;
+    bindM : forall `{A:OType} `{B:OType},
+        M @t@ A -o> (A -o> M @t@ B) -o> M @t@ B }.
 
 Instance OTHasType_returnM `(MonadOps) `(A:OType) :
-  OTHasType (A -o> M _ _ A) (OTarrow_R A _) returnM returnM.
+  OTHasType (A -o> M @t@ A) (OTarrow_R A _) returnM returnM.
 Proof.
   apply OTHasType_Proper. unfold Proper. reflexivity.
 Defined.
 
 Instance OTHasType_bindM `(MonadOps) `(A:OType) `(B:OType) :
-  OTHasType (M _ _ A -o> (A -o> M _ _ B) -o> M _ _ B)
-            (OTarrow_R (M _ _ A) ((A -o> M _ _ B) -o> M _ _ B))
+  OTHasType (M @t@ A -o> (A -o> M @t@ B) -o> M @t@ B)
+            (OTarrow_R (M @t@ A) ((A -o> M @t@ B) -o> M @t@ B))
             bindM bindM.
 Proof.
   apply OTHasType_Proper. unfold Proper. reflexivity.
@@ -32,16 +31,16 @@ Defined.
 Class Monad `(MonadOps) : Prop :=
   {
     monad_return_bind :
-      forall `(A:OType) `(B:OType) (f: A -o> M _ _ B) x,
+      forall `(A:OType) `(B:OType) (f: A -o> M @t@ B) x,
         bindM @o@ (returnM @o@ x) @o@ f =o= f @o@ x;
 
     monad_bind_return :
-      forall `(A:OType) (m: M _ _ A),
+      forall `(A:OType) (m: M @t@ A),
         bindM @o@ m @o@ returnM =o= m;
 
     monad_assoc :
       forall `(A:OType) `(B:OType) `(C:OType)
-             m (f: A -o> M _ _ B) (g: B -o> M _ _ C),
+             m (f: A -o> M @t@ B) (g: B -o> M @t@ C),
         bindM @o@ (bindM @o@ m @o@ f) @o@ g
         =o=
         bindM @o@ m @o@ (mkOTerm _ (fun x => bindM @o@ (f @o@ x) @o@ g));
@@ -56,12 +55,14 @@ Notation "'do' x <- m1 ; m2" :=
  *** The Identity Monad
  ***)
 
-Definition Identity `(A:OType) : OType (ot_Type A) (ot_R A) := A.
+Instance Identity : OTypeF (fun `(A:OType) => T) (fun `(A:OType) => R) :=
+  fun `(A:OType) => A.
 
-Instance IdMonad_MonadOps :
-  MonadOps (fun `(A:OType) => T) (fun `(A:OType) => R) (@Identity) :=
-  { returnM := fun `(A:OType) => mkOTerm (A -o> Identity A) (fun x => x);
-    bindM := fun `(A:OType) `(B:OType) => mkOTerm _ (fun m f => f @o@ m) }.
+Program Instance IdMonad_MonadOps : MonadOps Identity :=
+  { returnM := fun `(A:OType) => mkOTerm (A -o> Identity @t@ A) (fun x => x);
+    bindM := fun `(A:OType) `(B:OType) =>
+               mkOTerm (Identity @t@ A -o> (A -o> Identity @t@ B) -o> Identity @t@ B)
+                       (fun m f => f @o@ m) }.
 
 Instance IdMonad : Monad IdMonad_MonadOps.
 Proof.
