@@ -280,10 +280,8 @@ Module OTNotations.
   Notation "x @o@ y" :=
     (pfun_app x y) (left associativity, at level 20).
 
-  (*
   Notation "F @t@ A" :=
-    (OTypeF_app F A) (left associativity, at level 20).
-   *)
+    (otypef_app F A) (left associativity, at level 20).
 
 End OTNotations.
 
