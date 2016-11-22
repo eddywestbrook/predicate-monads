@@ -72,10 +72,14 @@ Qed.
 we don't make this an instance, because we don't want proof search finding it
 all the time... *)
 Definition OTdiscrete T : OType T := eq.
-Instance Valid_OTdiscrete T : ValidOType (OTdiscrete T).
+
+Lemma Valid_OTdiscrete T : ValidOType (OTdiscrete T).
 Proof.
   constructor; compute; typeclasses eauto.
 Qed.
+
+(* Tactic to apply Valid_OTdiscrete when we already have an OTdiscrete type *)
+Hint Extern 1 (ValidOType (OTdiscrete _)) => apply Valid_OTdiscrete.
 
 (* The only ordered type over unit is the discrete one *)
 Instance OTunit : OType unit := OTdiscrete unit.
@@ -92,13 +96,18 @@ Qed.
 (* NOTE: we don't want this to be an instance, since applying it in proof search
 leads to infinite regress... *)
 Definition OTflip `(A:OType) : OType T := Basics.flip A.
-Instance Valid_OTflip `(A:OType) (valid:ValidOType A) : ValidOType (OTflip A).
+Definition Valid_OTflip `(A:OType) (valid:ValidOType A) : ValidOType (OTflip A).
 Proof.
   constructor; unfold OTflip, ot_R; fold (ot_R A). typeclasses eauto.
 Qed.
 
+(* Tactic to apply Valid_OTflip when we already have an OTflip type *)
+Hint Extern 1 (ValidOType (OTflip _)) => apply Valid_OTflip.
+
 (* Avoid infinite regress from repeatedly applying Valid_OTflip *)
+(*
 Hint Cut [ !*; Valid_OTflip; Valid_OTflip ] : typeclass_instances.
+*)
 
 (* The non-dependent product ordered type, where pairs are related pointwise *)
 Instance OTpair {TA} (A:OType TA) {TB} (B:OType TB) : OType (TA*TB) :=
@@ -243,6 +252,8 @@ Class OTypeF (TF: forall `(A:OType), Type) : Type :=
   otypef_app : forall `(A:OType), OType (TF A).
 
 Arguments otypef_app [TF] _ [T] A _ _.
+
+Instance OType_OTypeF_app `(F:OTypeF) `(A:OType) : OType (TF _ A) := otypef_app _ A.
 
 Class ValidOTypeF `(F:OTypeF) : Prop :=
   {
