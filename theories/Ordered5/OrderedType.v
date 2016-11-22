@@ -42,7 +42,7 @@ Proof. auto with typeclass_instances. Qed.
  *)
 
 Instance PreOrder_ot_R `(valid:ValidOType) : PreOrder (ot_R A).
-Proof. auto with typeclass_instances. Qed.
+Proof. typeclasses eauto. Qed.
 
 (* The equivalence relation for an OrderedType *)
 Definition ot_equiv `(A:OType) : relation T :=
@@ -65,7 +65,7 @@ Qed.
 Instance OTProp : OType Prop := Basics.impl.
 Instance Valid_OTProp : ValidOType OTProp.
 Proof.
-  constructor; constructor; auto with typeclass_instances.
+  constructor; constructor; typeclasses eauto.
 Qed.
 
 (* The discrete ordered type, where things are only related to themselves. NOTE:
@@ -74,7 +74,7 @@ all the time... *)
 Definition OTdiscrete T : OType T := eq.
 Instance Valid_OTdiscrete T : ValidOType (OTdiscrete T).
 Proof.
-  constructor; compute; auto with typeclass_instances.
+  constructor; compute; typeclasses eauto.
 Qed.
 
 (* The only ordered type over unit is the discrete one *)
@@ -85,7 +85,7 @@ Instance Valid_OTunit : ValidOType OTunit := Valid_OTdiscrete unit.
 Instance OTnat : OType nat := le.
 Instance Valid_OTnat : ValidOType OTnat.
 Proof.
-  constructor; auto with typeclass_instances.
+  constructor; typeclasses eauto.
 Qed.
 
 (* Flip the ordering of an OType *)
@@ -94,8 +94,7 @@ leads to infinite regress... *)
 Definition OTflip `(A:OType) : OType T := Basics.flip A.
 Instance Valid_OTflip `(A:OType) (valid:ValidOType A) : ValidOType (OTflip A).
 Proof.
-  constructor; unfold OTflip, ot_R; fold (ot_R A).
-  auto with typeclass_instances.
+  constructor; unfold OTflip, ot_R; fold (ot_R A). typeclasses eauto.
 Qed.
 
 (* Avoid infinite regress from repeatedly applying Valid_OTflip *)
@@ -240,19 +239,22 @@ dependent version of OTContext, below. *)
  *** Ordered Type Functions
  ***)
 
-(* FIXME HERE: I don't think we need these any more... *)
-(*
-Class OTypeF (TF: forall `(A:OType), Type)
-      (RF: forall `(A:OType), relation (TF A)) : Prop :=
-  otypef_otype : forall `(A:OType), OType (TF A) (RF A).
+Class OTypeF (TF: forall `(A:OType), Type) : Type :=
+  otypef_app : forall `(A:OType), OType (TF A).
 
-Definition OTypeF_app `(F:OTypeF) `(A:OType) : OType (TF _ _ A) (RF _ _ A) :=
-  otypef_otype A.
+Arguments otypef_app [TF] _ [T] A _ _.
 
-Instance OType_OTypeF_app `(F:OTypeF) `(A:OType) :
-  OType (ot_Type (OTypeF_app F A)) (RF _ _ A) :=
-  otypef_otype A.
- *)
+Class ValidOTypeF `(F:OTypeF) : Prop :=
+  {
+    otypef_app_PreOrder :>
+      forall `(A:OType) {_:ValidOType A}, PreOrder (ot_R (otypef_app F A))
+  }.
+
+Instance ValidOType_OTypeF_app `(ValidOTypeF) `(ValidOType) :
+  ValidOType (otypef_app F A).
+Proof.
+  constructor. typeclasses eauto.
+Qed.
 
 
 (***
@@ -360,9 +362,9 @@ Definition OTHasType_lambda `(A:OType) `(B:OType)
   OTHasType (OTarrow A B) (ot_R A ==> RBU) fl fr.
 Proof.
   constructor.
-  auto with typeclass_instances.
+  typeclasses eauto.
   intros xl xr Rx. apply pf. constructor.
-  auto with typeclass_instances.
+  typeclasses eauto.
   assumption.
 Defined.
 
@@ -384,7 +386,7 @@ Instance OTHasType_pfun_app `(A:OType) `(B:OType) (fl fr:OTarrow A B) argl argr
  : OTHasType B (ot_R B) (pfun_app fl argl) (pfun_app fr argr) | 2.
 Proof.
   constructor.
-  auto with typeclass_instances.
+  typeclasses eauto.
   apply (ot_wf_term (OTHasType:=otef)).
   apply (ot_wf_term (OTHasType:=otea)).
 Defined.
