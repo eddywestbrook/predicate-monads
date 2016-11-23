@@ -14,15 +14,15 @@ Import ListNotations.
  ***)
 
 Class OType (T:Type) : Type :=
-  ot_R : relation T.
-
-Arguments ot_R {_} _ _ _.
-
-Class ValidOType `(A:OType) : Prop :=
-  { ot_PreOrder :> PreOrder (ot_R A) }.
+  otype_rel : relation T.
 
 Definition ot_Type `(A:OType) : Type := T.
 Coercion ot_Type : OType >-> Sortclass.
+
+Definition ot_R `(A:OType) : relation A := otype_rel.
+
+Class ValidOType `(A:OType) : Prop :=
+  { ot_PreOrder :> PreOrder (ot_R A) }.
 
 (*
 Instance PreOrder_OType `(valid:ValidOType) : PreOrder A.
@@ -41,11 +41,13 @@ Instance Transitive_ValidOType {T} (A:relation T) (valid:ValidOType A) : Transit
 Proof. auto with typeclass_instances. Qed.
  *)
 
+(*
 Instance PreOrder_ot_R `(valid:ValidOType) : PreOrder (ot_R A).
 Proof. typeclasses eauto. Qed.
+*)
 
 (* The equivalence relation for an OrderedType *)
-Definition ot_equiv `(A:OType) : relation T :=
+Definition ot_equiv `(A:OType) : relation A :=
   fun x y => ot_R A x y /\ ot_R A y x.
 
 Instance ot_equiv_Equivalence `{ValidOType} : Equivalence (ot_equiv A).
@@ -98,11 +100,12 @@ leads to infinite regress... *)
 Definition OTflip `(A:OType) : OType T := Basics.flip A.
 Definition Valid_OTflip `(A:OType) (valid:ValidOType A) : ValidOType (OTflip A).
 Proof.
-  constructor; unfold OTflip, ot_R; fold (ot_R A). typeclasses eauto.
+  Print Hint PreOrder.
+  constructor. change (PreOrder (Basics.flip (ot_R A))). typeclasses eauto.
 Qed.
 
 (* Tactic to apply Valid_OTflip when we already have an OTflip type *)
-Hint Extern 1 (ValidOType (OTflip _)) => apply Valid_OTflip.
+Hint Extern 1 (ValidOType (OTflip _)) => apply Valid_OTflip : typeclass_instances.
 
 (* Avoid infinite regress from repeatedly applying Valid_OTflip *)
 (*
@@ -135,7 +138,7 @@ Instance OTsum {TA TB} (A:OType TA) (B:OType TB) : OType (TA+TB) :=
 Instance Valid_OTsum `(A:OType) `(B:OType)
          (vA:ValidOType A) (vB:ValidOType B) : ValidOType (OTsum A B).
 Proof.
-  repeat constructor; unfold OTsum, ot_R; fold (ot_R A); fold (ot_R B).
+  repeat constructor; unfold ot_R, otype_rel, OTsum.
   { intro s; destruct s; simpl; reflexivity. }
   { intros s1 s2 s3 R12 R23.
     destruct s1; destruct s2; destruct s3;
@@ -170,9 +173,9 @@ Program Definition OTType : OType :=
  ***)
 
 (* The type of continuous, i.e. Proper, functions between ordered types *)
-Record Pfun {TA TB} (A:OType TA) (B: OType TB) :=
+Record Pfun `(A:OType) `(B: OType) :=
   {
-    pfun_app : TA -> TB;
+    pfun_app : A -> B;
     pfun_Proper :> Proper (ot_R A ==> ot_R B) pfun_app
   }.
 
@@ -184,15 +187,14 @@ Arguments pfun_Proper [_ _ _ _] _ _ _ _.
 (* The non-dependent function ordered type *)
 Instance OTarrow `(A:OType) `(B:OType) : OType (Pfun A B) :=
   fun f g =>
-    forall a1 a2, A a1 a2 -> B (pfun_app f a1) (pfun_app g a2).
+    forall a1 a2, ot_R A a1 a2 -> ot_R B (pfun_app f a1) (pfun_app g a2).
 
 Instance Valid_OTarrow `(A:OType) `(B:OType)
   (vA:ValidOType A) (vB:ValidOType B) : ValidOType (OTarrow A B).
 Proof.
   repeat constructor.
   { intros f; apply (pfun_Proper f). }
-  { fold (ot_R A); fold (ot_R B); intros f g h Rfg Rgh a1 a2 Ra.
-    transitivity (pfun_app g a1).
+  { intros f g h Rfg Rgh a1 a2 Ra; transitivity (pfun_app g a1).
     - apply (Rfg a1 a1). reflexivity.
     - apply Rgh; assumption. }
 Qed.
