@@ -1,5 +1,3 @@
-Require Import Coq.Setoids.Setoid.
-Require Export Coq.Classes.Morphisms.
 Require Export PredMonad.Ordered5.OrderedType.
 
 Import OTNotations.
