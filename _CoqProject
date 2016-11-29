@@ -2,6 +2,7 @@
 
 ./theories/Ordered5/OrderedType.v
 ./theories/Ordered5/Monad.v
+./theories/Ordered5/MonadState.v
 
 #./theories/Ordered/OrderedType.v
 #./theories/Ordered/Monad.v

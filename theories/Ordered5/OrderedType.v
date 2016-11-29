@@ -15,6 +15,7 @@ Import ListNotations.
 
 Class OType (T:Type) : Type :=
   otype_rel : relation T.
+(* Hint Mode OType + : typeclass_instances. *)
 
 Definition ot_Type `(A:OType) : Type := T.
 Coercion ot_Type : OType >-> Sortclass.
@@ -23,6 +24,7 @@ Definition ot_R `(A:OType) : relation A := otype_rel.
 
 Class ValidOType `(A:OType) : Prop :=
   { ot_PreOrder :> PreOrder (ot_R A) }.
+Hint Mode ValidOType + - : typeclass_instances.
 
 (*
 Instance PreOrder_OType `(valid:ValidOType) : PreOrder A.
@@ -100,7 +102,6 @@ leads to infinite regress... *)
 Definition OTflip `(A:OType) : OType T := Basics.flip A.
 Definition Valid_OTflip `(A:OType) (valid:ValidOType A) : ValidOType (OTflip A).
 Proof.
-  Print Hint PreOrder.
   constructor. change (PreOrder (Basics.flip (ot_R A))). typeclasses eauto.
 Qed.
 
@@ -361,7 +362,6 @@ Class OTHasType `(A:OType) {AU} (RU:relation AU) (x y:AU) : Type :=
   }.
 
 Arguments OTHasType {_} A {AU%type} RU%signature x y.
-Hint Mode OTHasType - - + - + +.
 
 (* NOTE: We only want this to apply to terms that are syntactically lambdas, so
 we use an Extern hint, below. *)
@@ -446,7 +446,7 @@ Instance OTHasType_refl_rel {T} (A:relation T) {vA:ValidOType A} (x:T)
 *)
 
 Program Definition mkOTerm `(A:OType) {AU RU} (x:AU)
-        `{@OTHasType _ A AU RU x x} : T :=
+        `{@OTHasType _ A AU RU x x} : ot_Type A :=
   ot_lift (OTEnrich:=ot_wf_type) x ot_wf_term.
 
 Arguments mkOTerm {_} A {AU%type RU%signature} x {H}.
@@ -539,10 +539,17 @@ Definition ex5 `{A:OType} `{B:OType} {_:ValidOType A} {_:ValidOType B}
 Eval simpl in (fun `{ValidOType} `{ValidOType} =>
                  ot_unlift ex5 : A *o* A0 -> A0 *o* A).
 
-
 Definition ex6 `{A:OType} `{B:OType} `{C:OType}
            {_:ValidOType A} {_:ValidOType B} {_:ValidOType C}
   : A *o* B *o* C -o> C *o* A :=
   mkOTerm _ (fun triple => (snd triple, fst (fst triple))).
+
+Set Printing All. Typeclasses eauto := debug.
+
+Definition ex7 `{A:OType} `{B:OType} `{C:OType}
+           {_:ValidOType A} {_:ValidOType B} {_:ValidOType C}
+  : (A *o* B -o> C) -o> C -o> A -o> B -o> C :=
+  mkOTerm _
+          (fun f c a b => f @o@ (a, b)).
 
 End OTExamples.
