@@ -542,6 +542,14 @@ Program Definition mkOTerm (A:OType) {AU RU} (x:AU)
 
 Arguments mkOTerm A {AU%type RU%signature} x {ht}.
 
+(* FIXME HERE NOW: this is not provable!!
+Instance OTHasType_mkOTerm A AU RU x y htx hty (ht:@OTHasType A AU RU x y)
+  : OTHasType A (ot_R A) (@mkOTerm A AU RU x htx) (@mkOTerm A AU RU y hty).
+Proof.
+  constructor; [ typeclasses eauto | ].
+  apply (ot_lift_Proper x y).
+*)
+
 
 (***
  *** OT Typing Rules for Common Operations
@@ -636,12 +644,12 @@ Module OTNotations.
     (otypef_app F A) (left associativity, at level 20).
    *)
 
-  Definition ot_fst {A B} : A *o* B -o> A := mkOTerm _ fst.
-  Definition ot_snd {A B} : A *o* B -o> B := mkOTerm _ snd.
-  Definition ot_pair {A B} : A -o> B -o> A *o* B := mkOTerm _ pair.
+  Definition ofst {A B} : A *o* B -o> A := mkOTerm _ fst.
+  Definition osnd {A B} : A *o* B -o> B := mkOTerm _ snd.
+  Definition opair {A B} : A -o> B -o> A *o* B := mkOTerm _ pair.
 
   Notation "( x ,o, y )" :=
-    (ot_pair @o@ x @o@ y)
+    (opair @o@ x @o@ y)
       (no associativity, at level 0).
 
 End OTNotations.
@@ -677,7 +685,7 @@ Definition ex6 {A B C} : A *o* B *o* C -o> C *o* A :=
  *)
 
 Definition ex6 {A B C} : A *o* B *o* C -o> C *o* A :=
-  mkOTerm _ (fun triple => (ot_snd @o@ triple , ot_fst @o@ (ot_fst @o@ triple))).
+  mkOTerm _ (fun triple => (osnd @o@ triple , ofst @o@ (ofst @o@ triple))).
 
 Definition ex7 {A B C} : (A *o* B -o> C) -o> C -o> A -o> B -o> C :=
   mkOTerm _ (fun f c a b => f @o@ (a ,o, b)).
