@@ -255,6 +255,22 @@ itself be proper, i.e., to be an element of OTarrow A OType. Would also need a
 dependent version of OTContext, below. *)
 
 
+(* pfun_app is always Proper *)
+Instance Proper_pfun_app A B :
+  Proper (ot_R (OTarrow A B) ==> ot_R A ==> ot_R B) (@pfun_app A B).
+Proof.
+  intros f1 f2 Rf a1 a2 Ra. apply Rf; assumption.
+Qed.
+
+(* pfun_app is always Proper w.r.t. ot_equiv *)
+Instance Proper_pfun_app_equiv A B :
+  Proper (ot_equiv (OTarrow A B) ==> ot_equiv A ==> ot_equiv B) (@pfun_app A B).
+Proof.
+  intros f1 f2 Rf a1 a2 Ra; destruct Rf; destruct Ra.
+  split; apply Proper_pfun_app; assumption.
+Qed.
+
+
 (***
  *** Ordered Type Functions
  ***)
@@ -282,7 +298,7 @@ Qed.
 
 
 (***
- *** Building Proper Functions
+ *** Finding and Instantiating Ordered Types
  ***)
 
 (* States that A is the default OType for type AU. We expect that AU = ot_Type
@@ -294,6 +310,8 @@ Class OTForType (A:OType) {AU} (RU:relation AU) : Type :=
     ot_unlift_iso : A -> AU;
     ot_unlift_iso_Proper : Proper (ot_R A ==> RU) ot_unlift_iso;
     ot_for_type_PreOrder :> PreOrder RU;
+    ot_lift_unlift_iso : forall x, ot_unlift_iso (ot_lift_iso x) = x;
+    ot_unlift_lift_iso : forall x, ot_lift_iso (ot_unlift_iso x) = x;
   }.
 
 Instance OTForType_refl (A:OType) : OTForType A (ot_R A) :=
@@ -303,6 +321,8 @@ Instance OTForType_refl (A:OType) : OTForType A (ot_R A) :=
     ot_unlift_iso := fun a => a;
     ot_unlift_iso_Proper := fun a1 a2 Ra => Ra;
     ot_for_type_PreOrder := ot_PreOrder A;
+    ot_unlift_lift_iso := fun a => eq_refl;
+    ot_lift_unlift_iso := fun a => eq_refl;
   }.
 
 (* Hint to use OTForType_refl if AU unifies with (ot_Type A), even if it is not
@@ -328,6 +348,12 @@ Qed.
 Next Obligation.
   intros p1 p2 Rp; destruct Rp.
   split; simpl; apply ot_unlift_iso_Proper; assumption.
+Qed.
+Next Obligation.
+  repeat rewrite ot_lift_unlift_iso. reflexivity.
+Qed.
+Next Obligation.
+  repeat rewrite ot_unlift_lift_iso. reflexivity.
 Qed.
 
 (* The default OType for a sum is OTsum of the defaults for the two types *)
@@ -356,6 +382,12 @@ Next Obligation.
   intros s1 s2 Rs.
   destruct Rs; constructor; apply ot_unlift_iso_Proper; assumption.
 Qed.
+Next Obligation.
+  destruct x; rewrite ot_lift_unlift_iso; reflexivity.
+Qed.
+Next Obligation.
+  destruct x; rewrite ot_unlift_lift_iso; reflexivity.
+Qed.
 
 
 (* States that A is a valid OType for the Proper elements of AU *)
@@ -367,6 +399,16 @@ Class OTForRel (A:OType) {AU} (RU:relation AU) : Type :=
         RU a1 a2 -> ot_R A (ot_lift a1 prp1) (ot_lift a2 prp2);
     ot_unlift : A -> AU;
     ot_unlift_Proper : Proper (ot_R A ==> RU) ot_unlift;
+    ot_lift_unlift_R : forall a prp, RU a (ot_unlift (ot_lift a prp));
+
+    ot_unlift_lift :
+      forall a prp, ot_equiv A (ot_lift (ot_unlift a) prp) a;
+
+    (* NOTE: the case for RU is more complex since it may not be transitive *)
+    ot_lift_unlift1 :
+      forall a' a prp, RU a' a <-> RU a' (ot_unlift (ot_lift a prp));
+    ot_lift_unlift2 :
+      forall a' a prp, RU a a' <-> RU (ot_unlift (ot_lift a prp)) a';
   }.
 
 Arguments OTForRel A {AU%type} RU%signature.
@@ -382,29 +424,42 @@ Program Instance OTForRel_refl (A:OType) : OTForRel A (ot_R A) :=
 
 (* If A is the default OType for AU and RU, then it is a valid OType for them *)
 Program Instance OTForRel_OTForType A AU RU
-        (_:@OTForType A AU RU) : OTForRel A RU :=
-  {
+        (_:@OTForType A AU RU) : OTForRel A RU | 3 :=
+  {|
     ot_lift := fun a _ => ot_lift_iso a;
     ot_unlift := ot_unlift_iso;
-  }.
+  |}.
 Next Obligation.
   apply ot_lift_iso_Proper. assumption.
 Qed.
 Next Obligation.
   intros a1 a2 Ra; apply ot_unlift_iso_Proper; assumption.
 Qed.
+Next Obligation.
+  rewrite ot_lift_unlift_iso. reflexivity.
+Qed.
+Next Obligation.
+  rewrite ot_unlift_lift_iso. reflexivity.
+Qed.
+Next Obligation.
+  rewrite ot_lift_unlift_iso. reflexivity.
+Qed.
+Next Obligation.
+  rewrite ot_lift_unlift_iso. reflexivity.
+Qed.
+
 
 Program Instance OTForRel_fun (A B:OType) AU RAU BU RBU
         (otA:@OTForType A AU RAU) (otB:@OTForRel B BU RBU) :
   OTForRel (OTarrow A B) (RAU ==> RBU) :=
-  {
+  {|
     ot_lift := fun f prp =>
                  {| pfun_app :=
                       fun a =>
                         ot_lift (OTForRel:=otB) (f (ot_unlift_iso a)) _ |};
     ot_lift_Proper := _;
     ot_unlift := fun pfun a => ot_unlift (pfun_app pfun (ot_lift_iso a));
-  }.
+  |}.
 Next Obligation.
   apply prp. reflexivity.
 Qed.
@@ -420,51 +475,81 @@ Next Obligation.
   intros f1 f2 Rf a1 a2 Ra. apply ot_unlift_Proper.
   apply Rf. apply ot_lift_iso_Proper. assumption.
 Qed.
+Next Obligation.
+  intros a1 a2 Ra. apply ot_lift_unlift1. rewrite ot_lift_unlift_iso.
+  apply prp. assumption.
+Qed.
+Next Obligation.
+  split; intros a1 a2 Ra; simpl.
+  { transitivity (pfun_app a (ot_lift_iso (ot_unlift_iso a1)));
+      [ apply (proj1 (ot_unlift_lift _ _))
+      | rewrite ot_unlift_lift_iso; apply pfun_Proper; assumption ]. }
+  { transitivity (pfun_app a (ot_lift_iso (ot_unlift_iso a2)));
+      [ rewrite ot_unlift_lift_iso; apply pfun_Proper; assumption
+      | apply (proj2 (ot_unlift_lift _ _)) ]. }
+Qed.
+Next Obligation.
+  split; intros Ra' a1 a2 Ra.
+  { apply ot_lift_unlift1. rewrite ot_lift_unlift_iso. apply Ra'; assumption. }
+  { rewrite <- (ot_lift_unlift_iso a2).
+    refine (proj2 (ot_lift_unlift1 (a' a1) _ _) (Ra' _ _ _)); assumption. }
+Qed.
+Next Obligation.
+  split; intros Ra' a1 a2 Ra.
+  { apply ot_lift_unlift2. rewrite ot_lift_unlift_iso. apply Ra'; assumption. }
+  { rewrite <- (ot_lift_unlift_iso a1).
+    refine (proj2 (ot_lift_unlift2 (a' a2) _ _) (Ra' _ _ _)). assumption. }
+Qed.
 
-(*
+
 (* Tactic to prove OTForRel goals *)
 Ltac prove_OTForRel :=
   lazymatch goal with
-  | |- @OTForRel _ _ (_ -> _) _ => apply OTForRel_fun
-  | |- OTForRel ?A ?B => apply OTForRel_refl
+  | |- @OTForRel ?A (forall x:?AU, ?BU) ?RU =>
+    refine (OTForRel_fun _ _ _ _ _ _ _ _)
+  | |- @OTForRel (OTarrow ?A ?B) _ _ =>
+    apply OTForRel_fun
+  | |- @OTForRel _ _ _ => apply OTForRel_OTForType; try apply OTForType_refl
   end.
+
+(*
+Ltac prove_OTForRel :=
+  lazymatch goal with
+  | |- @OTForRel (OTarrow ?A ?B) (forall x:?AU, ?BU) _ =>
+    let RBU := fresh "RBU" in
+    evar (RBU: forall (x:AU), relation BU);
+    assert (forall x, @OTForRel A BU (?RBU x)); [ intro x | ];
+    unfold RBU; clear RBU
+  | |- @OTForRel _ _ _ => apply OTForRel_OTForType
+  end.
+*)
 
 (* Hint to use the prove_OTForRel tactic; we need this because often the
 relation part is an evar, so will not match any of the instances above *)
-Hint Extern 1 (OTForRel _ _) => prove_OTForRel : typeclass_instances.
- *)
+Hint Extern 2 (@OTForRel _ _ _) => prove_OTForRel : typeclass_instances.
 
 
-(* A version of OTForType that is deferred until all other typeclass
-instantiation has finished *)
-Class OTForType_Defer (A:OType) {AU} (RU:relation AU) : Type :=
+(***
+ *** Building Ordered Terms
+ ***)
+
+Class OTHasType (A:OType) {AU} (RU:relation AU) (x y:AU) : Prop :=
   {
-    ot_for_type_defer : OTForType A RU;
-  }.
-
-Instance OTForType_Defer_OTForType `(ot:OTForType) : OTForType_Defer A RU | 99 :=
-  {| ot_for_type_defer := ot |}.
-
-
-Class OTHasType (A:OType) {AU} (RU:relation AU) (x y:AU) : Type :=
-  {
-    ot_wf_type : OTForRel A RU;
-    ot_wf_term : RU x y;
+    ot_has_type : RU x y
   }.
 
 Arguments OTHasType A {AU%type} RU%signature x y.
 
 Instance OTHasType_app (A:OType) AU RAU (B:OType) BU RBU
          (fl fr:AU -> BU) argl argr
-         `(OTForRel B BU RBU)
-         `(OTHasType (OTarrow A B) _ (RAU ==> RBU) fl fr)
-         `(OTHasType A _ RAU argl argr)
- : OTHasType B RBU (fl argl) (fr argr) | 3.
+         (otef:OTHasType (OTarrow A B) (RAU ==> RBU) fl fr)
+         (otea:OTHasType A RAU argl argr) :
+  OTHasType B RBU (fl argl) (fr argr) | 3.
 Proof.
   constructor.
-  assumption.
-  apply H0. apply ot_wf_term.
-Defined.
+  apply (ot_has_type (OTHasType:=otef)).
+  apply ot_has_type.
+Qed.
 
 Instance OTHasType_pfun_app (A B:OType) (fl fr:OTarrow A B) argl argr
          (otef:OTHasType (OTarrow A B) (ot_R (OTarrow A B)) fl fr)
@@ -472,26 +557,21 @@ Instance OTHasType_pfun_app (A B:OType) (fl fr:OTarrow A B) argl argr
  : OTHasType B (ot_R B) (pfun_app fl argl) (pfun_app fr argr) | 2.
 Proof.
   constructor.
-  typeclasses eauto.
-  apply (ot_wf_term (OTHasType:=otef)).
-  apply (ot_wf_term (OTHasType:=otea)).
-Defined.
+  apply (ot_has_type (OTHasType:=otef)).
+  apply (ot_has_type (OTHasType:=otea)).
+Qed.
 
 (* NOTE: We only want this to apply to terms that are syntactically lambdas, so
 we use an Extern hint, below. *)
 Definition OTHasType_lambda (A B:OType) AU RAU BU RBU
-           (otA:OTForType_Defer A RAU) (otB:OTForRel B RBU)
          (fl fr:AU -> BU)
          (pf: forall xl xr (pf:OTHasType A RAU xl xr),
              OTHasType B RBU (fl xl) (fr xr)) :
   OTHasType (OTarrow A B) (RAU ==> RBU) fl fr.
 Proof.
   constructor.
-  apply OTForRel_fun; try apply ot_for_type_defer; typeclasses eauto.
-  intros xl xr Rx. apply pf. constructor.
-  apply OTForRel_OTForType. apply ot_for_type_defer.
-  assumption.
-Defined.
+  intros xl xr Rx; apply pf; constructor; assumption.
+Qed.
 
 
 (*
@@ -512,7 +592,7 @@ Hint Extern 4 (OTHasType _ _ _ _) => OTHasType_tac : typeclass_instances.
 Ltac try_OTHasType_lambda :=
   lazymatch goal with
   | |- @OTHasType _ _ _ (fun x => ?f) (fun y => ?g) =>
-    eapply (OTHasType_lambda _ _ _ _ _ _ _ _ (fun x => f) (fun y => g))
+    eapply (OTHasType_lambda _ _ _ _ _ _ (fun x => f) (fun y => g))
   end.
 
 Hint Extern 2 (@OTHasType _ _ _ (fun _ => _) (fun _ => _)) =>
@@ -536,19 +616,17 @@ Instance OTHasType_refl_rel {T} (A:relation T) {vA:ValidOType A} (x:T)
   : OTHasType A A x x := OTHasType_refl A x.
 *)
 
-Program Definition mkOTerm (A:OType) {AU RU} (x:AU)
-        {ht:@OTHasType A AU RU x x} : ot_Type A :=
-  ot_lift (OTForRel:=ot_wf_type) x ot_wf_term.
+Program Definition mkOTerm (A:OType) {AU RU}
+        {otfr:OTForRel A RU} (x:AU) {ht:@OTHasType A AU RU x x} : ot_Type A :=
+  ot_lift (OTForRel:=otfr) x ot_has_type.
 
-Arguments mkOTerm A {AU%type RU%signature} x {ht}.
+Arguments mkOTerm A {AU%type RU%signature} {otfr} x {ht}.
 
-(* FIXME HERE NOW: this is not provable!!
-Instance OTHasType_mkOTerm A AU RU x y htx hty (ht:@OTHasType A AU RU x y)
-  : OTHasType A (ot_R A) (@mkOTerm A AU RU x htx) (@mkOTerm A AU RU y hty).
+Instance OTHasType_mkOTerm A AU RU x y otr htx hty (ht:@OTHasType A AU RU x y)
+  : OTHasType A (ot_R A) (@mkOTerm A AU RU otr x htx) (@mkOTerm A AU RU otr y hty).
 Proof.
-  constructor; [ typeclasses eauto | ].
-  apply (ot_lift_Proper x y).
-*)
+  constructor. apply (ot_lift_Proper x y). apply ot_has_type.
+Qed.
 
 
 (***
@@ -620,39 +698,63 @@ apply OTHasType_pair : typeclass_instances.
  *** Notations for Ordered Types
  ***)
 
-Module OTNotations.
+Notation "A '-o>' B" :=
+  (OTarrow A B) (right associativity, at level 99).
+Notation "A '*o*' B" :=
+  (OTpair A B) (left associativity, at level 40).
+Notation "A '+o+' B" :=
+  (OTsum A B) (left associativity, at level 50).
+Notation "'~o~' A" :=
+  (OTflip A) (right associativity, at level 35).
 
-  Notation "A '-o>' B" :=
-    (OTarrow A B) (right associativity, at level 99).
-  Notation "A '*o*' B" :=
-    (OTpair A B) (left associativity, at level 40).
-  Notation "A '+o+' B" :=
-    (OTsum A B) (left associativity, at level 50).
-  Notation "'~o~' A" :=
-    (OTflip A) (right associativity, at level 35).
+Notation "x <o= y" :=
+  (ot_R _ x y) (no associativity, at level 70).
+Notation "x =o= y" :=
+  (ot_equiv _ x y) (no associativity, at level 70).
 
-  Notation "x <o= y" :=
-    (ot_R _ x y) (no associativity, at level 70).
-  Notation "x =o= y" :=
-    (ot_equiv _ x y) (no associativity, at level 70).
+Notation "x @o@ y" :=
+  (pfun_app x y) (left associativity, at level 20).
 
-  Notation "x @o@ y" :=
-    (pfun_app x y) (left associativity, at level 20).
-
-  (*
+(*
   Notation "F @t@ A" :=
     (otypef_app F A) (left associativity, at level 20).
-   *)
+ *)
 
-  Definition ofst {A B} : A *o* B -o> A := mkOTerm _ fst.
-  Definition osnd {A B} : A *o* B -o> B := mkOTerm _ snd.
-  Definition opair {A B} : A -o> B -o> A *o* B := mkOTerm _ pair.
+Definition ofst {A B} : A *o* B -o> A := mkOTerm _ fst.
+Definition osnd {A B} : A *o* B -o> B := mkOTerm _ snd.
+Definition opair {A B} : A -o> B -o> A *o* B := mkOTerm _ pair.
 
-  Notation "( x ,o, y )" :=
-    (opair @o@ x @o@ y)
-      (no associativity, at level 0).
+Notation "( x ,o, y )" :=
+  (opair @o@ x @o@ y)
+    (no associativity, at level 0).
 
-End OTNotations.
+
+(***
+ *** Rewrite Rules for Ordered Terms
+ ***)
+
+Lemma mkOTerm_unfold (A:OType) AU RU
+      (otfr:OTForRel A RU) (x:AU) (ht:@OTHasType A AU RU x x) :
+  @mkOTerm A AU RU otfr x ht = ot_lift (OTForRel:=otfr) x ot_has_type.
+  reflexivity.
+Qed.
+
+Lemma ot_lift_app (A B:OType) AU RAU BU RBU
+      (otfA:@OTForType A AU RAU) (otfB:@OTForRel B BU RBU)
+      (f:AU -> BU) prp arg :
+  ot_lift (OTForRel:=OTForRel_fun A B AU RAU BU RBU otfA otfB) f prp @o@ arg
+  =o= ot_lift (OTForRel:=otfB) (f (ot_unlift_iso arg))
+              (ltac:(apply prp; apply ot_unlift_iso_Proper; reflexivity)).
+  split; apply ot_lift_Proper; apply prp; apply ot_unlift_iso_Proper; reflexivity.
+Qed.
+
+
+(* Add the above rules to the OT rewrite set *)
+Hint Rewrite @mkOTerm_unfold @ot_lift_app @ot_lift_unlift_iso @ot_unlift_lift_iso : OT.
+
+(* Tactic to apply rewrites in the OT rewrite set *)
+Ltac rewrite_OT := rewrite_strat (topdown (hints OT)).
+
 
 
 (***
@@ -660,7 +762,6 @@ End OTNotations.
  ***)
 
 Module OTExamples.
-Import OTNotations.
 
 Definition ex1 := mkOTerm (OTProp -o> OTProp) (fun p => p).
 Eval compute in (ot_unlift ex1 : Prop -> Prop).
@@ -668,9 +769,16 @@ Eval compute in (ot_unlift ex1 : Prop -> Prop).
 Definition ex2 {A} := mkOTerm (A -o> A) (fun p => p).
 Eval simpl in (fun A:OType => ot_unlift (@ex2 A) : A -> A).
 
+Definition ex2' {A} := mkOTerm (A -o> A -o> A) (fun p1 p2 => p1).
+Eval simpl in (fun A:OType => ot_unlift (@ex2' A) : A -> A -> A).
+
+(* FIXME HERE: ex3 does not work without type annotations on fun vars! I think
+the problem is that the inferred types of the fun vars are evars that depend on
+all the previous vars, so it looks like a dependent forall type and OTForRel_fun
+does not apply. *)
 Definition ex3 {A} :=
   mkOTerm (A -o> A -o> A -o> A -o> A) (fun p1 p2 p3 p4 => p1).
-Eval simpl in (fun A:OType => ot_unlift (@ex3 A) : A -> A  -> A -> A -> A).
+Eval simpl in (fun A:OType => ot_unlift (@ex3 A) : A -> A -> A -> A -> A).
 
 Definition ex4 {A B} : (A *o* B -o> A) := mkOTerm _ (fun p => fst p).
 Eval simpl in (fun (A B:OType) => ot_unlift ex4 : A * B -> A).
@@ -688,6 +796,7 @@ Definition ex6 {A B C} : A *o* B *o* C -o> C *o* A :=
   mkOTerm _ (fun triple => (osnd @o@ triple , ofst @o@ (ofst @o@ triple))).
 
 Definition ex7 {A B C} : (A *o* B -o> C) -o> C -o> A -o> B -o> C :=
-  mkOTerm _ (fun f c a b => f @o@ (a ,o, b)).
+  mkOTerm ((A *o* B -o> C) -o> C -o> A -o> B -o> C)
+          (fun (f:A *o* B -o> C) (c:C) a b => f @o@ (a ,o, b)).
 
 End OTExamples.

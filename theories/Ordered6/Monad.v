@@ -1,7 +1,5 @@
 Require Export PredMonad.Ordered6.OrderedType.
 
-Import OTNotations.
-
 
 (***
  *** The monad typeclass
@@ -30,6 +28,9 @@ Class Monad M `{MOps:MonadOps M} : Prop :=
 (* Helpful bind notation *)
 Notation "'do' x <- m1 ; m2" :=
   (bindM @o@ m1 @o@ (mkOTerm _ (fun x => m2))) (at level 60, right associativity).
+
+(* Add the monad laws to the OT rewrite set *)
+Hint Rewrite @monad_return_bind @monad_bind_return @monad_assoc : OT.
 
 
 (***

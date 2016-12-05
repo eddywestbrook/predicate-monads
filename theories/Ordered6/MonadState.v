@@ -1,7 +1,5 @@
 Require Export PredMonad.Ordered6.Monad.
 
-Import OTNotations.
-
 
 (***
  *** Monads with State Effects
@@ -52,12 +50,9 @@ Class MonadState M `{MSOps:MonadStateOps M} : Prop :=
 
 Definition StateT St M A := St -o> M (St *o* A).
 
-Set Printing All. Typeclasses eauto := debug.
 Instance StateT_MonadOps St M (MOps:MonadOps M) : MonadOps (StateT St M) :=
   {returnM :=
-     fun A => mkOTerm (A -o> St -o> M (St *o* A))
-                      (fun x s => returnM @o@ (s ,o, x));
-
+     fun A => mkOTerm _ (fun x s => returnM @o@ (s ,o, x));
    bindM :=
      fun A B =>
        mkOTerm _ (fun (m:StateT St M A) (f:A -o> StateT St M B) s =>
@@ -65,10 +60,14 @@ Instance StateT_MonadOps St M (MOps:MonadOps M) : MonadOps (StateT St M) :=
                       f @o@ (osnd @o@ s_x) @o@ (ofst @o@ s_x))
   }.
 
+
 (* The Monad instance for StateT *)
-Global Instance StateT_Monad : Monad (StateT).
+Instance StateT_Monad St M `{Monad M} : Monad (StateT St M).
 Proof.
-  constructor; intros; unfold StateT, returnM, bindM, lrM, StateT_MonadOps.
+  constructor; intros; unfold StateT, returnM, bindM, StateT_MonadOps.
+  rewrite mkOTerm_app.
+  Focus 4. try rewrite_OT.
+
   - auto with typeclass_instances.
   - prove_lr_proper.
   - prove_lr_proper.
