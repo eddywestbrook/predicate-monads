@@ -17,7 +17,7 @@ Record OType : Type :=
   {
     ot_Type :> Type;
     ot_R : relation ot_Type;
-    ot_PreOrder :> PreOrder ot_R
+    ot_PreOrder : PreOrder ot_R
   }.
 
 Instance OType_Reflexive (A:OType) : Reflexive (ot_R A).
@@ -184,7 +184,7 @@ Program Definition OTType : OType :=
 Record Pfun (A B:OType) :=
   {
     pfun_app : ot_Type A -> ot_Type B;
-    pfun_Proper :> Proper (ot_R A ==> ot_R B) pfun_app
+    pfun_Proper : Proper (ot_R A ==> ot_R B) pfun_app
   }.
 
 Arguments pfun_app [_ _] _ _.
