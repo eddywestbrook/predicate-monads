@@ -64,7 +64,63 @@ Instance StateT_MonadOps St M (MOps:MonadOps M) : MonadOps (StateT St M) :=
 (* The Monad instance for StateT *)
 Instance StateT_Monad St M `{Monad M} : Monad (StateT St M).
 Proof.
-  constructor; intros; unfold StateT, returnM, bindM, StateT_MonadOps.
+  constructor; intros; unfold StateT, returnM, bindM, StateT_MonadOps, StateT.
+  prove_OT.
+  apply ot_arrow_ext; intro; intro; intro.
+  prove_OT.
+  simpl_mkOTerm_refl.
+
+  apply ot_arrow_ext. intro; intro; intro.
+  progress simpl_mkOTerm_apply.
+  progress simpl_mkOTerm_apply.
+  progress simpl_mkOTerm_apply.
+  progress simpl_mkOTerm_apply.
+  progress simpl_mkOTerm_apply.
+  progress simpl_mkOTerm_apply.
+  lazymatch goal with
+  | |- context
+         ctx
+         [@mkOTerm
+            _ _ _
+            (OTForRel_fun ?A ?B ?AU ?RAU ?BU ?RBU ?otfA ?otfB) ?f ?ht
+         @o@ ?arg] =>
+    idtac f arg;
+    let new_goal :=
+        context
+          ctx
+          [mkOTerm B (otfr:=otfB)
+                   (ht:=
+                      {| ot_has_type :=
+                           (ot_has_type (OTHasType:=ht)) _ _ (reflexivity _) |})
+                   (f arg)]
+    in change new_goal; cbv beta; idtac new_goal
+  end.
+  cbv beta.
+
+  repeat first [simpl_mkOTerm_apply | simpl_ot_unlift_iso].
+
+  repeat prove_OT.
+  lazymatch goal with
+  | |- context
+         ctx
+         [@mkOTerm
+            _ _ _
+            (OTForRel_fun ?A ?B ?AU ?RAU ?BU ?RBU ?otfA ?otfB) ?f ?ht
+         @o@ ?arg] =>
+    idtac (context ctx 
+  end.
+
+  prove_OT.
+
+  split; repeat rewrite mkOTerm_apply; apply ot_arrow_ext; intros.
+  repeat rewrite mkOTerm_apply.
+
+  unfold mkOTerm. rewrite ot_lift_app. rewrite ot_lift_app.
+  
+
+  unfold ot_unlift_iso, OTForType_refl, ot_lift, OTForRel_OTForType, OTForRel_fun.
+  unfold ot_lift at 1. unfold OTForRel_fun.
+
   rewrite mkOTerm_app.
   Focus 4. try rewrite_OT.
 

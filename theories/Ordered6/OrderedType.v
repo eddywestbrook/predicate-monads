@@ -456,13 +456,11 @@ Program Instance OTForRel_fun (A B:OType) AU RAU BU RBU
     ot_lift := fun f prp =>
                  {| pfun_app :=
                       fun a =>
-                        ot_lift (OTForRel:=otB) (f (ot_unlift_iso a)) _ |};
+                        ot_lift (OTForRel:=otB) (f (ot_unlift_iso a))
+                                (prp _ _ (reflexivity _))|};
     ot_lift_Proper := _;
     ot_unlift := fun pfun a => ot_unlift (pfun_app pfun (ot_lift_iso a));
   |}.
-Next Obligation.
-  apply prp. reflexivity.
-Qed.
 Next Obligation.
   intros a1 a2 Ra. apply ot_lift_Proper. apply prp.
   apply ot_unlift_iso_Proper. assumption.
@@ -500,7 +498,6 @@ Next Obligation.
   { rewrite <- (ot_lift_unlift_iso a1).
     refine (proj2 (ot_lift_unlift2 (a' a2) _ _) (Ra' _ _ _)). assumption. }
 Qed.
-
 
 (* Tactic to prove OTForRel goals *)
 Ltac prove_OTForRel :=
@@ -730,31 +727,141 @@ Notation "( x ,o, y )" :=
 
 
 (***
- *** Rewrite Rules for Ordered Terms
+ *** Automation for Ordered Terms
  ***)
 
-Lemma mkOTerm_unfold (A:OType) AU RU
-      (otfr:OTForRel A RU) (x:AU) (ht:@OTHasType A AU RU x x) :
-  @mkOTerm A AU RU otfr x ht = ot_lift (OTForRel:=otfr) x ot_has_type.
-  reflexivity.
-Qed.
+Create HintDb OT.
 
-Lemma ot_lift_app (A B:OType) AU RAU BU RBU
+(* Split ot_equiv equalities into the left and right cases *)
+Definition prove_ot_equiv A (x y : ot_Type A)
+           (pf1: x <o= y) (pf2 : y <o= x) : x =o= y :=
+  conj pf1 pf2.
+
+Hint Resolve prove_ot_equiv : OT.
+
+(* Extensionality for ot_R *)
+Definition ot_arrow_ext (A B:OType) (f1 f2 : A -o> B)
+           (pf:forall x y, x <o= y -> f1 @o@ x <o= f2 @o@ y) : f1 <o= f2 := pf.
+
+Hint Resolve ot_arrow_ext : OT.
+
+(* Application commutes with ot_lift *)
+(* FIXME: don't use this! *)
+(*
+Definition ot_lift_apply (A B:OType) AU RAU BU RBU
       (otfA:@OTForType A AU RAU) (otfB:@OTForRel B BU RBU)
       (f:AU -> BU) prp arg :
   ot_lift (OTForRel:=OTForRel_fun A B AU RAU BU RBU otfA otfB) f prp @o@ arg
-  =o= ot_lift (OTForRel:=otfB) (f (ot_unlift_iso arg))
-              (ltac:(apply prp; apply ot_unlift_iso_Proper; reflexivity)).
-  split; apply ot_lift_Proper; apply prp; apply ot_unlift_iso_Proper; reflexivity.
-Qed.
+  = ot_lift (OTForRel:=otfB) (f (ot_unlift_iso arg)) (prp _ _ (reflexivity _))
+  := eq_refl.
+*)
 
+(* ot_unlift_iso for OTForType_refl is just the identity *)
+(* NOTE: also don't use this directly *)
+(*
+Lemma ot_unlift_iso_OTForType_refl_id (A:OType) x :
+  ot_unlift_iso (OTForType:=OTForType_refl A) x = x.
+  reflexivity.
+Qed.
+*)
+
+(* Tactic to simplify ot_unlift_iso x to just x *)
+(*
+Ltac simpl_ot_unlift_iso :=
+  lazymatch goal with
+  | |- context ctx [@ot_unlift_iso _ _ _ (OTForType_refl ?A) ?x] =>
+    let new_goal := context ctx [x] in
+    change new_goal
+  end.
+ *)
+
+(* Tactic to simplify mkOTerm x to just x *)
+(*
+Definition simpl_mkOTerm_refl A x ht :
+  mkOTerm (otfr:=OTForRel_OTForType _ _ _ (OTForType_refl A)) A x (ht:=ht) = x
+  := eq_refl.
+*)
+
+Ltac simpl_mkOTerm_refl :=
+  lazymatch goal with
+  | |- context ctx [@mkOTerm
+                      _ _ _
+                      (OTForRel_OTForType _ _ _ (OTForType_refl _)) _ ?x _] =>
+    let new_goal := context ctx [x] in
+    change new_goal
+  end.
+
+
+(* Application commutes with mkOTerm *)
+(* NOTE: Don't use this directly; it is just here to inform the change tactic
+used in prove_OT, below *)
+(*
+Definition mkOTerm_apply (A B:OType) AU RAU BU RBU
+      (otfA:@OTForType A AU RAU) (otfB:@OTForRel B BU RBU)
+      (f:AU -> BU) ht arg :
+  mkOTerm (A -o> B) (otfr:=OTForRel_fun A B AU RAU BU RBU otfA otfB)
+          f (ht:=ht) @o@ arg
+  =
+  mkOTerm B (otfr:=otfB)
+          (ht:=
+             {| ot_has_type :=
+                  (ot_has_type (OTHasType:=ht)) _ _ (reflexivity _) |})
+          (f (ot_unlift_iso arg))
+  := eq_refl.
+ *)
+
+(* Tactic to simplify mkOTerm f @o@ x to f (ot_unlift_iso x) *)
+Ltac simpl_mkOTerm_apply :=
+  lazymatch goal with
+  | |- context
+         ctx
+         [@mkOTerm
+            _ _ _
+            (OTForRel_fun ?A ?B ?AU ?RAU ?BU ?RBU (OTForType_refl _) ?otfB) ?f ?ht
+         @o@ ?arg] =>
+    let new_goal :=
+        context
+          ctx
+          [mkOTerm B (otfr:=otfB)
+                   (ht:=
+                      {| ot_has_type :=
+                           (ot_has_type (OTHasType:=ht)) _ _ (reflexivity _) |})
+                   (f arg)]
+    in change new_goal; cbv beta
+(*
+  | |- context
+         ctx
+         [@mkOTerm
+            _ _ _
+            (OTForRel_fun ?A ?B ?AU ?RAU ?BU ?RBU ?otfA ?otfB) ?f ?ht
+         @o@ ?arg] =>
+    let new_goal :=
+        context
+          ctx
+          [mkOTerm B (otfr:=otfB)
+                   (ht:=
+                      {| ot_has_type :=
+                           (ot_has_type (OTHasType:=ht)) _ _ (reflexivity _) |})
+                   (f (ot_unlift_iso arg))]
+    in change new_goal; cbv beta
+*)
+  end.
 
 (* Add the above rules to the OT rewrite set *)
-Hint Rewrite @mkOTerm_unfold @ot_lift_app @ot_lift_unlift_iso @ot_unlift_lift_iso : OT.
+(* Hint Rewrite @mkOTerm_apply @ot_unlift_iso_OTForType_refl_id : OT. *)
 
 (* Tactic to apply rewrites in the OT rewrite set *)
 Ltac rewrite_OT := rewrite_strat (topdown (hints OT)).
 
+(* General tactic to try to prove theorems about ordered terms *)
+Ltac prove_OT :=
+  repeat first [simpl_mkOTerm_refl | simpl_mkOTerm_apply];
+  try rewrite_OT;
+  lazymatch goal with
+  | |- ot_equiv _ _ _ => split
+  | |- _ => idtac
+  end.
+  (* repeat (apply ot_arrow_ext; intros). *)
 
 
 (***
