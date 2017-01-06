@@ -379,6 +379,9 @@ Notation ofun := ot_Lambda.
  *** Automation for Ordered Terms
  ***)
 
+(* Don't unfold ot_Lambda when simplifying  *)
+Arguments ot_Lambda A B f prp : simpl never.
+
 Instance Proper_ot_R_ot_R A :
   Proper (Basics.flip (ot_R A) ==> ot_R A ==> Basics.impl) (ot_R A).
 Proof.
@@ -410,11 +413,11 @@ Qed.
 Create HintDb OT.
 
 (* Split ot_equiv equalities into the left and right cases *)
-Definition prove_ot_equiv A (x y : ot_Type A)
+Definition split_ot_equiv A (x y : ot_Type A)
            (pf1: x <o= y) (pf2 : y <o= x) : x =o= y :=
   conj pf1 pf2.
 
-Hint Resolve prove_ot_equiv : OT.
+Hint Resolve split_ot_equiv : OT.
 
 (* Extensionality for ot_R *)
 Definition ot_arrow_ext (A B:OType) (f1 f2 : A -o> B)
@@ -422,9 +425,16 @@ Definition ot_arrow_ext (A B:OType) (f1 f2 : A -o> B)
 
 Hint Resolve ot_arrow_ext : OT.
 
-
 (* Add the above rules to the OT rewrite set *)
 (* Hint Rewrite @mkOTerm_apply @ot_unlift_iso_OTForType_refl_id : OT. *)
+
+(* Eta-equality for pairs *)
+Lemma ot_pair_eta (A B:OType) (x : A *o* B) :
+  @ot_equiv (A *o* B) (fst x , snd x) x.
+  split; split; reflexivity.
+Qed.
+
+Hint Rewrite ot_pair_eta : OT.
 
 (* Tactic to apply rewrites in the OT rewrite set *)
 Ltac rewrite_OT := rewrite_strat (topdown (hints OT)).
