@@ -387,10 +387,13 @@ Definition split_ot_equiv A `{OTRelation A} (x y : A)
 Hint Resolve split_ot_equiv : OT.
 
 (* Extensionality for ot_R *)
+(*
 Definition ot_arrow_ext A B `{OTRelation A} `{OTRelation B} (f1 f2 : A -o> B)
            (pf:forall x y, x <o= y -> f1 @o@ x <o= f2 @o@ y) : f1 <o= f2 := pf.
 
 Hint Resolve ot_arrow_ext : OT.
+*)
+
 
 (* Add the above rules to the OT rewrite set *)
 (* Hint Rewrite @mkOTerm_apply @ot_unlift_iso_OTForType_refl_id : OT. *)

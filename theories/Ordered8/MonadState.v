@@ -12,20 +12,43 @@ Class MonadStateOps M `{MonadOps M} St `{OType St} : Type :=
     putM : St -o> M unit _ _
   }.
 
-Class MonadState M `{MonadStateOps M} : Prop :=
+FIXME HERE NOW: the problem is that the proof arguments keep getting too big!
+
+Inductive OpaqueOFunArg A B `{OTRelation A} `{OTRelation B} (f : A -> B) : Prop :=
+| MkOFunArg {prp:forall x y, ProperPair A x y -> ProperPair B (f x) (f y)}.
+Definition GetOFunArg {A B} `{OTRelation A} `{OTRelation B} {f : A -> B}
+           (arg:OpaqueOFunArg A B f) :
+  forall x y, ProperPair A x y -> ProperPair B (f x) (f y) :=
+  let (prp) := arg in prp.
+
+Definition mk_ofun {A B} `{OTRelation A} `{OTRelation B} (f: A -> B)
+           (arg:OpaqueOFunArg A B f)
+  : A -o> B :=
+  ofun f (prp:=GetOFunArg arg).
+
+Ltac mk_ofun_tac := program_simpl; apply MkOFunArg; typeclasses eauto.
+
+
+Program Definition monad_state_get_type M `{MonadStateOps M} : Prop :=
+  forall A `{OType A} (m : M A _ _),
+    bindM @o@ getM @o@ (mk_ofun (fun _ => m) _) =o= m.
+Solve Obligations with mk_ofun_tac.
+
+Program Definition monad_state_get_put_type M `{MonadStateOps M} : Prop :=
+  forall A `{OType A} (f : St -o> unit -o> M A _ _),
+    bindM @o@ getM @o@
+          (mk_ofun (fun s => bindM @o@ (putM @o@ s) @o@ (f @o@ s)) _)
+    =o= bindM @o@ getM @o@
+              (mk_ofun (fun s => f @o@ s @o@ tt) _).
+Solve Obligations with mk_ofun_tac.
+
+
+Program Class MonadState M `{MonadStateOps M} : Prop :=
   {
     monad_state_monad :> Monad M;
 
-    monad_state_get :
-      forall A `{OType A} (m : M A _ _),
-        bindM @o@ getM @o@ (ofun (fun _ => m)) =o= m ;
-
-    monad_state_get_put :
-      forall A `{OType A} (f : St -o> unit -o> M A _ _),
-        bindM @o@ getM @o@
-              (ofun (fun s => bindM @o@ (putM @o@ s) @o@ (f @o@ s)))
-        =o= bindM @o@ getM @o@
-                  (ofun (fun s => f @o@ s @o@ tt)) ;
+    monad_state_get : monad_state_get_type M;
+    monad_state_get_put : monad_state_get_put_type M;
 
     monad_state_put_get :
       forall A `{OType A} s (f : unit -o> St -o> M A _ _),
@@ -57,17 +80,19 @@ Instance OTypeF_StateT St `{OType St} M `{OTypeF M} :
   OTypeF (StateT St M) :=
   fun _ _ _ => _.
 
-Instance StateT_MonadOps St `{OType St} M `{MonadOps M} : MonadOps (StateT St M) :=
+Program Instance StateT_MonadOps St `{OType St} M `{MonadOps M} : MonadOps (StateT St M) :=
   {returnM :=
-     fun A _ _ => ofun (fun x => ofun (fun s => returnM @o@ (s , x)));
+     fun A _ _ => mk_ofun (fun x => mk_ofun (fun s => returnM @o@ (s , x)) _) _;
    bindM :=
      fun A B _ _ _ _ =>
-       ofun (fun m =>
-               ofun (fun f =>
-                       ofun (fun s =>
-                               do s_x <- (m @o@ s);
-                                 f @o@ (snd s_x) @o@ (fst s_x))))
+       mk_ofun
+         (fun m =>
+            mk_ofun (fun f =>
+                       mk_ofun (fun s =>
+                                  do s_x <- (m @o@ s);
+                                    f @o@ (snd s_x) @o@ (fst s_x)) _) _) _
   }.
+Solve Obligations with mk_ofun_tac.
 
 
 Ltac simpl_OT_term t :=
@@ -103,18 +128,15 @@ Ltac simpl_OT :=
   end.
 
 Ltac prove_OT :=
-  simpl_OT; repeat (rewrite_OT; simpl_OT);
-  lazymatch goal with
-  | |- @ot_equiv (_ -o> _) _ _ _ =>
+  simpl; repeat (rewrite_OT; simpl_OT);
+  match goal with
+  | H : (?x <o= ?y) |- _ => rewrite H; prove_OT
+  | H : (?x =o= ?y) |- _ => rewrite H; prove_OT
+  | |- @ot_equiv _ _ _ _ =>
     split; apply ot_arrow_ext; intro; intro; intro; prove_OT
-  | |- @ot_R (_ -o> _) _ _ _ =>
+  | |- @ot_R _ _ _ _ =>
     apply ot_arrow_ext; intro; intro; intro; prove_OT
-  | |- _ =>
-    match goal with
-    | H : (?x <o= ?y) |- _ => rewrite H; prove_OT
-    | H : (?x =o= ?y) |- _ => rewrite H; prove_OT
-    | |- _ => try reflexivity
-    end
+  | |- _ => try reflexivity
   end.
 
 Instance Proper_pair A B `{OType A} `{OType B} :
@@ -123,6 +145,8 @@ Proof.
   repeat intro; split; assumption.
 Qed.
 
+Arguments bindM : simpl never.
+Arguments StateT : simpl never.
 
 (*
 Instance ot_equiv_pointwise_Pfun A B `{OType A} `{OType B} :
@@ -132,7 +156,7 @@ Instance ot_equiv_pointwise_Pfun A B `{OType A} `{OType B} :
 (* The Monad instance for StateT *)
 Instance StateT_Monad St `{OType St} M `{Monad M} : Monad (StateT St M).
 Proof.
-  constructor; intros; unfold StateT, returnM, bindM, StateT_MonadOps.
+  constructor; intros.
   { prove_OT; typeclasses eauto. }
   { prove_OT; transitivity (bindM @o@ (m @o@ y) @o@ returnM).
     - apply Proper_ot_R_pfun_app_partial; try typeclasses eauto.
@@ -141,6 +165,30 @@ Proof.
     - prove_OT; typeclasses eauto.
     - apply Proper_ot_R_pfun_app_partial; try typeclasses eauto.
       prove_OT; typeclasses eauto. }
+  { split; intro; intros; setoid_rewrite H7.
+    Set Printing All.
+    simpl (bindM @o@ _); unfold mk_ofun.
+    rewrite monad_assoc.
+
+    simpl.
+    (* simpl bindM. repeat (simpl (ofun _ @o@ _)). *)
+    refine (proj1 (monad_assoc _ _ _ (m @o@ a2) (ofun (fun s_x => f @o@ snd s_x @o@ fst s_x)) _)).
+    exact (proj1 (monad_assoc ))
+
+    - refine (proj1 (monad_assoc _ _ _ _ _ _)).
+    rewrite monad_assoc.
+rewrite_OT.
+
+ apply ot_arrow_ext; intros.
+    intro.
+    apply ot_arrow_ext.
+
+
+split.
+
+simpl. split.
+
+prove_OT.
   { admit.
     (* FIXME HERE: why is the following SOOOOOO slow?! *)
     (*
