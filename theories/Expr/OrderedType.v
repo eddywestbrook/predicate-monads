@@ -329,15 +329,15 @@ Instance Proper_compose_pfun_equiv A B C :
 Qed.
 
 (* Category theory laws for Pfuns *)
-Lemma id_compose_Pfun A B (f: A -o> B) :
+Lemma id_compose_pfun A B (f: A -o> B) :
   ot_equiv (compose_pfun id_pfun f) f.
   split; intros a1 a2 Ra; simpl; apply pfun_Proper; assumption.
 Qed.
-Lemma compose_id_Pfun A B (f: A -o> B) :
+Lemma compose_id_pfun A B (f: A -o> B) :
   ot_equiv (compose_pfun f id_pfun) f.
   split; intros a1 a2 Ra; simpl; apply pfun_Proper; assumption.
 Qed.
-Lemma compose_compose_Pfun A B C D (f: A -o> B) (g: B -o> C) (h: C -o> D) :
+Lemma compose_compose_pfun A B C D (f: A -o> B) (g: B -o> C) (h: C -o> D) :
   ot_equiv (compose_pfun f (compose_pfun g h)) (compose_pfun (compose_pfun f g) h).
   split; intros a1 a2 Ra; simpl; repeat apply pfun_Proper; assumption.
 Qed.
@@ -627,8 +627,8 @@ Lemma lookup_weaken_OTInCtx W n B ctx pf :
   { reflexivity. }
   { simpl. rewrite compose_pair_snd. reflexivity. }
   { simpl. reflexivity. }
-  { simpl. rewrite compose_compose_Pfun. rewrite compose_pair_fst.
-    rewrite <- compose_compose_Pfun. rewrite IHpf. reflexivity. }
+  { simpl. rewrite compose_compose_pfun. rewrite compose_pair_fst.
+    rewrite <- compose_compose_pfun. rewrite IHpf. reflexivity. }
 Qed.
 
 
@@ -638,24 +638,20 @@ Qed.
 
 (* Ordered expressions *)
 Inductive OExpr : OTCtx -> OType -> Type :=
-| OVar ctx A : OTInCtx A ctx -> OExpr ctx A
-| OEmbed ctx A : ot_Type A -> OExpr ctx A
-| OApp ctx A B : OExpr ctx (A -o> B) -> OExpr ctx A -> OExpr ctx B
-| OLam ctx A B : OExpr (A::ctx) B -> OExpr ctx (A -o> B)
+| OVar {ctx A} : OTInCtx A ctx -> OExpr ctx A
+| OEmbed {ctx A} : ot_Type A -> OExpr ctx A
+| OApp {ctx A B} : OExpr ctx (A -o> B) -> OExpr ctx A -> OExpr ctx B
+| OLam {ctx A B} : OExpr (A::ctx) B -> OExpr ctx (A -o> B)
 .
 
 (* Weakening of ordered expressions *)
-Fixpoint weakenOExpr W n ctx A (e:OExpr ctx A) :
+Fixpoint weakenOExpr W n {ctx A} (e:OExpr ctx A) :
   OExpr (weakenOTCtx W n ctx) A :=
   match e with
-  | OVar ctx A pf => OVar _ A (weakenOTInCtx W n A ctx pf)
-  | OEmbed ctx A x => OEmbed (weakenOTCtx W n ctx) A x
-  | OApp ctx A B f arg =>
-    OApp (weakenOTCtx W n ctx) A B (weakenOExpr W n ctx (A -o> B) f)
-         (weakenOExpr W n ctx A arg)
-  | OLam ctx A B f =>
-    OLam (weakenOTCtx W n ctx) A B
-         (weakenOExpr W (S n) (A::ctx) B f)
+  | OVar pf => OVar (weakenOTInCtx W n _ _ pf)
+  | OEmbed x => OEmbed x
+  | OApp f arg => OApp (weakenOExpr W n f) (weakenOExpr W n arg)
+  | OLam f => OLam (weakenOExpr W (S n) f)
   end.
 
 (* A substitution for all the elements of a context *)
@@ -674,34 +670,34 @@ Fixpoint weakenOSubst W n ctx_from ctx_to :
   | [] => fun _ => tt
   | A::ctx_from' =>
     fun s => (weakenOSubst W n ctx_from' ctx_to (fst s),
-              weakenOExpr W n _ A (snd s))
+              weakenOExpr W n (snd s))
   end.
 
 (* Substitution into an ordered expression variable *)
-Fixpoint substOVar ctx A (v:OTInCtx A ctx) ctx_to : OSubst ctx ctx_to ->
-                                                    OExpr ctx_to A :=
+Fixpoint substOVar {ctx A} (v:OTInCtx A ctx) {ctx_to} : OSubst ctx ctx_to ->
+                                                        OExpr ctx_to A :=
   match v in OTInCtx _ ctx return OSubst ctx ctx_to -> OExpr ctx_to A with
   | OTInCtx_base _ _ =>
     fun s => snd s
   | OTInCtx_step _ ctx' _ v' =>
-    fun s => substOVar ctx' A v' ctx_to (fst s)
+    fun s => substOVar v' (fst s)
   end.
 
 (* Substitute into an expression *)
-Fixpoint substOExpr ctx A (e:OExpr ctx A) :
-  forall ctx_to (s:OSubst ctx ctx_to), OExpr ctx_to A :=
+Fixpoint substOExpr {ctx A} (e:OExpr ctx A) :
+  forall {ctx_to} (s:OSubst ctx ctx_to), OExpr ctx_to A :=
   match e with
-  | OVar ctx A pf => fun ctx_to s => substOVar ctx A pf ctx_to s
-  | OEmbed ctx A a => fun ctx_to _ => OEmbed ctx_to A a
-  | OApp ctx A B e1 e2 =>
+  | OVar pf => fun ctx_to s => substOVar pf s
+  | OEmbed a => fun ctx_to _ => OEmbed a
+  | OApp e1 e2 =>
     fun ctx_to s =>
-      OApp ctx_to A B (substOExpr ctx (A -o> B) e1 ctx_to s)
-           (substOExpr ctx A e2 ctx_to s)
-  | OLam ctx A B e =>
+      OApp (substOExpr e1 s)
+           (substOExpr e2 s)
+  | @OLam ctx A _ e =>
     fun ctx_to s =>
-      OLam ctx_to A B (substOExpr (A::ctx) B e (A::ctx_to)
-                                  (weakenOSubst A 0 ctx ctx_to s,
-                                   OVar _ _ (OTInCtx_base A ctx_to)))
+      OLam (substOExpr
+              e
+              (weakenOSubst A 0 ctx _ s, OVar (OTInCtx_base A _)))
   end.
 
 (* The identity substitution *)
@@ -709,8 +705,8 @@ Fixpoint idSubst ctx : OSubst ctx ctx :=
   match ctx with
   | [] => tt
   | A::ctx' =>
-    (weakenOSubst A 0 ctx' ctx' (idSubst ctx'),
-     OVar _ _ (OTInCtx_base A ctx'))
+    (@weakenOSubst A 0 ctx' ctx' (idSubst ctx'),
+     OVar (OTInCtx_base A ctx'))
   end.
 
 
@@ -731,13 +727,12 @@ Definition weakenSemantics W n ctx B
 Arguments weakenSemantics W n ctx B sem /.
 
 (* The semantics for any ordered expression *)
-Fixpoint exprSemantics ctx A (e:OExpr ctx A) : OTSemantics ctx A :=
+Fixpoint exprSemantics {ctx A} (e:OExpr ctx A) : OTSemantics ctx A :=
   match e in OExpr ctx A return OTSemantics ctx A with
-  | OVar ctx A pf => lookupOTInCtx A ctx pf
-  | OEmbed ctx A a => const_pfun a
-  | OApp ctx A B e1 e2 =>
-    pfun_apply (exprSemantics ctx (A -o> B) e1) (exprSemantics ctx A e2)
-  | OLam ctx A B e => pfun_curry (exprSemantics (A::ctx) B e)
+  | OVar pf => lookupOTInCtx _ _ pf
+  | OEmbed a => const_pfun a
+  | OApp e1 e2 => pfun_apply (exprSemantics e1) (exprSemantics e2)
+  | OLam e => pfun_curry (exprSemantics e)
   end.
 
 (* The ordered type over expressions *)
@@ -750,23 +745,23 @@ Program Definition OExprOType ctx A : OType :=
  *)
 
 Definition oexpr_R {ctx A} : relation (OExpr ctx A) :=
-  fun e1 e2 => ot_R (exprSemantics ctx A e1) (exprSemantics ctx A e2).
+  fun e1 e2 => ot_R (exprSemantics e1) (exprSemantics e2).
 Definition oexpr_equiv {ctx A} : relation (OExpr ctx A) :=
-  fun e1 e2 => oexpr_R e1 e2 /\ oexpr_R e2 e1.
+  fun e1 e2 => ot_equiv (exprSemantics e1) (exprSemantics e2).
 
 Instance oexpr_R_PreOrder ctx A : PreOrder (@oexpr_R ctx A).
 Proof.
   unfold oexpr_R; constructor; intro; intros.
   { reflexivity. }
-  { transitivity (exprSemantics ctx A y); assumption. }
+  { transitivity (exprSemantics y); assumption. }
 Qed.
 
 Instance oexpr_equiv_Equivalence ctx A : Equivalence (@oexpr_equiv ctx A).
 Proof.
-  constructor; intro; intros.
-  { split; reflexivity. }
-  { destruct H; split; assumption. }
-  { destruct H; destruct H0; split; transitivity y; assumption. }
+  constructor; intro; intros; unfold oexpr_equiv.
+  { reflexivity. }
+  { symmetry; assumption. }
+  { transitivity (exprSemantics y); assumption. }
 Qed.
 
 Notation "x <o= y" :=
@@ -785,25 +780,25 @@ Proof.
   intros x y Rxy; destruct Rxy; assumption.
 Qed.
 
-Instance OEmbed_Proper_R ctx A : Proper (ot_R ==> oexpr_R) (OEmbed ctx A).
+Instance OEmbed_Proper_R ctx A : Proper (ot_R ==> oexpr_R) (@OEmbed ctx A).
 Proof.
   intros a1 a2 Ra c1 c2 Rc. apply Ra.
 Qed.
 
 Instance OEmbed_Proper_equiv ctx A :
-  Proper (ot_equiv ==> oexpr_equiv) (OEmbed ctx A).
+  Proper (ot_equiv ==> oexpr_equiv) (@OEmbed ctx A).
 Proof.
   intros a1 a2 Ra; split; intros c1 c2 Rc; apply Ra.
 Qed.
 
 Instance OEmbed_Proper_equiv_R ctx A :
-  Proper (ot_equiv ==> oexpr_R) (OEmbed ctx A).
+  Proper (ot_equiv ==> oexpr_R) (@OEmbed ctx A).
 Proof.
   intros a1 a2 Ra; intros c1 c2 Rc; apply Ra.
 Qed.
 
 Instance OApp_Proper_R ctx A B :
-  Proper (oexpr_R ==> oexpr_R ==> oexpr_R) (OApp ctx A B).
+  Proper (oexpr_R ==> oexpr_R ==> oexpr_R) (@OApp ctx A B).
 Proof.
   intros f1 f2 Rf e1 e2 Re c1 c2 Rc. simpl.
   apply Rf; [ assumption | ].
@@ -811,42 +806,31 @@ Proof.
 Qed.
 
 Instance OApp_Proper_equiv ctx A B :
-  Proper (oexpr_equiv ==> oexpr_equiv ==> oexpr_equiv) (OApp ctx A B).
+  Proper (oexpr_equiv ==> oexpr_equiv ==> oexpr_equiv) (@OApp ctx A B).
 Proof.
   intros f1 f2 Rf e1 e2 Re; simpl.
-  destruct Rf; destruct Re; split.
+  destruct Rf; destruct Re; split; simpl.
   - rewrite H; rewrite H1; reflexivity.
   - rewrite H0; rewrite H2; reflexivity.
 Qed.
 
-Instance OLam_Proper_R ctx A B : Proper (oexpr_R ==> oexpr_R) (OLam ctx A B).
+Instance OLam_Proper_R ctx A B : Proper (oexpr_R ==> oexpr_R) (@OLam ctx A B).
 Proof.
   intros e1 e2 Re c1 c2 Rc a1 a2 Ra. simpl.
   apply Re. split; assumption.
 Qed.
 
 Instance OLam_Proper_equiv ctx A B :
-  Proper (oexpr_equiv ==> oexpr_equiv) (OLam ctx A B).
+  Proper (oexpr_equiv ==> oexpr_equiv) (@OLam ctx A B).
 Proof.
   intros e1 e2 Re. destruct Re.
-  split; [ rewrite H | rewrite H0]; reflexivity.
+  split; simpl; [ rewrite H | rewrite H0]; reflexivity.
 Qed.
 
 
 (***
  *** Beta Rules
  ***)
-
-Lemma OExpr_Weakening W n ctx A (e: OExpr ctx A) :
-  ot_equiv
-    (exprSemantics (weakenOTCtx W n ctx) A (weakenOExpr W n ctx A e))
-    (weakenSemantics W n ctx A (exprSemantics ctx A e)).
-  revert n; induction e; intros; simpl.
-  { apply lookup_weaken_OTInCtx. }
-  { rewrite compose_f_const_pfun; reflexivity. }
-  { rewrite IHe1. rewrite IHe2. rewrite compose_pfun_apply. reflexivity. }
-  { rewrite (IHe (S n)). simpl. rewrite compose_pfun_curry. reflexivity. }
-Qed.
 
 Fixpoint substSemantics ctx_from ctx_to :
   OSubst ctx_from ctx_to -> OTCtxElem ctx_to -o> OTCtxElem ctx_from :=
@@ -858,9 +842,19 @@ Fixpoint substSemantics ctx_from ctx_to :
     fun s =>
       pair_pfun
         (substSemantics ctx_from' ctx_to (fst s))
-        (exprSemantics _ _ (snd s))
+        (exprSemantics (snd s))
   end.
 
+Lemma OExpr_Weakening W n {ctx A} (e: OExpr ctx A) :
+  ot_equiv
+    (exprSemantics (weakenOExpr W n e))
+    (weakenSemantics W n ctx A (exprSemantics e)).
+  revert n; induction e; intros; simpl.
+  { apply lookup_weaken_OTInCtx. }
+  { rewrite compose_f_const_pfun; reflexivity. }
+  { rewrite IHe1. rewrite IHe2. rewrite compose_pfun_apply. reflexivity. }
+  { rewrite (IHe (S n)). simpl. rewrite compose_pfun_curry. reflexivity. }
+Qed.
 
 Lemma OSubst_Weakening W ctx_from ctx_to s :
   ot_equiv
@@ -874,11 +868,11 @@ Lemma OSubst_Weakening W ctx_from ctx_to s :
     reflexivity. }
 Qed.
 
-Lemma OExpr_Substitution ctx A e ctx_to s :
-  ot_equiv (exprSemantics ctx_to A (substOExpr ctx A e ctx_to s))
+Lemma OExpr_Substitution {ctx A} (e: OExpr ctx A) {ctx_to} s :
+  ot_equiv (exprSemantics (substOExpr e s))
            (compose_pfun
               (substSemantics ctx ctx_to s)
-              (exprSemantics ctx A e)).
+              (exprSemantics e)).
   revert ctx_to s; induction e; intros.
   { induction o.
     - simpl. rewrite compose_pair_snd. reflexivity.
@@ -889,7 +883,19 @@ Lemma OExpr_Substitution ctx A e ctx_to s :
     rewrite OSubst_Weakening. reflexivity. }
 Qed.
 
-Lemma OExpr_beta ctx A B 
+Lemma idSubst_id ctx :
+  ot_equiv (substSemantics _ _ (idSubst ctx)) id_pfun.
+  induction ctx; simpl.
+  { split; intros c1 c2 Rc; destruct c1; destruct c2; simpl; reflexivity. }
+  { rewrite OSubst_Weakening. rewrite IHctx. rewrite compose_id_pfun.
+    rewrite pair_fst_snd_eta. reflexivity. }
+Qed.
+
+Lemma OExpr_beta ctx A B (f: OExpr (A::ctx) B) (arg: OExpr ctx A) :
+  OApp (OLam f) arg =o= substOExpr f (idSubst _, arg).
+  unfold oexpr_equiv. simpl. rewrite pfun_apply_pfun_curry.
+  rewrite OExpr_Substitution. simpl. rewrite idSubst_id. reflexivity.
+Qed.
 
 
 FIXME HERE NOW
