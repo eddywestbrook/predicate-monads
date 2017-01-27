@@ -541,6 +541,12 @@ Lemma compose_pfun_curry A B C D (f: A -o> B) (g: B *o* C -o> D) :
   split; intros a1 a2 Ra c1 c2 Rc; simpl; rewrite Ra; rewrite Rc; reflexivity.
 Qed.
 
+(* Applying a const is just composition *)
+Lemma pfun_apply_const A B C (f: B -o> C) (g: A -o> B) :
+  ot_equiv (pfun_apply (A:=A) (const_pfun f) g) (compose_pfun g f).
+  split; intros a1 a2 Ra; simpl; rewrite Ra; reflexivity.
+Qed.
+
 (* We can simplify pfun_S used with pfun_curry *)
 Lemma pfun_apply_pfun_curry A B C f g :
   ot_equiv (@pfun_apply A B C (pfun_curry f) g)
@@ -549,6 +555,22 @@ Lemma pfun_apply_pfun_curry A B C f g :
     try apply pfun_Proper; assumption.
 Qed.
 
+(* The pair constructor as a pfun *)
+Program Definition pair_ctor_pfun {A B} : A -o> B -o> A *o* B :=
+  {| pfun_app := fun a => {| pfun_app := fun b => (a,b) |} |}.
+Next Obligation.
+  intros b1 b2 Rb; rewrite Rb; reflexivity.
+Qed.
+Next Obligation.
+  intros a1 a2 Ra b1 b2 Rb; simpl; rewrite Ra; rewrite Rb; reflexivity.
+Qed.
+
+(* Applying pair_ctor_pfun yields a pair_pfun *)
+Lemma apply_pair_ctor_pfun {A B C} (f: A -o> B) (g: A -o> C) :
+  ot_equiv (pfun_apply (pfun_apply (const_pfun pair_ctor_pfun) f) g)
+           (pair_pfun f g).
+  split; intros a1 a2 Ra; simpl; rewrite Ra; reflexivity.
+Qed.
 
 
 (***
@@ -744,11 +766,13 @@ Program Definition OExprOType ctx A : OType :=
   |}.
  *)
 
+(* The ot_R and ot_equiv relations on ordered expressions *)
 Definition oexpr_R {ctx A} : relation (OExpr ctx A) :=
   fun e1 e2 => ot_R (exprSemantics e1) (exprSemantics e2).
 Definition oexpr_equiv {ctx A} : relation (OExpr ctx A) :=
   fun e1 e2 => ot_equiv (exprSemantics e1) (exprSemantics e2).
 
+(* oexpr_R is a PreOrder *)
 Instance oexpr_R_PreOrder ctx A : PreOrder (@oexpr_R ctx A).
 Proof.
   unfold oexpr_R; constructor; intro; intros.
@@ -756,6 +780,7 @@ Proof.
   { transitivity (exprSemantics y); assumption. }
 Qed.
 
+(* oexpr_equiv is an Equivalence *)
 Instance oexpr_equiv_Equivalence ctx A : Equivalence (@oexpr_equiv ctx A).
 Proof.
   constructor; intro; intros; unfold oexpr_equiv.
@@ -764,6 +789,7 @@ Proof.
   { transitivity (exprSemantics y); assumption. }
 Qed.
 
+(* Notations for oexpr_R and oexpr_equiv *)
 Notation "x <o= y" :=
   (oexpr_R x y) (no associativity, at level 70).
 Notation "x =o= y" :=
@@ -832,6 +858,8 @@ Qed.
  *** Beta Rules
  ***)
 
+(* The semantics of a substitution is a proper function from its range context
+to its domain context *)
 Fixpoint substSemantics ctx_from ctx_to :
   OSubst ctx_from ctx_to -> OTCtxElem ctx_to -o> OTCtxElem ctx_from :=
   match ctx_from return
@@ -845,6 +873,7 @@ Fixpoint substSemantics ctx_from ctx_to :
         (exprSemantics (snd s))
   end.
 
+(* The Weakening Lemma for ordered expressions *)
 Lemma OExpr_Weakening W n {ctx A} (e: OExpr ctx A) :
   ot_equiv
     (exprSemantics (weakenOExpr W n e))
@@ -856,6 +885,7 @@ Lemma OExpr_Weakening W n {ctx A} (e: OExpr ctx A) :
   { rewrite (IHe (S n)). simpl. rewrite compose_pfun_curry. reflexivity. }
 Qed.
 
+(* The Weakening Lemma for substitutions *)
 Lemma OSubst_Weakening W ctx_from ctx_to s :
   ot_equiv
     (substSemantics ctx_from (W::ctx_to) (weakenOSubst W 0 _ _ s))
@@ -868,6 +898,7 @@ Lemma OSubst_Weakening W ctx_from ctx_to s :
     reflexivity. }
 Qed.
 
+(* The Substitution Lemma for ordered expressions *)
 Lemma OExpr_Substitution {ctx A} (e: OExpr ctx A) {ctx_to} s :
   ot_equiv (exprSemantics (substOExpr e s))
            (compose_pfun
@@ -883,6 +914,7 @@ Lemma OExpr_Substitution {ctx A} (e: OExpr ctx A) {ctx_to} s :
     rewrite OSubst_Weakening. reflexivity. }
 Qed.
 
+(* The identity substitution really is the identity *)
 Lemma idSubst_id ctx :
   ot_equiv (substSemantics _ _ (idSubst ctx)) id_pfun.
   induction ctx; simpl.
@@ -891,6 +923,7 @@ Lemma idSubst_id ctx :
     rewrite pair_fst_snd_eta. reflexivity. }
 Qed.
 
+(* The beta rule for ordered expressions *)
 Lemma OExpr_beta ctx A B (f: OExpr (A::ctx) B) (arg: OExpr ctx A) :
   OApp (OLam f) arg =o= substOExpr f (idSubst _, arg).
   unfold oexpr_equiv. simpl. rewrite pfun_apply_pfun_curry.
@@ -898,286 +931,8 @@ Lemma OExpr_beta ctx A B (f: OExpr (A::ctx) B) (arg: OExpr ctx A) :
 Qed.
 
 
-FIXME HERE NOW
-
-(* Reverse l1 and append l2 *)
-Fixpoint rev_app {A} (l1 l2: list A) : list A :=
-  match l1 with
-  | [] => l2
-  | x::l1' => rev_app l1' (x::l2)
-  end.
-
-Fixpoint weakenOTInCtx_rev_app ctx_pre :
-  forall B ctx, OTInCtx B ctx -> OTInCtx B (rev_app ctx_pre ctx) :=
-  match ctx_pre
-        return forall B ctx, OTInCtx B ctx -> OTInCtx B (rev_app ctx_pre ctx)
-  with
-  | [] => fun B ctx pf => pf
-  | A::ctx_pre' =>
-    fun B ctx pf =>
-      weakenOTInCtx_rev_app ctx_pre' B (A::ctx) (OTInCtx_step B _ A pf)
-  end.
-
-(* Build the weakening substitution, that maps each variable in ctx to the
-corresonding variable in rev_app ctx_pre ctx *)
-Fixpoint weakenSubst (ctx_pre ctx: OTCtx) : OSubst ctx (rev_app ctx_pre ctx) :=
-  match ctx with
-  | [] => tt
-  | A::ctx' =>
-    (weakenSubst (A::ctx_pre) ctx',
-     OVar _ _ (weakenOTInCtx_rev_app ctx_pre A (A::ctx') (OTInCtx_base A ctx')))
-  end.
+(***
+ *** Iota and Eta Rules for Pairs
+ ***)
 
 FIXME HERE NOW
-
-(* Substitution into a context (which just removes a type) *)
-Fixpoint substOTCtx (ctx:OTCtx) B (pf:OTInCtx B ctx) : OTCtx :=
-  match pf with
-  | OTInCtx_base _ ctx => ctx
-  | OTInCtx_step _ ctx A pf' =>
-    A :: (substOTCtx ctx B pf')
-  end.
-
-(* Substitution into an ordered variable *)
-Fixpoint substOVar ctx A (pf: OTInCtx A ctx) :
-  forall B pfB, OExpr (substOTCtx ctx B pf) B -> OExpr (substOTCtx ctx B pf) A :=
-  match pf in OTInCtx A ctx
-        return forall B pfB, OExpr (substOTCtx ctx B pf) B ->
-                             OExpr (substOTCtx ctx B pf) A
-  with
-  | OTInCtx_base _ ctx =>
-    fun B pfB s =>
-      match pfB with
-      | OTInCtx_base _ 
-
-(* Substitution into ordered expressions *)
-Fixpoint substOExpr ctx A (e:OExpr ctx A) :
-  forall B pf, OExpr (substOTCtx ctx B pf) B -> OExpr (substOTCtx ctx B pf) A :=
-  match e return
-        forall B pf,
-          OExpr (substOTCtx ctx B pf) B -> OExpr (substOTCtx ctx B pf) A
-  with
-  | OVar ctx A 
-
-
-
-
-
-(* FIXME HERE NOW: old stuff below... *)
-
-(***
- *** Building Proper Functions
- ***)
-
-Class ProperPair (A:OType) (x y:A) : Prop :=
-  proper_pair_pf : ot_R A x y.
-
-Definition ot_Lambda {A B:OType} (f: A -> B)
-           {prp:forall x y, ProperPair A x y -> ProperPair B (f x) (f y)}
-  : OTarrow A B :=
-  {| pfun_app := f; pfun_Proper := prp |}.
-
-Instance ProperPair_refl (A:OType) (x:A) : ProperPair A x x.
-Proof.
-  unfold ProperPair. reflexivity.
-Qed.
-
-Instance ProperPair_pfun_app (A B:OType) (fl fr:OTarrow A B) argl argr
-         (prpf:ProperPair (OTarrow A B) fl fr)
-         (prpa:ProperPair A argl argr)
- : ProperPair B (pfun_app fl argl) (pfun_app fr argr).
-Proof.
-  apply prpf; assumption.
-Qed.
-
-Instance ProperPair_ot_lambda (A B:OType) (f g:A -> B) prpl prpr
-         (pf: forall x y, ProperPair A x y -> ProperPair B (f x) (g y)) :
-  ProperPair (OTarrow A B) (@ot_Lambda A B f prpl) (@ot_Lambda A B g prpr).
-Proof.
-  intros xl xr Rx; apply pf; assumption.
-Qed.
-
-
-(***
- *** Ordered Terms for Pair Operations
- ***)
-
-Program Definition ofst {A B:OType} : OTarrow (OTpair A B) A :=
-  @ot_Lambda (OTpair A B) A fst _.
-Next Obligation.
-  destruct H. assumption.
-Qed.
-
-Program Definition osnd {A B:OType} : OTarrow (OTpair A B) B :=
-  @ot_Lambda (OTpair A B) _ snd _.
-Next Obligation.
-  destruct H. assumption.
-Qed.
-
-Program Definition opair {A B:OType} : OTarrow A (OTarrow B (OTpair A B)) :=
-  @ot_Lambda
-    A _
-    (fun x =>
-       @ot_Lambda
-         B (OTpair A B)
-         (fun y => pair x y)
-         _)
-    _.
-Next Obligation.
-  split; [ reflexivity | assumption ].
-Qed.
-Next Obligation.
-  apply ProperPair_ot_lambda; intros. split; assumption.
-Qed.
-
-
-(***
- *** Notations for Ordered Types
- ***)
-
-Notation "A '-o>' B" :=
-  (OTarrow A B) (right associativity, at level 99).
-Notation "A '*o*' B" :=
-  (OTpair A B) (left associativity, at level 40).
-Notation "A '+o+' B" :=
-  (OTsum A B) (left associativity, at level 50).
-Notation "'~o~' A" :=
-  (OTflip A) (right associativity, at level 35).
-
-Notation "x <o= y" :=
-  (ot_R _ x y) (no associativity, at level 70).
-Notation "x =o= y" :=
-  (ot_equiv _ x y) (no associativity, at level 70).
-
-Notation "x @o@ y" :=
-  (pfun_app x y) (left associativity, at level 20).
-
-Notation "( x ,o, y )" :=
-  (opair @o@ x @o@ y)
-    (no associativity, at level 0).
-
-(* FIXME: why don't these work?
-Notation "'ofun' ( x : A ) =o> t" :=
-  (@ot_Lambda A _ (fun x => t))
-    (at level 100, right associativity, x at level 99) : pterm_scope.
-
-Notation "'ofun' x =o> t" :=
-  (ot_Lambda (fun x => t))
-    (at level 100, right associativity, x at level 99) : pterm_scope.
- *)
-
-Notation ofun := ot_Lambda.
-
-
-(***
- *** Automation for Ordered Terms
- ***)
-
-(* Don't unfold ot_Lambda when simplifying  *)
-Arguments ot_Lambda A B f prp : simpl never.
-
-Instance Proper_ot_R_ot_R A :
-  Proper (Basics.flip (ot_R A) ==> ot_R A ==> Basics.impl) (ot_R A).
-Proof.
-  intros x1 x2 Rx y1 y2 Ry R.
-  transitivity x1; [ assumption | ]; transitivity y1; assumption.
-Qed.
-
-Instance Proper_ot_equiv_ot_R A :
-  Proper (ot_equiv A ==> ot_equiv A ==> iff) (ot_R A).
-Proof.
-  intros x1 x2 Rx y1 y2 Ry; destruct Rx; destruct Ry; split; intro R.
-  transitivity x1; [ assumption | ]; transitivity y1; assumption.
-  transitivity x2; [ assumption | ]; transitivity y2; assumption.
-Qed.
-
-Instance Proper_ot_R_pfun_app A B :
-  Proper (ot_R (A -o> B) ==> ot_R A ==> ot_R B) (@pfun_app A B).
-Proof.
-  intros f1 f2 Rf x1 x2 Rx. apply Rf; apply Rx.
-Qed.
-
-Instance Proper_ot_R_pfun_app_partial A B f :
-  Proper (ot_R A ==> ot_R B) (@pfun_app A B f).
-Proof.
-  apply pfun_Proper.
-Qed.
-
-
-Create HintDb OT.
-
-(* Split ot_equiv equalities into the left and right cases *)
-Definition split_ot_equiv A (x y : ot_Type A)
-           (pf1: x <o= y) (pf2 : y <o= x) : x =o= y :=
-  conj pf1 pf2.
-
-Hint Resolve split_ot_equiv : OT.
-
-(* Extensionality for ot_R *)
-Definition ot_arrow_ext (A B:OType) (f1 f2 : A -o> B)
-           (pf:forall x y, x <o= y -> f1 @o@ x <o= f2 @o@ y) : f1 <o= f2 := pf.
-
-Hint Resolve ot_arrow_ext : OT.
-
-(* Add the above rules to the OT rewrite set *)
-(* Hint Rewrite @mkOTerm_apply @ot_unlift_iso_OTForType_refl_id : OT. *)
-
-(* Eta-equality for pairs *)
-Lemma ot_pair_eta (A B:OType) (x : A *o* B) :
-  @ot_equiv (A *o* B) (fst x , snd x) x.
-  split; split; reflexivity.
-Qed.
-
-Hint Rewrite ot_pair_eta : OT.
-
-(* Tactic to apply rewrites in the OT rewrite set *)
-Ltac rewrite_OT := rewrite_strat (topdown (hints OT)).
-
-(* General tactic to try to prove theorems about ordered terms *)
-(*
-Ltac prove_OT :=
-  repeat first [simpl_mkOTerm_refl | simpl_mkOTerm_apply];
-  try rewrite_OT;
-  lazymatch goal with
-  | |- ot_equiv _ _ _ => split
-  | |- _ => idtac
-  end.
-  (* repeat (apply ot_arrow_ext; intros). *)
- *)
-
-
-(***
- *** Examples of Ordered Terms
- ***)
-
-Module OTExamples.
-
-Definition ex1 : OTProp -o> OTProp := ot_Lambda (fun p => p).
-(* Eval compute in (pfun_app ex1 : Prop -> Prop). *)
-
-Definition ex2 {A} : (A -o> A) := ot_Lambda (fun p => p).
-(* Eval simpl in (fun A:OType => pfun_app (@ex2 A) : A -> A). *)
-
-Definition ex3 {A} : (A -o> A -o> A) :=
-  ot_Lambda (fun p1 => ot_Lambda (fun p2 => p1)).
-(* Eval simpl in (fun (A:OType) x => pfun_app (pfun_app (@ex3 A) x)). *)
-
-Definition ex4 {A B} : (A *o* B -o> A) := ot_Lambda (fun p => ofst @o@ p).
-(* Eval simpl in (fun (A B:OType) => pfun_app ex4 : A * B -> A). *)
-
-Definition ex5 {A B} : A *o* B -o> B *o* A :=
-  ot_Lambda (fun p => (osnd @o@ p ,o, ofst @o@ p)).
-(* Eval simpl in (fun (A B:OType) => pfun_app ex5 : A *o* B -> B *o* A). *)
-
-Definition ex6 {A B C} : A *o* B *o* C -o> C *o* A :=
-  ot_Lambda (fun triple => (osnd @o@ triple ,o, ofst @o@ (ofst @o@ triple))).
-
-Definition ex7 {A B C} : (A *o* B -o> C) -o> C -o> A -o> B -o> C :=
-  ot_Lambda (fun (f:(A *o* B -o> C)) =>
-               ot_Lambda
-                 (fun (c:C) =>
-                    ot_Lambda
-                      (fun a =>
-                         ot_Lambda (fun b => f @o@ (a ,o, b))))).
-
-End OTExamples.
