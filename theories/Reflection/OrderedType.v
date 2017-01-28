@@ -177,19 +177,19 @@ Program Definition OTType : OType :=
  *** Proper Instances for Simple Ordered Types
  ***)
 
-Instance Proper_pair A B `{OType A} `{OType B} :
+Instance Proper_pair A B `{OTRelation A} `{OTRelation B} :
   Proper (ot_R ==> ot_R ==> ot_R) (pair : A -> B -> A*B).
 Proof.
   repeat intro; split; assumption.
 Qed.
 
-Instance Proper_fst A B `{OType A} `{OType B} :
+Instance Proper_fst A B `{OTRelation A} `{OTRelation B} :
   Proper (ot_R ==> ot_R) (fst : A*B -> A).
 Proof.
   intros p1 p2 Rp; destruct Rp; assumption.
 Qed.
 
-Instance Proper_snd A B `{OType A} `{OType B} :
+Instance Proper_snd A B `{OTRelation A} `{OTRelation B} :
   Proper (ot_R ==> ot_R) (snd : A*B -> B).
 Proof.
   intros p1 p2 Rp; destruct Rp; assumption.
@@ -236,30 +236,30 @@ itself be proper, i.e., to be an element of OTarrow A OType. *)
 
 
 (* pfun_app is always Proper *)
-Instance Proper_pfun_app A B `{OType A} `{OType B} :
+Instance Proper_pfun_app A B `{OTRelation A} `{OTRelation B} :
   Proper (ot_R ==> ot_R ==> ot_R) (@pfun_app A B _ _).
 Proof.
   intros f1 f2 Rf a1 a2 Ra. apply Rf; assumption.
 Qed.
 
 (* pfun_app is always Proper w.r.t. ot_equiv *)
-Instance Proper_pfun_app_equiv A B `{OType A} `{OType B} :
+Instance Proper_pfun_app_equiv A B `{OTRelation A} `{OTRelation B} :
   Proper (ot_equiv ==> ot_equiv ==> ot_equiv) (@pfun_app A B _ _).
 Proof.
   intros f1 f2 Rf a1 a2 Ra; destruct Rf; destruct Ra.
   split; apply Proper_pfun_app; assumption.
 Qed.
 
-Instance Proper_pfun_app_partial A B `{OType A} `{OType B} f :
+Instance Proper_pfun_app_partial A B `{OTRelation A} `{OTRelation B} f :
   Proper (ot_R ==> ot_R) (pfun_app (A:=A) (B:=B) f).
 Proof.
   apply pfun_Proper.
 Qed.
 
-Instance Proper_pfun_app_partial_equiv A B `{OType A} `{OType B} f :
+Instance Proper_pfun_app_partial_equiv A B `{OTRelation A} `{OTRelation B} f :
   Proper (ot_equiv ==> ot_equiv) (@pfun_app A B _ _ f).
 Proof.
-  apply Proper_pfun_app_equiv; try assumption; reflexivity.
+  intros a1 a2 Ra; destruct Ra; split; apply pfun_Proper; assumption.
 Qed.
 
 
@@ -288,109 +288,117 @@ Instance Proper_compose_pfun A B C
   apply Rg. apply Rf. assumption.
 Qed.
 
-Instance Proper_compose_pfun_equiv A B C `{OType A} `{OType B} `{OType C} :
+Instance Proper_compose_pfun_equiv A B C
+         `{OTRelation A} `{OTRelation B} `{OTRelation C} :
   Proper (ot_equiv ==> ot_equiv ==> ot_equiv) (@compose_pfun A B C _ _ _).
+Proof.
   intros f1 f2 Rf g1 g2 Rg.
-  split; intros a1 a2 Ra;
-    simpl; rewrite Rg; rewrite Rf; rewrite Ra; reflexivity.
+  split; intros a1 a2 Ra; simpl; apply Rg; apply Rf; apply Ra.
 Qed.
 
 (* Category theory laws for Pfuns *)
-Lemma id_compose_pfun A B `{OType A} `{OType B} (f: A -o> B) :
+Lemma id_compose_pfun A B `{OTRelation A} `{OTRelation B} (f: A -o> B) :
   ot_equiv (compose_pfun id_pfun f) f.
   split; intros a1 a2 Ra; simpl; apply pfun_Proper; assumption.
 Qed.
-Lemma compose_id_pfun A B `{OType A} `{OType B} (f: A -o> B) :
+Lemma compose_id_pfun A B `{OTRelation A} `{OTRelation B} (f: A -o> B) :
   ot_equiv (compose_pfun f id_pfun) f.
   split; intros a1 a2 Ra; simpl; apply pfun_Proper; assumption.
 Qed.
 Lemma compose_compose_pfun A B C D
-      `{OType A} `{OType B} `{OType C} `{OType D}
+      `{OTRelation A} `{OTRelation B} `{OTRelation C} `{OTRelation D}
       (f: A -o> B) (g: B -o> C) (h: C -o> D) :
   ot_equiv (compose_pfun f (compose_pfun g h)) (compose_pfun (compose_pfun f g) h).
   split; intros a1 a2 Ra; simpl; repeat apply pfun_Proper; assumption.
 Qed.
 
 (* The constant pfun *)
-Program Definition const_pfun {A B} `{OType A} `{OType B} b : A -o> B :=
+Program Definition const_pfun {A B} `{OTRelation A} `{OType B} b : A -o> B :=
   {| pfun_app := fun _ => b; pfun_Proper := fun _ _ _ => ltac:(reflexivity) |}.
 
 (* Composing with the constant pfun on the left *)
-Lemma compose_const_pfun_f A B C `{OType A} `{OType B} `{OType C}
+Lemma compose_const_pfun_f A B C `{OTRelation A} `{OType B} `{OType C}
       b (f : B -o> C) :
   ot_equiv (compose_pfun (const_pfun (A:=A) b) f) (const_pfun (pfun_app f b)).
   split; intros a1 a2 Ra; reflexivity.
 Qed.
 
 (* Composing with the constant pfun on the right *)
-Lemma compose_f_const_pfun A B C `{OType A} `{OType B} `{OType C} (f : A -o> B) c :
+Lemma compose_f_const_pfun A B C `{OTRelation A} `{OType B} `{OType C}
+      (f : A -o> B) c :
   ot_equiv (compose_pfun f (const_pfun c)) (const_pfun c).
   split; intros a1 a2 Ra; reflexivity.
 Qed.
 
 
 (* Take the pair of the outputs of two pfuns *)
-Program Definition pair_pfun {A B C} `{OType A} `{OType B} `{OType C}
-           (f: A -o> B) (g: A -o> C) : A -o> (B * C) :=
+Program Definition pair_pfun {A B C}
+        `{OTRelation A} `{OTRelation B} `{OTRelation C}
+        (f: A -o> B) (g: A -o> C) : A -o> (B * C) :=
   {| pfun_app := fun a => (pfun_app f a, pfun_app g a) |}.
 Next Obligation.
   intros a1 a2 Ra; split; apply pfun_Proper; assumption.
 Qed.
 
-Instance Proper_pair_pfun A B C `{OType A} `{OType B} `{OType C} :
+Instance Proper_pair_pfun A B C `{OTRelation A} `{OTRelation B} `{OTRelation C} :
   Proper (ot_R ==> ot_R ==> ot_R) (pair_pfun (A:=A) (B:=B) (C:=C)).
 Proof.
-  intros a1 a2 Ra b1 b2 Rb c1 c2 Rc.
-  simpl. rewrite Ra. rewrite Rb. rewrite Rc. reflexivity.
+  intros a1 a2 Ra b1 b2 Rb c1 c2 Rc; simpl; split.
+  - apply Ra; assumption.
+  - apply Rb; assumption.
 Qed.
 
-Instance Proper_pair_pfun_equiv A B C `{OType A} `{OType B} `{OType C} :
+Instance Proper_pair_pfun_equiv A B C
+         `{OTRelation A} `{OTRelation B} `{OTRelation C} :
   Proper (ot_equiv ==> ot_equiv ==> ot_equiv)
          (pair_pfun (A:=A) (B:=B) (C:=C)).
 Proof.
-  intros a1 a2 Ra b1 b2 Rb; split; intros c1 c2 Rc; split; simpl;
-    try rewrite Ra; try rewrite Rb; try rewrite Rc; reflexivity.
+  intros a1 a2 Ra b1 b2 Rb.
+  destruct Ra as [ Ra1 Ra2 ]; destruct Rb as [ Rb1 Rb2 ].
+  split; intros c1 c2 Rc; split; simpl;
+    first [ apply Ra1 | apply Ra2 | apply Rb1 | apply Rb2 ]; assumption.
 Qed.
 
 (* compose commutes with pair *)
-Lemma compose_f_pair_pfun A B C D `{OType A} `{OType B} `{OType C} `{OType D}
+Lemma compose_f_pair_pfun A B C D
+      `{OTRelation A} `{OTRelation B} `{OTRelation C} `{OTRelation D}
       (f: A -o> B) (g: B -o> C) (h: B -o> D) :
   ot_equiv (compose_pfun f (pair_pfun g h))
            (pair_pfun (compose_pfun f g) (compose_pfun f h)).
-  split; intros a1 a2 Ra; simpl; rewrite Ra; reflexivity.
+  split; intros a1 a2 Ra; simpl; split; repeat apply pfun_Proper; assumption.
 Qed.
 
 (* The first projection pfun *)
-Definition fst_pfun {A B} `{OType A} `{OType B} : A * B -o> A :=
+Definition fst_pfun {A B} `{OTRelation A} `{OTRelation B} : A * B -o> A :=
   {| pfun_app := fst; pfun_Proper := _ |}.
 
 (* The second projection pfun *)
-Definition snd_pfun {A B} `{OType A} `{OType B} : A * B -o> B :=
+Definition snd_pfun {A B} `{OTRelation A} `{OTRelation B} : A * B -o> B :=
   {| pfun_app := snd; pfun_Proper := _ |}.
 
 (* Composing pair with fst gives the first function in the pair *)
-Lemma compose_pair_fst A B C `{OType A} `{OType B} `{OType C}
+Lemma compose_pair_fst A B C `{OTRelation A} `{OTRelation B} `{OTRelation C}
       (f: A -o> B) (g: A -o> C) :
   ot_equiv (compose_pfun (pair_pfun f g) fst_pfun) f.
   split; intros a1 a2 Ra; simpl; apply pfun_Proper; assumption.
 Qed.
 
 (* Composing pair with snd gives the second function in the pair *)
-Lemma compose_pair_snd A B C `{OType A} `{OType B} `{OType C}
+Lemma compose_pair_snd A B C `{OTRelation A} `{OTRelation B} `{OTRelation C}
       (f: A -o> B) (g: A -o> C) :
   ot_equiv (compose_pfun (pair_pfun f g) snd_pfun) g.
   split; intros a1 a2 Ra; simpl; apply pfun_Proper; assumption.
 Qed.
 
 (* Taking the pair of fst and snd is the identity *)
-Lemma pair_fst_snd_eta A B `{OType A} `{OType B} :
+Lemma pair_fst_snd_eta A B `{OTRelation A} `{OTRelation B} :
   ot_equiv (pair_pfun (fst_pfun (A:=A) (B:=B)) snd_pfun) id_pfun.
   split; intros p1 p2 Rp; destruct Rp; split; simpl; assumption.
 Qed.
 
 
 (* Curry a Pfun *)
-Program Definition pfun_curry {A B C} `{OType A} `{OType B} `{OType C}
+Program Definition pfun_curry {A B C} `{OType A} `{OTRelation B} `{OTRelation C}
         (pfun : (A * B) -o> C)
   : A -o> (B -o> C) :=
   {| pfun_app :=
@@ -410,7 +418,8 @@ Proof.
 Qed.
 
 (* Uncrry a Pfun *)
-Program Definition pfun_uncurry {A B C} `{OType A} `{OType B} `{OType C}
+Program Definition pfun_uncurry {A B C}
+        `{OTRelation A} `{OTRelation B} `{OTRelation C}
         (pfun : A -o> (B -o> C))
   : (A * B) -o> C :=
   {| pfun_app :=
@@ -424,14 +433,14 @@ Qed.
 
 
 (* pfun_curry is Proper *)
-Instance Proper_pfun_curry A B C `{OType A} `{OType B} `{OType C}
+Instance Proper_pfun_curry A B C `{OType A} `{OTRelation B} `{OTRelation C}
   : Proper (ot_R ==> ot_R) (pfun_curry (A:=A) (B:=B) (C:=C)).
 Proof.
   intros f1 f2 Rf a1 a2 Ra b1 b2 Rb. apply Rf. split; assumption.
 Qed.
 
 (* pfun_curry is Proper w.r.t. equivalence *)
-Instance Proper_pfun_curry_equiv A B C `{OType A} `{OType B} `{OType C} :
+Instance Proper_pfun_curry_equiv A B C `{OType A} `{OTRelation B} `{OTRelation C} :
   Proper (ot_equiv ==> ot_equiv) (pfun_curry (A:=A) (B:=B) (C:=C)).
 Proof.
   intros f1 f2 Rf; destruct Rf; split; apply Proper_pfun_curry; assumption.
@@ -440,7 +449,7 @@ Qed.
 (* FIXME: Proper instance for pfun_uncurry *)
 
 (* Currying and uncurrying of pfuns form an isomorphism: part 1 *)
-Lemma pfun_curry_uncurry_eq A B C `{OType A} `{OType B} `{OType C}
+Lemma pfun_curry_uncurry_eq A B C `{OType A} `{OTRelation B} `{OTRelation C}
       (f: (A * B) -o> C) :
   pfun_uncurry (pfun_curry f) =o= f.
   split; intros ab1 ab2 Rab; simpl; apply pfun_Proper;
@@ -448,7 +457,7 @@ Lemma pfun_curry_uncurry_eq A B C `{OType A} `{OType B} `{OType C}
 Qed.
 
 (* Currying and uncurrying of pfuns form an isomorphism: part 2 *)
-Lemma pfun_uncurry_curry_eq A B C `{OType A} `{OType B} `{OType C}
+Lemma pfun_uncurry_curry_eq A B C `{OType A} `{OTRelation B} `{OTRelation C}
       (f: A -o> B -o> C) :
   pfun_curry (pfun_uncurry f) =o= f.
   split; intros a1 a2 Ra b1 b2 Rb; simpl; apply Proper_pfun_app;
@@ -457,7 +466,7 @@ Qed.
 
 
 (* The S combinator for pfuns (FIXME: do we need this?) *)
-Program Definition pfun_S {A B C} `{OType A} `{OType B} `{OType C}
+Program Definition pfun_S {A B C} `{OTRelation A} `{OTRelation B} `{OTRelation C}
   : (A -o> B -o> C) -o> (A -o> B) -o> A -o> C :=
   {| pfun_app :=
        fun f =>
@@ -481,25 +490,27 @@ Next Obligation.
 Qed.
 
 (* This is the S combinator, but partially applied *)
-Program Definition pfun_apply {A B C} `{OType A} `{OType B} `{OType C}
+Program Definition pfun_apply {A B C}
+        `{OTRelation A} `{OTRelation B} `{OTRelation C}
         (f: A -o> B -o> C) (g: A -o> B) : A -o> C :=
   {| pfun_app := fun a => pfun_app (pfun_app f a) (pfun_app g a) |}.
 Next Obligation.
   intros a1 a2 Ra; apply Proper_pfun_app; try apply pfun_Proper; assumption.
 Qed.
 
-Instance Proper_pfun_apply A B C `{OType A} `{OType B} `{OType C} :
+Instance Proper_pfun_apply A B C `{OTRelation A} `{OTRelation B} `{OTRelation C} :
   Proper (ot_R ==> ot_R ==> ot_R) (pfun_apply (A:=A) (B:=B) (C:=C)).
 Proof.
   intros a1 a2 Ra b1 b2 Rb c1 c2 Rc. simpl.
-  rewrite Ra. rewrite Rb. rewrite Rc. reflexivity.
+  apply Ra; try assumption. apply Rb; try assumption.
 Qed.
 
-Instance Proper_pfun_apply_equiv A B C `{OType A} `{OType B} `{OType C} :
+Instance Proper_pfun_apply_equiv A B C
+         `{OTRelation A} `{OTRelation B} `{OTRelation C} :
   Proper (ot_equiv ==> ot_equiv ==> ot_equiv) (pfun_apply (A:=A) (B:=B) (C:=C)).
 Proof.
   intros a1 a2 Ra b1 b2 Rb; split; intros c1 c2 Rc; simpl;
-    rewrite Ra; rewrite Rb; rewrite Rc; reflexivity.
+    apply Ra; try apply Rb; assumption.
 Qed.
 
 (* compose commutes with S *)
