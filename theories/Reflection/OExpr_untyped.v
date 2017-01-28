@@ -12,7 +12,7 @@ Import ListNotations.
 (* Untyped expressions to represent proper functions *)
 Inductive OExpr : Type :=
 | OVar (n:nat)
-| OEmbed {A} (a:A)
+| OEmbed {A} {RA:OTRelation A} (a:A)
 | OApp (A B:Type) {RA:OTRelation A} {RB:OTRelation B} (e1 e2 : OExpr)
 | OLam (A B:Type) {RA:OTRelation A} {RB:OTRelation B} (e: OExpr)
 .
@@ -80,23 +80,22 @@ Fixpoint CtxElem (ctx:Ctx) : Type :=
   | CtxCons A ctx' => A * CtxElem ctx'
   end.
 
-(* OTRelation and OType instances for nil CtxElems *)
-Instance OTRelation_CtxElem_Nil : OTRelation (CtxElem CtxNil) := OTunit_R.
-Instance OType_CtxElem_Nil : OType (CtxElem CtxNil) := OTunit.
-
-(* OTRelation and OType instances for cons CtxElems *)
-Instance OTRelation_CtxElem_Cons A `{OType A} ctx `{OTRelation (CtxElem ctx)} :
-  OTRelation (CtxElem (CtxCons A ctx)) := OTpair_R _ _ _ _.
-Instance OType_CtxElem_Cons A `{OType A} ctx `{OType (CtxElem ctx)} :
-  OType (CtxElem (CtxCons A ctx)) := OTpair _ _ _ _.
+(* OTRelation instance for any CtxElem type *)
+Instance OTRelation_CtxElem ctx : OTRelation (CtxElem ctx).
+Proof.
+  induction ctx.
+  - apply OTunit_R.
+  - apply OTpair_R; assumption.
+Defined.
 
 (* Proofs that a type is the nth element of a context *)
-Fixpoint HasTypeVar (v:nat) (ctx:Ctx) (B:Type) : Prop :=
+Fixpoint HasTypeVar (v:nat) (ctx:Ctx) (B:Type) {RB:OTRelation B} : Prop :=
   match v with
   | 0 =>
     match ctx with
     | CtxNil => False
-    | CtxCons A _ => A = B
+    | @CtxCons A RA _ =>
+      existT OTRelation A RA = existT OTRelation B RB
     end
   | S v' =>
     match ctx with
@@ -106,24 +105,30 @@ Fixpoint HasTypeVar (v:nat) (ctx:Ctx) (B:Type) : Prop :=
   end.
 
 (* Typing proofs for ordered expressions *)
-Fixpoint HasType (e:OExpr) (ctx:Ctx) (B:Type) : Prop :=
+Fixpoint HasType (e:OExpr) (ctx:Ctx) (B:Type) {RB:OTRelation B} : Prop :=
   match e with
   | OVar v => HasTypeVar v ctx B
-  | @OEmbed A a => A = B
+  | @OEmbed A RA a =>
+      existT OTRelation A RA = existT OTRelation B RB
   | OApp A B' f arg =>
-    (A -o> B') = B /\ (HasType f ctx (A -o> B') /\ HasType arg ctx A)
-  | OLam A B' body => (A -o> B') = B /\ HasType body (CtxCons A ctx) B'
+    existT OTRelation (A -o> B') _ = existT OTRelation B _
+    /\ (HasType f ctx (A -o> B') /\ HasType arg ctx A)
+  | OLam A B' body =>
+    existT OTRelation (A -o> B') _ = existT OTRelation B _
+    /\ HasType body (CtxCons A ctx) B'
   end.
 
 (* Lemma: each HasTypeVar proof is unique *)
-Lemma HasTypeVar_unique v ctx B (ht1 ht2: HasTypeVar v ctx B) : ht1 = ht2.
+Lemma HasTypeVar_unique v ctx B {RB:OTRelation B} (ht1 ht2: HasTypeVar v ctx B)
+  : ht1 = ht2.
   revert ctx ht1 ht2; induction v; destruct ctx; simpl; intros;
     try apply UIP; try apply IHv; try destruct ht1.
 Qed.
 
 (* Lemma: each HasType proof is unique *)
-Lemma HasType_unique ctx B e (ht1 ht2: HasType e ctx B) : ht1 = ht2.
-  revert ctx B ht1 ht2; induction e; simpl; intros.
+Lemma HasType_unique ctx B {RB:OTRelation B} e (ht1 ht2: HasType e ctx B)
+  : ht1 = ht2.
+  revert ctx B RB ht1 ht2; induction e; simpl; intros.
   { apply HasTypeVar_unique. }
   { apply UIP. }
   { destruct ht1 as [ ht11 ht1 ]; destruct ht1;
@@ -133,25 +138,32 @@ Lemma HasType_unique ctx B e (ht1 ht2: HasType e ctx B) : ht1 = ht2.
 Qed.
 
 (* The semantics of a well-typed variable *)
-Fixpoint varSemantics v ctx B : HasTypeVar v ctx B -> CtxElem ctx -o> B :=
+Program Fixpoint varSemantics v ctx B {RB:OTRelation B} :
+  HasTypeVar v ctx B -> CtxElem ctx -o> B :=
   match v return HasTypeVar v ctx B -> CtxElem ctx -o> B with
   | 0 =>
     match ctx return HasTypeVar 0 ctx B -> CtxElem ctx -o> B with
-    | [] => fun ht => match ht with end
-    | A::ctx' => fun ht => rew ht in fst_pfun
+    | CtxNil => fun ht => match ht with end
+    | @CtxCons A RA ctx' =>
+      fun (ht: existT OTRelation A RA = existT OTRelation B RB) =>
+        rew [fun p =>
+               @Pfun (A * CtxElem ctx') (projT1 p) (OTpair_R A _ RA _) (projT2 p)]
+            ht in (fst_pfun (A:=projT1 (existT OTRelation A RA)) (H:=RA))
     end
   | S v' =>
-    match ctx return HasTypeVar (S v') ctx B -> CtxElem ctx -o> B with
-    | [] => fun ht => match ht with end
-    | A::ctx' =>
+    match ctx return HasTypeVar (S v') ctx B ->
+                     @Pfun (CtxElem ctx) B (OTRelation_CtxElem ctx) _ with
+    | CtxNil => fun ht => match ht with end
+    | CtxCons A ctx' =>
       fun ht =>
         compose_pfun snd_pfun (varSemantics v' ctx' B ht)
     end
   end.
 
 (* The semantics of a well-typed expression *)
-Fixpoint exprSemantics e ctx B : HasType e ctx B -> CtxElem ctx -> B :=
-  match e return HasType e ctx B -> CtxElem ctx -> B with
+Fixpoint exprSemantics e ctx B {RB:OTRelation B} :
+  HasType e ctx B -> CtxElem ctx -> B :=
+  match e return HasType e ctx B -> CtxElem ctx -o> B with
   | OVar v => varSemantics v ctx B
   | OEmbed a => fun ht _ => rew ht in a
   | OApp A B' f arg =>
