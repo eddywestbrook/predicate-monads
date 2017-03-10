@@ -1,5 +1,5 @@
 Require Export PredMonad.Reflection.OrderedType.
-Require Import Coq.Logic.Eqdep. (* We need Streicher's K / UIP *)
+Require Import Coq.Logic.ProofIrrelevance.
 
 Import EqNotations.
 Import ListNotations.
@@ -67,6 +67,12 @@ Fixpoint substOExpr n (s:OExpr) (e:OExpr) : OExpr :=
  *** Typing for Ordered Expressions
  ***)
 
+(* Proof that one ordered type equals another *)
+Definition eqOType A {RA:OTRelation A} B {RB:OTRelation B} : Prop :=
+  existT OTRelation A RA = existT OTRelation B RB.
+
+
+
 (* A context here is just a list of types *)
 Inductive Ctx : Type :=
 | CtxNil
@@ -77,7 +83,7 @@ Inductive Ctx : Type :=
 Fixpoint CtxElem (ctx:Ctx) : Type :=
   match ctx with
   | CtxNil => unit
-  | CtxCons A ctx' => A * CtxElem ctx'
+  | CtxCons A ctx' => CtxElem ctx' * A
   end.
 
 (* OTRelation instance for any CtxElem type *)
@@ -88,14 +94,34 @@ Proof.
   - apply OTpair_R; assumption.
 Defined.
 
+(* Inductive type stating that every type in a Ctx is a valid OType *)
+Inductive ValidCtxInd : Ctx -> Prop :=
+| ValidCtxNil : ValidCtxInd CtxNil
+| ValidCtxCons A `{OType A} ctx : ValidCtxInd ctx -> ValidCtxInd (CtxCons A ctx)
+.
+
+(* Typeclass version of ValidCtxInd *)
+Class ValidCtx ctx : Prop :=
+  validCtx : ValidCtxInd ctx.
+
+(* Instances for building ValidCtx proofs *)
+Instance ValidCtx_Nil : ValidCtx CtxNil := ValidCtxNil.
+Instance ValidCtx_Cons A `{OType A} ctx (vc:ValidCtx ctx) :
+  ValidCtx (CtxCons A ctx) := ValidCtxCons A ctx vc.
+
+(* OType instance of CtxElem of a valid context *)
+Instance OType_CtxElem ctx (valid:ValidCtx ctx) : OType (CtxElem ctx).
+Proof.
+  induction valid; typeclasses eauto.
+Qed.
+
 (* Proofs that a type is the nth element of a context *)
 Fixpoint HasTypeVar (v:nat) (ctx:Ctx) (B:Type) {RB:OTRelation B} : Prop :=
   match v with
   | 0 =>
     match ctx with
     | CtxNil => False
-    | @CtxCons A RA _ =>
-      existT OTRelation A RA = existT OTRelation B RB
+    | @CtxCons A RA _ => eqOType A B
     end
   | S v' =>
     match ctx with
@@ -108,34 +134,39 @@ Fixpoint HasTypeVar (v:nat) (ctx:Ctx) (B:Type) {RB:OTRelation B} : Prop :=
 Fixpoint HasType (e:OExpr) (ctx:Ctx) (B:Type) {RB:OTRelation B} : Prop :=
   match e with
   | OVar v => HasTypeVar v ctx B
-  | @OEmbed A RA a =>
-      existT OTRelation A RA = existT OTRelation B RB
+  | @OEmbed A RA a => eqOType A B /\ OType A
   | OApp A B' f arg =>
-    existT OTRelation (A -o> B') _ = existT OTRelation B _
-    /\ (HasType f ctx (A -o> B') /\ HasType arg ctx A)
+    eqOType B' B /\ (HasType f ctx (A -o> B') /\ HasType arg ctx A)
   | OLam A B' body =>
-    existT OTRelation (A -o> B') _ = existT OTRelation B _
-    /\ HasType body (CtxCons A ctx) B'
+    eqOType (A -o> B') B /\ (ValidCtx ctx /\ HasType body (CtxCons A ctx) B')
   end.
 
 (* Lemma: each HasTypeVar proof is unique *)
+(*
 Lemma HasTypeVar_unique v ctx B {RB:OTRelation B} (ht1 ht2: HasTypeVar v ctx B)
   : ht1 = ht2.
   revert ctx ht1 ht2; induction v; destruct ctx; simpl; intros;
-    try apply UIP; try apply IHv; try destruct ht1.
+    try apply proof_irrelevance; try apply IHv; try destruct ht1.
 Qed.
+*)
 
 (* Lemma: each HasType proof is unique *)
+(*
 Lemma HasType_unique ctx B {RB:OTRelation B} e (ht1 ht2: HasType e ctx B)
   : ht1 = ht2.
   revert ctx B RB ht1 ht2; induction e; simpl; intros.
   { apply HasTypeVar_unique. }
-  { apply UIP. }
-  { destruct ht1 as [ ht11 ht1 ]; destruct ht1;
-      destruct ht2 as [ ht21 ht2 ]; destruct ht2;
-        repeat f_equal; first [ apply UIP | apply IHe1 | apply IHe2 ]. }
+  { apply proof_irrelevance. }
+  { destruct ht1; destruct ht2; f_equal; apply proof_irrelevance. }
+      repeat f_equal; first [ apply UIP | apply IHe1 | apply IHe2 ]. }
   { destruct ht1; destruct ht2. f_equal; [ apply UIP | apply IHe ]. }
 Qed.
+ *)
+
+
+(***
+ *** The Semantics of Ordered Expressions
+ ***)
 
 (* The semantics of a well-typed variable *)
 Program Fixpoint varSemantics v ctx B {RB:OTRelation B} :
@@ -145,10 +176,10 @@ Program Fixpoint varSemantics v ctx B {RB:OTRelation B} :
     match ctx return HasTypeVar 0 ctx B -> CtxElem ctx -o> B with
     | CtxNil => fun ht => match ht with end
     | @CtxCons A RA ctx' =>
-      fun (ht: existT OTRelation A RA = existT OTRelation B RB) =>
+      fun ht =>
         rew [fun p =>
-               @Pfun (A * CtxElem ctx') (projT1 p) (OTpair_R A _ RA _) (projT2 p)]
-            ht in (fst_pfun (A:=projT1 (existT OTRelation A RA)) (H:=RA))
+               @Pfun (CtxElem ctx' * A) (projT1 p) (OTpair_R _ A _ RA) (projT2 p)]
+            ht in (snd_pfun (B:=projT1 (existT OTRelation A RA)))
     end
   | S v' =>
     match ctx return HasTypeVar (S v') ctx B ->
@@ -156,23 +187,35 @@ Program Fixpoint varSemantics v ctx B {RB:OTRelation B} :
     | CtxNil => fun ht => match ht with end
     | CtxCons A ctx' =>
       fun ht =>
-        compose_pfun snd_pfun (varSemantics v' ctx' B ht)
+        compose_pfun fst_pfun (varSemantics v' ctx' B ht)
     end
   end.
 
+(* Helper to cast a proper function using an equality on ordered types *)
+Definition castSemantics {ctx A B} `{OTRelation A} `{OTRelation B}
+           (e:eqOType A B) (sem: CtxElem ctx -o> A) : CtxElem ctx -o> B :=
+  rew [fun p => @Pfun (CtxElem ctx) (projT1 p) _ (projT2 p)] e in
+    (sem : CtxElem ctx -o> (projT1 (existT OTRelation A _))).
+
 (* The semantics of a well-typed expression *)
 Fixpoint exprSemantics e ctx B {RB:OTRelation B} :
-  HasType e ctx B -> CtxElem ctx -> B :=
+  HasType e ctx B -> CtxElem ctx -o> B :=
   match e return HasType e ctx B -> CtxElem ctx -o> B with
   | OVar v => varSemantics v ctx B
-  | OEmbed a => fun ht _ => rew ht in a
+  | OEmbed a =>
+    fun ht => castSemantics (proj1 ht) (const_pfun (H0:=proj2 ht) a)
   | OApp A B' f arg =>
-    fun ht celem =>
-      rew (proj1 ht) in
-        pfun_app (exprSemantics f ctx (A -o> B') (proj1 (proj2 ht)) celem)
-                 (exprSemantics arg ctx A (proj2 (proj2 ht)) celem)
+    fun ht =>
+      castSemantics
+        (proj1 ht)
+        (pfun_apply
+           (exprSemantics f ctx (A -o> B') (proj1 (proj2 ht)))
+           (exprSemantics arg ctx A (proj2 (proj2 ht))))
   | OLam A B' body =>
-    fun ht celem =>
-      rew (proj1 ht) in
-        exprSemantics body (A::ctx) B' (proj2 ht) celem
+    fun ht =>
+      castSemantics
+        (proj1 ht)
+        (pfun_curry (H:=OType_CtxElem ctx (proj1 (proj2 ht)))
+                   (exprSemantics body (CtxCons A ctx) B' (proj2 (proj2 ht)))
+         : CtxElem ctx -o> (projT1 (existT OTRelation (A -o> B') _)))
   end.
