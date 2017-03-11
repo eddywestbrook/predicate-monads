@@ -219,3 +219,41 @@ Fixpoint exprSemantics e ctx B {RB:OTRelation B} :
                    (exprSemantics body (CtxCons A ctx) B' (proj2 (proj2 ht)))
          : CtxElem ctx -o> (projT1 (existT OTRelation (A -o> B') _)))
   end.
+
+
+(***
+ *** Relating Ordered Expressions
+ ***)
+
+(* The preorder on ordered expressions *)
+Definition oexpr_R B `{OTRelation B} : relation OExpr :=
+  fun e1 e2 =>
+    (forall ctx, HasType e1 ctx B <-> HasType e2 ctx B) /\
+    (forall ctx ht1 ht2 `{ValidCtx ctx},
+        ot_R (exprSemantics e1 ctx B ht1) (exprSemantics e2 ctx B ht2)).
+
+(* The equivalence relation on ordered expressions *)
+Definition oexpr_eq B `{OTRelation B} : relation OExpr :=
+  fun e1 e2 => oexpr_R B e1 e2 /\ oexpr_R B e2 e1.
+
+(* oexpr_R is reflexive *)
+Instance Reflexive_oexpr_R B `{OType B} : Reflexive (oexpr_R B).
+Proof.
+  intro e; split.
+  intros ctx; reflexivity.
+  intros ctx ht1 ht2 celem1 celem2 r12;
+  rewrite (proof_irrelevance _ ht1 ht2); apply pfun_Proper; assumption.
+Qed.
+
+(* oexpr_R is transitive *)
+Instance Transitive_oexpr_R B `{OType B} : Transitive (oexpr_R B).
+Proof.
+  intros e1 e2 e3 r12 r23; destruct r12; destruct r23; split.
+  intros ctx.
+  transitivity (HasType e2 ctx B); [ apply H0 | apply H2 ].
+  intros ctx ht1 ht3 valid.
+  assert (HasType e2 ctx B) as ht2; [ apply H0; assumption | ].
+  transitivity (exprSemantics e2 ctx B ht2).
+  apply H1; assumption.
+  apply H3; assumption.
+Qed.
