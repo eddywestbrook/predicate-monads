@@ -9,7 +9,7 @@ Import ListNotations.
  *** Ordered Expressions
  ***)
 
-(* Untyped expressions to represent proper functions *)
+(* Ordered expressions to represent proper functions *)
 Inductive OExpr : Type :=
 | OVar (n:nat)
 | OEmbed {A} {RA:OTRelation A} (a:A)
@@ -226,34 +226,46 @@ Fixpoint exprSemantics e ctx B {RB:OTRelation B} :
  ***)
 
 (* The preorder on ordered expressions *)
-Definition oexpr_R B `{OTRelation B} : relation OExpr :=
+Definition oexpr_R ctx B `{OTRelation B} : relation OExpr :=
   fun e1 e2 =>
-    (forall ctx, HasType e1 ctx B <-> HasType e2 ctx B) /\
-    (forall ctx ht1 ht2 `{ValidCtx ctx},
+    (HasType e1 ctx B <-> HasType e2 ctx B) /\
+    (forall ht1 ht2 `{ValidCtx ctx},
         ot_R (exprSemantics e1 ctx B ht1) (exprSemantics e2 ctx B ht2)).
 
 (* The equivalence relation on ordered expressions *)
-Definition oexpr_eq B `{OTRelation B} : relation OExpr :=
-  fun e1 e2 => oexpr_R B e1 e2 /\ oexpr_R B e2 e1.
+Definition oexpr_eq ctx B `{OTRelation B} : relation OExpr :=
+  fun e1 e2 => oexpr_R ctx B e1 e2 /\ oexpr_R ctx B e2 e1.
 
 (* oexpr_R is reflexive *)
-Instance Reflexive_oexpr_R B `{OType B} : Reflexive (oexpr_R B).
+Instance Reflexive_oexpr_R ctx B `{OType B} : Reflexive (oexpr_R ctx B).
 Proof.
-  intro e; split.
-  intros ctx; reflexivity.
-  intros ctx ht1 ht2 celem1 celem2 r12;
-  rewrite (proof_irrelevance _ ht1 ht2); apply pfun_Proper; assumption.
+  intro e; split; intros.
+  - reflexivity.
+  - rewrite (proof_irrelevance _ ht1 ht2); apply pfun_Proper; assumption.
 Qed.
 
 (* oexpr_R is transitive *)
-Instance Transitive_oexpr_R B `{OType B} : Transitive (oexpr_R B).
+Instance Transitive_oexpr_R ctx B `{OType B} : Transitive (oexpr_R ctx B).
 Proof.
   intros e1 e2 e3 r12 r23; destruct r12; destruct r23; split.
-  intros ctx.
-  transitivity (HasType e2 ctx B); [ apply H0 | apply H2 ].
-  intros ctx ht1 ht3 valid.
-  assert (HasType e2 ctx B) as ht2; [ apply H0; assumption | ].
-  transitivity (exprSemantics e2 ctx B ht2).
-  apply H1; assumption.
-  apply H3; assumption.
+  { transitivity (HasType e2 ctx B); [ apply H0 | apply H2 ]. }
+  { intros ht1 ht3 valid.
+    assert (HasType e2 ctx B) as ht2; [ apply H0; assumption | ].
+    transitivity (exprSemantics e2 ctx B ht2).
+    - apply H1; assumption.
+    - apply H3; assumption. }
 Qed.
+
+(* oexpr_R is thus a PreOrder *)
+Instance PreOrder_oexpr_R ctx B `{OType B} : PreOrder (oexpr_R ctx B) :=
+  Build_PreOrder _ _ _.
+
+(* oexpr_eq is thus an Equivalence *)
+Instance Equivalence_oexpr_eq ctx B `{OType B} : Equivalence (oexpr_eq ctx B).
+Proof.
+  constructor; intro; intros.
+  { split; reflexivity. }
+  { destruct H0; split; assumption. }
+  { destruct H0; destruct H1; split; transitivity y; assumption. }
+Qed.
+
