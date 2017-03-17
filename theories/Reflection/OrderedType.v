@@ -316,6 +316,12 @@ Qed.
 Program Definition const_pfun {A B} `{OTRelation A} `{OType B} b : A -o> B :=
   {| pfun_app := fun _ => b; pfun_Proper := fun _ _ _ => ltac:(reflexivity) |}.
 
+Instance Proper_const_pfun {A B} `{OTRelation A} `{OType B} :
+  Proper (ot_R ==> ot_R) (const_pfun (A:=A) (B:=B)).
+Proof.
+  intros b1 b2 Rb a1 a2 Ra. apply Rb.
+Qed.
+
 (* Composing with the constant pfun on the left *)
 Lemma compose_const_pfun_f A B C `{OTRelation A} `{OType B} `{OType C}
       b (f : B -o> C) :
