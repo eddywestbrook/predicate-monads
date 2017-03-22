@@ -199,7 +199,7 @@ Inductive HasType ctx : forall A {RA:OTRelation A}, OExpr -> Prop :=
 
 Lemma HasType_unique_SemType ctx A {RA:OTRelation A} e :
   HasType ctx A e ->
-  {| semCtx := ctx; semType := A; sem_OTRelation := RA |} = OExpr_SemType e.
+  OExpr_SemType e = {| semCtx := ctx; semType := A; sem_OTRelation := RA |}.
   revert ctx A RA; induction e; intros.
   { inversion H. reflexivity. }
   { assert (OEmbed ctx a = OEmbed ctx a); [ reflexivity | ].
@@ -208,25 +208,25 @@ Lemma HasType_unique_SemType ctx A {RA:OTRelation A} e :
     rewrite H. dependent rewrite -> H2. reflexivity. }
   { assert (OApp B e1 e2 = OApp B e1 e2); [ reflexivity | ].
     revert H H0. generalize (OApp B e1 e2) at 0 1 2. intros.
-    destruct H; try discriminate H0; injection H0; intros.
-    dependent rewrite -> H4. simpl. rewrite H2 in H1.
-    rewrite <- (IHe2 _ _ _ H1). reflexivity. }
+    destruct H; simplify_eq H0; intros.
+    dependent rewrite -> H3. simpl. rewrite H5 in H1.
+    rewrite (IHe2 _ _ _ H1). reflexivity. }
   { assert (OLam e = OLam e); [ reflexivity | ].
     revert H H0. generalize (OLam e) at 0 1 2. intros.
     destruct H; simplify_eq H0; intros. simpl.
-    rewrite H1 in H. rewrite <- (IHe _ _ _ H). simpl. reflexivity. }
+    rewrite H1 in H. rewrite (IHe _ _ _ H). reflexivity. }
 Qed.
 
 
 Lemma HasType_unique_ctx ctx A {RA:OTRelation A} e :
   HasType ctx A e -> ctx = OExpr_ctx e.
-  intro ht. unfold OExpr_ctx. rewrite <- (HasType_unique_SemType _ _ _ ht).
+  intro ht. unfold OExpr_ctx. rewrite (HasType_unique_SemType _ _ _ ht).
   reflexivity.
 Qed.
 
 Lemma HasType_unique_type ctx A {RA:OTRelation A} e :
   HasType ctx A e -> A = OExpr_type e.
-  intro ht. unfold OExpr_type. rewrite <- (HasType_unique_SemType _ _ _ ht).
+  intro ht. unfold OExpr_type. rewrite (HasType_unique_SemType _ _ _ ht).
   reflexivity.
 Qed.
 
