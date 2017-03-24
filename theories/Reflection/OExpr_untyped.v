@@ -158,16 +158,26 @@ Record SemType : Type :=
 Instance OTRelation_SemType semTp : OTRelation (semType semTp) :=
   sem_OTRelation semTp.
 
+(* Eta rule for SemType *)
+Lemma eta_SemType semTp :
+  semTp = {| semCtx := semCtx semTp; semType := semType semTp;
+             sem_OTRelation := _ |}.
+  destruct semTp; reflexivity.
+Qed.
+
 (* Typeclass capturing that a SemType is valid: semType is an OType *)
+(* FIXME: is this needed? *)
+(*
 Class ValidSemType semTp : Prop := otypeSemType :> OType (semType semTp).
+*)
 
 (* Convert a SemType to an actual type (FIXME: should this be a coercion?) *)
-Definition oSemantics (semTp:SemType) : Type :=
+Definition Semantics (semTp:SemType) : Type :=
   CtxElem (semCtx semTp) -o> semType semTp.
 
 (* Cast a semantic value to an equal semantic type *)
 Definition castSemantics {semTp1 semTp2} (e:semTp1=semTp2)
-           (sem:oSemantics semTp1) : oSemantics semTp2 :=
+           (sem:Semantics semTp1) : Semantics semTp2 :=
   rew e in sem.
 
 (* castSemantics is Proper *)
@@ -191,13 +201,11 @@ Definition double_castSemantics semTp1 semTp2 semTp3 (e1:semTp1=semTp2)
   double_cast _ _ _ _.
 
 
-FIXME HERE NOW: we need to prove that castSemantics commutes with exprSemantics
-for the OApp and OLam constructors, which is going to be gross...
-
-
 (* castSemantics commutes with pfun_apply *)
+(*
 Lemma castSemantics_pfun_apply_commute semTp1 semTp2 (e:semTp1=semTp2)
-      (fsem: oSemantics {| semCtx := semCtx semTp1 |})
+      (fsem: Semantics {| semCtx := semCtx semTp1 |})
+*)
 
 
 (***
@@ -227,6 +235,10 @@ Fixpoint OExpr_SemType (e:OExpr) : SemType :=
 Definition OExpr_ctx e := semCtx (OExpr_SemType e).
 Definition OExpr_type e := semType (OExpr_SemType e).
 Instance OTRelation_OExpr_type e : OTRelation (OExpr_type e) := _.
+
+Arguments OExpr_ctx e /.
+Arguments OExpr_type e /.
+Arguments OTRelation_OExpr_type e /.
 
 
 (***
@@ -297,62 +309,94 @@ Fixpoint substOExpr n (s:OExpr) (e:OExpr) : OExpr :=
 
 
 (***
+ *** Typing for Ordered Expressions
+ ***)
+
+(* Proof that an ordered expression is well-typed *)
+Fixpoint HasType semTp (e:OExpr) : Prop :=
+  match e with
+  | OVar ctx n =>
+    ValidCtx ctx /\
+    {| semCtx := ctx; semType := nthCtx n ctx; sem_OTRelation := _ |} = semTp
+  | @OEmbed ctx A _ a =>
+    ValidCtx ctx /\
+    OType A /\
+    {| semCtx := ctx; semType := A; sem_OTRelation := _ |} = semTp
+  | OApp B f arg =>
+    (semTp = {| semCtx := semCtx semTp; semType := B; sem_OTRelation := _ |} /\
+     OType B) /\
+    (HasType {| semCtx := semCtx semTp;
+                semType := OExpr_type arg -o> semType semTp;
+                sem_OTRelation := _ |} f /\
+     HasType {| semCtx := semCtx semTp; semType := OExpr_type arg;
+                sem_OTRelation := _ |} arg)
+  | OLam f =>
+    {| semCtx := ctxTail (OExpr_ctx f);
+       semType := ctxHead (OExpr_ctx f) -o> OExpr_type f;
+       sem_OTRelation := _ |} = semTp /\
+    OExpr_ctx f <> CtxNil /\ HasType (OExpr_SemType f) f
+  end.
+
+(* Typeclass version of HasType *)
+Class HasTypeC semTp e : Prop := hasType : HasType semTp e.
+
+(* Expressions can only have their one type *)
+Lemma HasType_OExpr_SemType semTp e :
+  HasType semTp e -> semTp = OExpr_SemType e.
+  revert semTp; induction e; intros semTp ht; destruct ht.
+  - rewrite <- H0; reflexivity.
+  - destruct H0; rewrite <- H1; reflexivity.
+  - destruct H; destruct H0; simpl. rewrite H. rewrite <- (IHe2 _ H2).
+    reflexivity.
+  - rewrite <- H; simpl. reflexivity.
+Qed.
+
+Instance ValidCtx_OExpr_ctx semTp e (ht:HasTypeC semTp e) :
+  ValidCtx (OExpr_ctx e).
+Proof.
+  revert semTp ht; induction e; intros; destruct ht.
+  - assumption.
+  - assumption.
+  - destruct H0. apply (IHe2 _ H1).
+  - destruct H0. apply ValidCtx_ctxTail. apply (IHe _ H1).
+Qed.
+
+Instance ValidCtx_semTp_HasTypeC semTp e (ht:HasTypeC semTp e) :
+  ValidCtx (semCtx semTp).
+Proof.
+  rewrite (HasType_OExpr_SemType _ _ ht). typeclasses eauto.
+Qed.
+
+(* Any well-typed expression has a valid type *)
+Instance OType_OExpr_type semTp e (ht:HasTypeC semTp e) : OType (OExpr_type e).
+Proof.
+  revert semTp ht; induction e; intros; destruct ht.
+  - typeclasses eauto.
+  - destruct H0; assumption.
+  - destruct H; assumption.
+  - destruct H0.
+    assert (OType (OExpr_type e)); [ apply (IHe _ H1) | typeclasses eauto ].
+Qed.
+
+Instance OType_semTp_HasTypeC semTp e (ht:HasTypeC semTp e) :
+  OType (semType semTp).
+Proof.
+  rewrite (HasType_OExpr_SemType _ _ ht). typeclasses eauto.
+Qed.
+
+
+(***
  *** The Semantics of Ordered Expressions
  ***)
 
-Definition oexprSemantics e := oSemantics (OExpr_SemType e).
-
-
-(* Since expressions contain their types and contexts, the only requirement for
-typing ordered expressions is that different parts of the expression have types
-that agree with each other, and that the contexts are always valid *)
-Fixpoint WellTypedP (e:OExpr) : Prop :=
-  match e with
-  | OVar ctx n => ValidCtx ctx
-  | @OEmbed ctx A _ a => ValidCtx ctx /\ OType A
-  | OApp B f arg =>
-    (OExpr_SemType f =
-     {| semCtx := OExpr_ctx arg; semType := OExpr_type arg -o> B;
-        sem_OTRelation := _ |} /\ OType B)
-    /\ (WellTypedP f /\ WellTypedP arg)
-  | OLam f =>
-    OExpr_SemType f =
-    {| semCtx := CtxCons (ctxHead (OExpr_ctx f)) (ctxTail (OExpr_ctx f));
-       semType := OExpr_type f; sem_OTRelation := _ |}
-    /\ WellTypedP f
-  end.
-
-(* Type class for well-typedness *)
-Class WellTyped e : Prop := wellTyped : WellTypedP e.
-
-(* Any WellTyped expression has a ValidCtx *)
-Instance ValidCtx_OExpr_ctx e (wt:WellTyped e) : ValidCtx (OExpr_ctx e).
-Proof.
-  revert wt; induction e; simpl; intro wt.
-  - assumption.
-  - exact (proj1 wt).
-  - apply IHe2. apply (proj2 (proj2 wt)).
-  - apply ValidCtx_ctxTail. apply IHe. apply (proj2 wt).
-Qed.
-
-(* Any WellTyped expression has a valid type *)
-Instance OType_OExpr_type e (wt:WellTyped e) : OType (OExpr_type e).
-Proof.
-  revert wt; induction e; simpl; intro wt.
-  - typeclasses eauto.
-  - destruct wt; assumption.
-  - destruct wt as [wt1 wt2]; destruct wt1; assumption.
-  - unfold OExpr_type. simpl. destruct wt. typeclasses eauto.
-Qed.
-
 (* The semantics of a variable *)
 Fixpoint varSemantics ctx v {struct ctx} :
-  oSemantics (Build_SemType ctx (nthCtx v ctx) _) :=
-  match ctx return oSemantics (Build_SemType ctx (nthCtx v ctx) _) with
+  Semantics (Build_SemType ctx (nthCtx v ctx) _) :=
+  match ctx return Semantics (Build_SemType ctx (nthCtx v ctx) _) with
   | CtxNil => const_pfun tt
   | CtxCons A ctx' =>
     match v return
-          oSemantics (Build_SemType (CtxCons A ctx') (nthCtx v (CtxCons A ctx')) _)
+          Semantics (Build_SemType (CtxCons A ctx') (nthCtx v (CtxCons A ctx')) _)
     with
     | 0 => snd_pfun
     | S v' => compose_pfun fst_pfun (varSemantics ctx' v')
@@ -360,48 +404,92 @@ Fixpoint varSemantics ctx v {struct ctx} :
   end.
 
 
+(* We need versions of proj1 and proj2 that actually compute *)
+Definition proj1c {P Q:Prop} (pf:P /\ Q) : P :=
+  match pf with conj pf1 _ => pf1 end.
+Arguments proj1c {P Q} !pf.
+
+Definition proj2c {P Q:Prop} (pf:P /\ Q) : Q :=
+  match pf with conj _ pf2 => pf2 end.
+Arguments proj2c {P Q} !pf.
+
+
 (* The semantics of a well-typed expression *)
-Program Fixpoint exprSemantics e :
-  forall `{WellTyped e}, oexprSemantics e :=
-  match e return WellTyped e -> oexprSemantics e with
+Program Fixpoint exprSemantics semTp e :
+  HasTypeC semTp e -> Semantics semTp :=
+  match e return HasType semTp e -> Semantics semTp with
   | OVar ctx v =>
-    fun wt => varSemantics ctx v
+    fun ht =>
+      castSemantics (proj2c ht) (varSemantics ctx v)
   | OEmbed ctx a =>
-    fun wt => const_pfun (H0:=proj2 wt) a
+    fun ht =>
+      castSemantics (proj2c (proj2c ht))
+                    (const_pfun (H0:=proj1c (proj2c ht)) a)
   | OApp B f arg =>
-    fun wt =>
+    fun ht =>
       pfun_apply
-        (castSemantics (proj1 (proj1 wt)) (@exprSemantics f (proj1 (proj2 wt))))
-        (@exprSemantics arg (proj2 (proj2 wt)))
+        (exprSemantics
+           {| semCtx := semCtx semTp;
+              semType := OExpr_type arg -o> semType semTp;
+              sem_OTRelation := _ |}
+           f
+           (rew _ in proj1c (proj2c ht)))
+        (exprSemantics
+           {| semCtx := semCtx semTp; semType := OExpr_type arg;
+              sem_OTRelation := _ |}
+           arg
+           (rew _ in proj2c (proj2c ht)))
   | OLam f =>
-    fun wt =>
-      pfun_curry
-        (H:= _ )
-        (castSemantics (proj1 wt) (@exprSemantics f (proj2 wt)))
+    fun ht =>
+      castSemantics
+        (proj1c ht)
+        (pfun_curry
+           (H:= _ )
+           (exprSemantics
+              {| semCtx := CtxCons _ _; semType := OExpr_type f;
+                 sem_OTRelation := _ |}
+              f
+              _))
   end.
 Next Obligation.
-  eauto with typeclass_instances.
+  fold (HasTypeC (OExpr_SemType f) f) in H1; typeclasses eauto.
 Defined.
-
-Instance OTRelation_expr_oSemantics e : OTRelation (oexprSemantics e) := _.
-Instance OType_expr_oSemantics e (wt:WellTyped e) :
-  OType (oexprSemantics e) := _.
-
-(* castSemantics commutes with the semantics of applications *)
-Lemma castSemantics_commute_OApp B B' {RB:OTRelation B} {RB':OTRelation B} e1 e2
+Next Obligation.
+  rewrite <- (ctx_eq_head_tail _ H0).
+  rewrite <- (eta_SemType _). assumption.
+Defined.
 
 
 (***
  *** Relating Ordered Expressions
  ***)
 
+(* Proposition that two expressions have the same set of types *)
+Definition equiTyped e1 e2 : Prop :=
+  forall semTp, HasType semTp e1 <-> HasType semTp e2.
+
+Instance Equivalence_equiTyped : Equivalence equiTyped.
+Proof.
+  split.
+  - intros x semTp; reflexivity.
+  - intros x y equi semTp; symmetry; apply equi.
+  - intros e1 e2 e3 equi12 equi23 semTp.
+    transitivity (HasType semTp e2); [ apply equi12 | apply equi23 ].
+Qed.
+
+(* Equi-typed expressions have the same canonical types *)
+Lemma equiTyped_eq_SemTypes e1 e2 (equi:equiTyped e1 e2)
+      semTp (ht:HasType semTp e1) :
+  OExpr_SemType e1 = OExpr_SemType e2.
+  rewrite <- (HasType_OExpr_SemType _ _ ht).
+  apply (HasType_OExpr_SemType _ _ (proj1 (equi semTp) ht)).
+Qed.
+
 Record oexpr_R (e1 e2:OExpr) : Prop :=
-  { oexpr_R_wt : WellTyped e1 <-> WellTyped e2;
-    oexpr_R_eq_tp : OExpr_SemType e1 = OExpr_SemType e2;
-    oexpr_R_sem :
-      forall wt1 wt2,
-        castSemantics oexpr_R_eq_tp (@exprSemantics e1 wt1) <o=
-        @exprSemantics e2 wt2 }.
+  { oexpr_R_ht : equiTyped e1 e2;
+    oexpr_R_R :
+      forall semTp ht1 ht2,
+        exprSemantics semTp e1 ht1 <o= exprSemantics _ e2 ht2 }.
 
 (* The equivalence relation on ordered expressions *)
 Definition oexpr_eq : relation OExpr :=
@@ -410,22 +498,18 @@ Definition oexpr_eq : relation OExpr :=
 (* oexpr_R is reflexive *)
 Instance Reflexive_oexpr_R : Reflexive oexpr_R.
 Proof.
-  intro e; split.
-  - reflexivity.
-  - intros; apply mk_otRdep. rewrite (proof_irrelevance _ wt1 wt2). reflexivity.
+  intro e; split; try reflexivity.
+  intros. rewrite (proof_irrelevance _ ht1 ht2). reflexivity.
 Qed.
 
 (* oexpr_R is transitive *)
 Instance Transitive_oexpr_R : Transitive oexpr_R.
 Proof.
-  intros e1 e2 e3 [ wt12 r12 ]. destruct 
-  split.
-  { transitivity (WellTyped e2); assumption. }
-  { intros wt1 wt3. rewrite <- r23. rewrite <- r12.
-    rewrite (double_castSemantics _ _ _ _ _ (eq_trans eq12 eq23)).
-    reflexivity. }
-  Unshelve.
-  apply wt23. assumption.
+  intros e1 e2 e3 [ ht12 r12 ] [ ht23 r23 ]. split.
+  { intros; rewrite ht12; apply ht23. }
+  { intros.
+    transitivity (exprSemantics semTp e2 (proj1 (ht12 _) ht1));
+      [ apply r12 | apply r23 ]. }
 Qed.
 
 (* oexpr_R is thus a PreOrder *)
@@ -449,10 +533,9 @@ Qed.
 Instance Proper_OEmbed_R ctx A {RA:OTRelation A} :
   Proper (ot_R ==> oexpr_R) (@OEmbed ctx A _).
 Proof.
-  intros a1 a2 Ra. split; [ | exists eq_refl ].
-  { reflexivity. }
-  { unfold castSemantics; simpl; intros. rewrite (proof_irrelevance _ wt1 wt2).
-    destruct wt1. rewrite Ra. reflexivity. }
+  intros a1 a2 Ra; split; intros.
+  { intro semTp; reflexivity. }
+  { simpl. rewrite Ra. rewrite (proof_irrelevance _ ht1 ht2). reflexivity. }
 Qed.
 
 Instance Proper_OEmbed_eq ctx A {RA:OTRelation A} :
@@ -464,12 +547,31 @@ Qed.
 Instance Proper_OApp_R (B:Type) {RB:OTRelation B} :
   Proper (oexpr_R ==> oexpr_R ==> oexpr_R) (OApp B).
 Proof.
-  intros f1 f2 [ wt_f [ eqf rf ] ] arg1 arg2 [ wt_a [ eqa ra ] ].
-  split; [ | eexists ]. Unshelve.
-  { simpl. rewrite eqf. unfold OExpr_ctx, OExpr_type, OTRelation_OExpr_type.
-    rewrite wt_f. rewrite wt_a. rewrite eqa. reflexivity. }
-  { simpl; intros.
-
- intro wt1; generalize wt1. 
-
- intros.
+  intros f1 f2 [ ht_f rf ] arg1 arg2 [ ht_arg r_arg ]; split; intros.
+  { intro semTp; split;
+      intros [ [semTp_eq otype_b] [ht_f' ht_arg'] ]; split; split;
+      try assumption; simpl.
+    - apply ht_f.
+      rewrite (equiTyped_eq_SemTypes
+                 arg2 arg1 (symmetry ht_arg) _
+                 (proj1 (ht_arg _) ht_arg')); assumption.
+    - apply ht_arg.
+      rewrite (equiTyped_eq_SemTypes
+                 arg2 arg1 (symmetry ht_arg) _
+                 (proj1 (ht_arg _) ht_arg')); assumption.
+    - apply ht_f.
+      rewrite (equiTyped_eq_SemTypes
+                 arg1 arg2 ht_arg _
+                 (proj2 (ht_arg _) ht_arg')); assumption.
+    - apply ht_arg.
+      rewrite (equiTyped_eq_SemTypes
+                 arg1 arg2 ht_arg _
+                 (proj2 (ht_arg _) ht_arg')); assumption. }
+  { destruct ht1 as [ [eq_semTp otype_b] [ht_f1 ht_arg1]].
+    assert (OExpr_SemType arg1 = OExpr_SemType arg2) as eq_arg_tp;
+      [ apply (equiTyped_eq_SemTypes _ _ ht_arg _ ht_arg1) | ].
+    revert ht_f1 ht_arg1; simpl; rewrite eq_arg_tp; intros.
+    apply Proper_pfun_apply.
+    - apply (rf {| semCtx := _; semType := _; sem_OTRelation := _ |}).
+    - apply (r_arg {| semCtx := _; semType := _; sem_OTRelation := _ |}). }
+Qed.
