@@ -230,8 +230,27 @@ Lemma HasType_unique_type ctx A {RA:OTRelation A} e :
   reflexivity.
 Qed.
 
+
+(***
+ *** The Semantics of Ordered Expressions
+ ***)
+
+(* The semantics of a variable *)
+Fixpoint varSemantics ctx n {struct ctx} : CtxElem ctx -o> nthCtx n ctx :=
+  match ctx return CtxElem ctx -o> nthCtx n ctx with
+  | CtxNil => const_pfun tt
+  | CtxCons A ctx' =>
+    match n return CtxElem (CtxCons A ctx') -o> nthCtx n (CtxCons A ctx') with
+    | 0 => snd_pfun
+    | S n' => compose_pfun fst_pfun (varSemantics ctx' n')
+    end
+  end.
+
+
+Fixpoint exprSemantics e ctx A {RA:OTRelation A} (ht:HasType ctx A e) :
+  CtxElem 
+
 FIXME HERE NOW:
 - project out HasType proofs for subterms of OApp and OLam
   (might need the above proof!)
-- Also: OExpr_SemType could be OExpr_ctx followed by OExpr_type, since the
-  latter can be written in terms of the former
+- This is going to be gross; going back to OExpr_untyped.v ...
