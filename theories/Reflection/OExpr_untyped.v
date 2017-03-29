@@ -71,6 +71,8 @@ Fixpoint nthCtx n ctx {struct ctx} : Type :=
     end
   end.
 
+Arguments nthCtx !n !ctx.
+
 (* The OTRelation for the nth type in a context *)
 Instance OTRelation_nthCtx n ctx : OTRelation (nthCtx n ctx).
 Proof.
@@ -201,13 +203,6 @@ Definition double_castSemantics semTp1 semTp2 semTp3 (e1:semTp1=semTp2)
   double_cast _ _ _ _.
 
 
-(* castSemantics commutes with pfun_apply *)
-(*
-Lemma castSemantics_pfun_apply_commute semTp1 semTp2 (e:semTp1=semTp2)
-      (fsem: Semantics {| semCtx := semCtx semTp1 |})
-*)
-
-
 (***
  *** Ordered Expressions
  ***)
@@ -239,73 +234,6 @@ Instance OTRelation_OExpr_type e : OTRelation (OExpr_type e) := _.
 Arguments OExpr_ctx e /.
 Arguments OExpr_type e /.
 Arguments OTRelation_OExpr_type e /.
-
-
-(***
- *** Substitution and Weakening for Ordered Expressions
- ***)
-
-(* Weakening / lifting of ordered expression variables: insert w_ctx into the
-context of a variable at point n *)
-Fixpoint weakenOVar n w_ctx (v:nat) {struct n} : nat :=
-  match n with
-  | 0 => v + ctxLen w_ctx
-  | S n' =>
-    match v with
-    | 0 => 0
-    | S v' => weakenOVar n' w_ctx v'
-    end
-  end.
-
-(* Weakening a context by inserting another at point n *)
-Fixpoint weakenCtx n w_ctx ctx : Ctx :=
-  match n with
-  | 0 => appendCtx w_ctx ctx
-  | S n' =>
-    match ctx with
-    | CtxNil => CtxCons unit (weakenCtx n' w_ctx CtxNil)
-    | CtxCons A ctx' => CtxCons A (weakenCtx n' w_ctx ctx')
-    end
-  end.
-
-(* Weakening / lifting of ordered expressions *)
-Fixpoint weakenOExpr n w_ctx (e:OExpr) : OExpr :=
-  match e with
-  | OVar ctx v => OVar (weakenCtx n w_ctx ctx) (weakenOVar n w_ctx v)
-  | OEmbed ctx a => OEmbed (weakenCtx n w_ctx ctx) a
-  | OApp B f arg =>
-    OApp B (weakenOExpr n w_ctx f) (weakenOExpr n w_ctx arg)
-  | OLam f => OLam (weakenOExpr (S n) w_ctx f)
-  end.
-
-(* Substitution for ordered expression variables *)
-(* FIXME HERE: write this!
-Fixpoint substOVar n w_ctx (s:OExpr) v : OExpr :=
-  match n with
-  | 0 =>
-    match v with
-    | 0 => weakenOExpr 0 w_ctx s
-    | S v' => OVar v'
-    end
-  | S n' =>
-    match v with
-    | 0 => OVar lifting
-    | S v' =>
-      substOVar n' (S lifting) s v
-    end
-  end.
-*)
-
-(* Substitution for ordered expressions *)
-(*
-Fixpoint substOExpr n (s:OExpr) (e:OExpr) : OExpr :=
-  match e with
-  | OVar v => substOVar n CtxNil s v
-  | OEmbed a => OEmbed a
-  | OApp A B f arg => OApp A B (substOExpr n s f) (substOExpr n s arg)
-  | OLam A B body => OLam A B (substOExpr (S n) s body)
-  end.
- *)
 
 
 (***
@@ -544,34 +472,200 @@ Proof.
   intros a1 a2 eqA; destruct eqA; split; apply Proper_OEmbed_R; assumption.
 Qed.
 
-Instance Proper_OApp_R (B:Type) {RB:OTRelation B} :
+Instance Proper_equiTyped_OApp (B:Type) {RB:OTRelation B} :
+  Proper (equiTyped ==> equiTyped ==> equiTyped) (OApp B).
+Proof.
+  intros f1 f2 equi_f arg1 arg2 equi_arg semTp.
+  split; intros [ [semTp_eq otype_b] [ht_f' ht_arg'] ]; split; split;
+    try assumption; simpl.
+  { apply equi_f.
+    rewrite (equiTyped_eq_SemTypes
+               arg2 arg1 (symmetry equi_arg) _
+               (proj1 (equi_arg _) ht_arg')); assumption. }
+  { apply equi_arg.
+    rewrite (equiTyped_eq_SemTypes
+               arg2 arg1 (symmetry equi_arg) _
+               (proj1 (equi_arg _) ht_arg')); assumption. }
+  { apply equi_f.
+    rewrite (equiTyped_eq_SemTypes
+               arg1 arg2 equi_arg _
+               (proj2 (equi_arg _) ht_arg')); assumption. }
+  { apply equi_arg.
+      rewrite (equiTyped_eq_SemTypes
+                 arg1 arg2 equi_arg _
+                 (proj2 (equi_arg _) ht_arg')); assumption. }
+Qed.
+
+Instance Proper_oexpr_R_OApp (B:Type) {RB:OTRelation B} :
   Proper (oexpr_R ==> oexpr_R ==> oexpr_R) (OApp B).
 Proof.
-  intros f1 f2 [ ht_f rf ] arg1 arg2 [ ht_arg r_arg ]; split; intros.
-  { intro semTp; split;
-      intros [ [semTp_eq otype_b] [ht_f' ht_arg'] ]; split; split;
-      try assumption; simpl.
-    - apply ht_f.
-      rewrite (equiTyped_eq_SemTypes
-                 arg2 arg1 (symmetry ht_arg) _
-                 (proj1 (ht_arg _) ht_arg')); assumption.
-    - apply ht_arg.
-      rewrite (equiTyped_eq_SemTypes
-                 arg2 arg1 (symmetry ht_arg) _
-                 (proj1 (ht_arg _) ht_arg')); assumption.
-    - apply ht_f.
-      rewrite (equiTyped_eq_SemTypes
-                 arg1 arg2 ht_arg _
-                 (proj2 (ht_arg _) ht_arg')); assumption.
-    - apply ht_arg.
-      rewrite (equiTyped_eq_SemTypes
-                 arg1 arg2 ht_arg _
-                 (proj2 (ht_arg _) ht_arg')); assumption. }
+  intros f1 f2 [ equi_f rf ] arg1 arg2 [ equi_arg r_arg ]; split; intros.
+  { rewrite equi_f. rewrite equi_arg. reflexivity. }
   { destruct ht1 as [ [eq_semTp otype_b] [ht_f1 ht_arg1]].
     assert (OExpr_SemType arg1 = OExpr_SemType arg2) as eq_arg_tp;
-      [ apply (equiTyped_eq_SemTypes _ _ ht_arg _ ht_arg1) | ].
+      [ apply (equiTyped_eq_SemTypes _ _ equi_arg _ ht_arg1) | ].
     revert ht_f1 ht_arg1; simpl; rewrite eq_arg_tp; intros.
     apply Proper_pfun_apply.
     - apply (rf {| semCtx := _; semType := _; sem_OTRelation := _ |}).
     - apply (r_arg {| semCtx := _; semType := _; sem_OTRelation := _ |}). }
 Qed.
+
+Instance Proper_equiTyped_OLam : Proper (equiTyped ==> equiTyped) OLam.
+Proof.
+  intros e1 e2 equi_e semTp; split;
+    intros [semTp_eq [neq_nil ht_e]]; split; try split; simpl.
+  - rewrite <- (equiTyped_eq_SemTypes e1 e2 equi_e _ ht_e); assumption.
+  - rewrite <- (equiTyped_eq_SemTypes e1 e2 equi_e _ ht_e); assumption.
+  - rewrite <- (equiTyped_eq_SemTypes e1 e2 equi_e _ ht_e);
+      apply equi_e; assumption.
+  - rewrite <- (equiTyped_eq_SemTypes e2 e1 (symmetry equi_e) _ ht_e); assumption.
+  - rewrite <- (equiTyped_eq_SemTypes e2 e1 (symmetry equi_e) _ ht_e); assumption.
+  - rewrite <- (equiTyped_eq_SemTypes e2 e1 (symmetry equi_e) _ ht_e);
+      apply equi_e; assumption.
+Qed.
+
+Instance Proper_oexpr_R_OLam : Proper (oexpr_R ==> oexpr_R) OLam.
+Proof.
+  intros e1 e2 [ equi_e re ]; split.
+  { rewrite equi_e; reflexivity. }
+  { intros semTp [semTp_eq1 [neq1_nil ht_e1]] [semTp_eq2 [neq2_nil ht_e2]].
+    revert semTp_eq2 neq2_nil ht_e2; simpl.
+    rewrite <- (equiTyped_eq_SemTypes e1 e2 equi_e _ ht_e1).
+    intros. rewrite (proof_irrelevance _ semTp_eq2 semTp_eq1).
+    apply Proper_castSemantics.
+    refine (Proper_pfun_curry _ _ _ _ _ _).
+    refine (re {| semCtx := CtxCons _ _; semType := _;
+                  sem_OTRelation := _ |} _ _). }
+Qed.
+
+
+(***
+ *** Substitution and Weakening for Ordered Expressions
+ ***)
+
+(* Weakening / lifting of ordered expression variables: insert a type into the
+context of a variable at point n *)
+Fixpoint weakenOVar1 n (v:nat) {struct n} : nat :=
+  match n with
+  | 0 => S v
+  | S n' =>
+    match v with
+    | 0 => 0
+    | S v' => S (weakenOVar1 n' v')
+    end
+  end.
+Arguments weakenOVar1 !n !v.
+
+(* Weakening a context by inserting a type at point n *)
+Fixpoint weakenCtx1 n A {RA:OTRelation A} ctx : Ctx :=
+  match n with
+  | 0 => CtxCons A ctx
+  | S n' =>
+    match ctx with
+    | CtxNil => CtxCons unit (weakenCtx1 n' A CtxNil)
+    | CtxCons B ctx' => CtxCons B (weakenCtx1 n' A ctx')
+    end
+  end.
+Arguments weakenCtx1 !n A {RA} !ctx.
+
+(* Weakening a CtxElem *)
+Fixpoint weakenCtxElem1 n A {RA:OTRelation A} ctx :
+  CtxElem (weakenCtx1 n A ctx) -o> CtxElem ctx :=
+  match n return CtxElem (weakenCtx1 n A ctx) -o> CtxElem ctx with
+  | 0 => fst_pfun (H:=OTRelation_CtxElem _)
+  | S n' =>
+    match ctx return CtxElem (weakenCtx1 (S n') A ctx) -o> CtxElem ctx with
+    | CtxNil => const_pfun tt
+    | CtxCons B ctx' =>
+      pair_pfun (compose_pfun fst_pfun (weakenCtxElem1 n' A ctx')) snd_pfun
+    end
+  end.
+Arguments weakenCtxElem1 !n A {RA} !ctx.
+
+(* Weakening / lifting of ordered expressions *)
+Fixpoint weakenOExpr1 n A {RA:OTRelation A} (e:OExpr) : OExpr :=
+  match e with
+  | OVar ctx v => OVar (weakenCtx1 n A ctx) (weakenOVar1 n v)
+  | OEmbed ctx a => OEmbed (weakenCtx1 n A ctx) a
+  | OApp B f arg =>
+    OApp B (weakenOExpr1 n A f) (weakenOExpr1 n A arg)
+  | OLam f => OLam (weakenOExpr1 (S n) A f)
+  end.
+Arguments weakenOExpr1 n A {RA} !e.
+
+(* Weakening a semantic type *)
+Definition weakenSemType n A {RA:OTRelation A} semTp : SemType :=
+  {| semCtx := weakenCtx1 n A (semCtx semTp);
+     semType := semType semTp; sem_OTRelation := _ |}.
+
+(* Weakening a semantic value *)
+Definition weakenSemantics n A {RA:OTRelation A} semTp (sem:Semantics semTp) :
+  Semantics (weakenSemType n A semTp) :=
+  compose_pfun (weakenCtxElem1 n A (semCtx semTp)) sem.
+Arguments weakenSemantics n A {RA} semTp sem /.
+
+(* Weakening commutes with nthCtx *)
+Lemma weaken_nthCtx n A {RA:OTRelation A} ctx v :
+  nthCtx (weakenOVar1 n v) (weakenCtx1 n A ctx) = nthCtx v ctx.
+  revert ctx v; induction n; intros; [ | destruct ctx; destruct v ];
+    simpl; try reflexivity; apply IHn.
+Qed.
+
+Lemma weakenVarSemType_eq n A {RA:OTRelation A} ctx v :
+  {| semCtx := weakenCtx1 n A ctx;
+     semType := nthCtx (weakenOVar1 n v) (weakenCtx1 n A ctx);
+     sem_OTRelation := _ |} =
+  weakenSemType n A {| semCtx:= ctx; semType:= nthCtx v ctx;
+                       sem_OTRelation := _ |}.
+  revert ctx v; induction n; unfold weakenSemType; intros; try reflexivity.
+  destruct ctx; destruct v; try reflexivity; simpl.
+  { unfold weakenSemType in IHn; simpl in IHn.
+    injection (IHn CtxNil v); intros. dependent rewrite H. reflexivity. }
+  { unfold weakenSemType in IHn; simpl in IHn.
+    injection (IHn ctx v); intros. dependent rewrite H0. reflexivity. }
+Defined.
+
+(* Weakening commutes with exprSemantics for variables *)
+Lemma variable_weakening n A `{OType A} ctx `{ValidCtx ctx} v :
+  weakenSemantics n A _ (varSemantics ctx v)
+  =o=
+  castSemantics (weakenVarSemType_eq n A ctx v)
+                (varSemantics (weakenCtx1 n A ctx) (weakenOVar1 n v)).
+  revert ctx H0 v; induction n; intros ctx H0 v; destruct ctx; destruct v;
+    try reflexivity; simpl.
+  { rewrite compose_const_pfun_f.
+
+(* Substitution for ordered expression variables *)
+(* FIXME HERE: write this!
+Fixpoint substOVar n w_ctx (s:OExpr) v : OExpr :=
+  match n with
+  | 0 =>
+    match v with
+    | 0 => weakenOExpr 0 w_ctx s
+    | S v' => OVar v'
+    end
+  | S n' =>
+    match v with
+    | 0 => OVar lifting
+    | S v' =>
+      substOVar n' (S lifting) s v
+    end
+  end.
+*)
+
+(* Substitution for ordered expressions *)
+(*
+Fixpoint substOExpr n (s:OExpr) (e:OExpr) : OExpr :=
+  match e with
+  | OVar v => substOVar n CtxNil s v
+  | OEmbed a => OEmbed a
+  | OApp A B f arg => OApp A B (substOExpr n s f) (substOExpr n s arg)
+  | OLam A B body => OLam A B (substOExpr (S n) s body)
+  end.
+ *)
+
+
+
+FIXME HERE NOW:
+- prove beta rewrite rule(s)
+- build quoting tactic
