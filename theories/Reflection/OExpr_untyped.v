@@ -79,6 +79,7 @@ Proof.
   revert n; induction ctx; intros; simpl; try typeclasses eauto.
   destruct n; simpl; typeclasses eauto.
 Defined.
+Arguments OTRelation_nthCtx !n !ctx.
 
 (* For valid contexts, the nth element is a valid OType *)
 Instance OType_nthCtx n ctx `{valid:ValidCtx ctx} : OType (nthCtx n ctx).
@@ -160,6 +161,21 @@ Record SemType : Type :=
 Instance OTRelation_SemType semTp : OTRelation (semType semTp) :=
   sem_OTRelation semTp.
 
+(* A type plus a relation; i.e., a SemType minus the context *)
+Inductive TpRel : Type := | mkTpRel A {RA:OTRelation A}.
+
+Definition tpRelType (tpRel:TpRel) : Type :=
+  let (A,_) := tpRel in A.
+
+Instance OTRelation_TpRel tpRel : OTRelation (tpRelType tpRel) :=
+  match tpRel return OTRelation (tpRelType tpRel) with
+  | @mkTpRel A RA => RA
+  end.
+
+(* Project out the TpRel from a SemType *)
+Definition semTpRel (semTp:SemType) : TpRel := mkTpRel (semType semTp).
+Arguments semTpRel !semTp.
+
 (* Eta rule for SemType *)
 Lemma eta_SemType semTp :
   semTp = {| semCtx := semCtx semTp; semType := semType semTp;
@@ -167,15 +183,73 @@ Lemma eta_SemType semTp :
   destruct semTp; reflexivity.
 Qed.
 
-(* Typeclass capturing that a SemType is valid: semType is an OType *)
-(* FIXME: is this needed? *)
-(*
-Class ValidSemType semTp : Prop := otypeSemType :> OType (semType semTp).
-*)
+(* Project an equality on contexts from an equality on SemTypes *)
+Definition eqSemCtx {semTp1 semTp2} (e:semTp1=semTp2) :
+  semCtx semTp1 = semCtx semTp2 :=
+  match e in _ = semTp2 return semCtx semTp1 = semCtx semTp2 with
+  | eq_refl => eq_refl
+  end.
+
+(* Project an equality on types+relations from an equality on SemTypes *)
+Definition eqSemTpRel {semTp1 semTp2} (e:semTp1=semTp2) :
+  semTpRel semTp1 = semTpRel semTp2 :=
+  match e in _ = semTp2 with
+  | eq_refl => eq_refl
+  end.
+
+(* Split a goal of semTp1 = semTp2 into proving equality of the contexts and of
+the TpRels *)
+Lemma split_eqSemType {semTp1 semTp2} :
+  semCtx semTp1 = semCtx semTp2 -> semTpRel semTp1 = semTpRel semTp2 ->
+  semTp1 = semTp2.
+Proof.
+  destruct semTp1; destruct semTp2; unfold semTpRel; simpl; intros e_ctx e_tp.
+  rewrite e_ctx. inversion e_tp. reflexivity.
+Qed.
+
+(* Typeclass capturing that a SemType is valid *)
+Class ValidSemType semTp : Prop :=
+  { sem_OType :> OType (semType semTp);
+    sem_ValidCtx :> ValidCtx (semCtx semTp) }.
+Instance ValidSemType_ctor ctx `{ValidCtx ctx} A `{OType A} :
+  ValidSemType (Build_SemType ctx A _) :=
+  Build_ValidSemType _ _ _.
 
 (* Convert a SemType to an actual type (FIXME: should this be a coercion?) *)
 Definition Semantics (semTp:SemType) : Type :=
   CtxElem (semCtx semTp) -o> semType semTp.
+
+(* A pfun that converts from a context to an equal one *)
+Definition coerceCtx {ctx1 ctx2} (e:ctx1=ctx2) :
+  CtxElem ctx1 -o> CtxElem ctx2 :=
+  match e in _ = ctx2 with
+  | eq_refl => id_pfun
+  end.
+
+(* A pfun that converts from an otype to an equal one *)
+Definition coerceTpRel {tprel1 tprel2:TpRel} (e:tprel1=tprel2) :
+  tpRelType tprel1 -o> tpRelType tprel2 :=
+  match e in _ = tprel2 with
+  | eq_refl => id_pfun
+  end.
+
+(* Coerce a semantic value to an equal semantic type, by composing with
+coerceCtx and coerceTpRel (instead of casting sem directly) *)
+Definition coerceSemantics {semTp1 semTp2} (e:semTp1=semTp2)
+           (sem:Semantics semTp1) : Semantics semTp2 :=
+  compose_pfun
+    (coerceCtx (symmetry (eqSemCtx e)))
+    (compose_pfun sem (coerceTpRel (eqSemTpRel e))).
+
+(* coerceSemantics is Proper *)
+Instance Proper_coerceSemantics semTp1 semTp2 (e:semTp1=semTp2)
+         `{ValidSemType semTp1} :
+  Proper (ot_R ==> ot_R) (coerceSemantics e).
+Proof.
+  destruct e; intros sem1 sem2 Rsem.
+  unfold coerceSemantics; simpl.
+  rewrite Rsem. reflexivity.
+Qed.
 
 (* Cast a semantic value to an equal semantic type *)
 Definition castSemantics {semTp1 semTp2} (e:semTp1=semTp2)
@@ -186,8 +260,7 @@ Definition castSemantics {semTp1 semTp2} (e:semTp1=semTp2)
 Instance Proper_castSemantics semTp1 semTp2 (e:semTp1=semTp2) :
   Proper (ot_R ==> ot_R) (castSemantics e).
 Proof.
-  generalize e. rewrite e. intros e2 sem1 sem2 Rsem.
-  rewrite (UIP_refl _ _ e2). apply Rsem.
+  destruct e; intros sem1 sem2 Rsem. apply Rsem.
 Qed.
 
 Lemma double_cast {A} {x y z:A} {F:A -> Type} (e1:x=y) (e2:y=z) (e3:x=z) obj :
@@ -240,12 +313,25 @@ Arguments OTRelation_OExpr_type e /.
  *** Typing for Ordered Expressions
  ***)
 
+(* Proof that a variable has a particular type *)
+Fixpoint HasTypeVar ctx tpRel v : Prop :=
+  match ctx with
+  | CtxNil => mkTpRel unit = tpRel
+  | CtxCons A ctx' =>
+    match v with
+    | 0 => mkTpRel A = tpRel
+    | S v' =>
+      HasTypeVar ctx' tpRel v'
+    end
+  end.
+
 (* Proof that an ordered expression is well-typed *)
 Fixpoint HasType semTp (e:OExpr) : Prop :=
   match e with
-  | OVar ctx n =>
+  | OVar ctx v =>
     ValidCtx ctx /\
-    {| semCtx := ctx; semType := nthCtx n ctx; sem_OTRelation := _ |} = semTp
+    semCtx semTp = ctx /\
+    HasTypeVar (semCtx semTp) (semTpRel semTp) v
   | @OEmbed ctx A _ a =>
     ValidCtx ctx /\
     OType A /\
@@ -268,15 +354,29 @@ Fixpoint HasType semTp (e:OExpr) : Prop :=
 (* Typeclass version of HasType *)
 Class HasTypeC semTp e : Prop := hasType : HasType semTp e.
 
+(* Variables can only have their one type *)
+Lemma HasTypeVar_eq ctx tpRel v :
+  HasTypeVar ctx tpRel v -> tpRel = mkTpRel (nthCtx v ctx).
+Proof.
+  revert v; induction ctx; intros; destruct v; simpl in * |- *.
+  - symmetry; assumption.
+  - symmetry; assumption.
+  - symmetry; assumption.
+  - apply IHctx; assumption.
+Qed.
+
 (* Expressions can only have their one type *)
 Lemma HasType_OExpr_SemType semTp e :
   HasType semTp e -> semTp = OExpr_SemType e.
-  revert semTp; induction e; intros semTp ht; destruct ht.
-  - rewrite <- H0; reflexivity.
-  - destruct H0; rewrite <- H1; reflexivity.
-  - destruct H; destruct H0; simpl. rewrite H. rewrite <- (IHe2 _ H2).
+  revert semTp; induction e; intro semTp.
+  - intros [ valid [ ctx_eq htv ]]; simpl in * |- *.
+    apply split_eqSemType; [ assumption | ].
+    apply HasTypeVar_eq. rewrite <- ctx_eq; assumption.
+  - intros [ valid [ otype semTp_eq ]]. rewrite <- semTp_eq. reflexivity.
+  - intros [[ semTp_eq valid ] [ ht1 ht2 ]]; simpl.
+    rewrite semTp_eq. rewrite <- (IHe2 _ ht2).
     reflexivity.
-  - rewrite <- H; simpl. reflexivity.
+  - intros [ semTp_eq _ ]; rewrite <- semTp_eq; reflexivity.
 Qed.
 
 Instance ValidCtx_OExpr_ctx semTp e (ht:HasTypeC semTp e) :
@@ -318,16 +418,20 @@ Qed.
  ***)
 
 (* The semantics of a variable *)
-Fixpoint varSemantics ctx v {struct ctx} :
-  Semantics (Build_SemType ctx (nthCtx v ctx) _) :=
-  match ctx return Semantics (Build_SemType ctx (nthCtx v ctx) _) with
-  | CtxNil => const_pfun tt
+Fixpoint varSemantics ctx tpRel v {struct ctx} :
+  HasTypeVar ctx tpRel v -> CtxElem ctx -o> tpRelType tpRel :=
+  match ctx return HasTypeVar ctx tpRel v ->
+                   CtxElem ctx -o> tpRelType tpRel with
+  | CtxNil =>
+    fun htv => compose_pfun (const_pfun tt) (coerceTpRel htv)
   | CtxCons A ctx' =>
-    match v return
-          Semantics (Build_SemType (CtxCons A ctx') (nthCtx v (CtxCons A ctx')) _)
-    with
-    | 0 => snd_pfun
-    | S v' => compose_pfun fst_pfun (varSemantics ctx' v')
+    match v return HasTypeVar (CtxCons A ctx') tpRel v ->
+                   CtxElem (CtxCons A ctx') -o> tpRelType tpRel with
+    | 0 =>
+      fun htv => compose_pfun snd_pfun (coerceTpRel htv)
+    | S v' =>
+      fun htv =>
+        compose_pfun fst_pfun (varSemantics ctx' tpRel v' htv)
     end
   end.
 
@@ -348,7 +452,7 @@ Program Fixpoint exprSemantics semTp e :
   match e return HasType semTp e -> Semantics semTp with
   | OVar ctx v =>
     fun ht =>
-      castSemantics (proj2c ht) (varSemantics ctx v)
+      varSemantics (semCtx semTp) (semTpRel semTp) v (proj2c (proj2c ht))
   | OEmbed ctx a =>
     fun ht =>
       castSemantics (proj2c (proj2c ht))
@@ -540,7 +644,7 @@ Qed.
 
 
 (***
- *** Substitution and Weakening for Ordered Expressions
+ *** Weakening for Ordered Expressions
  ***)
 
 (* Weakening / lifting of ordered expression variables: insert a type into the
@@ -568,20 +672,6 @@ Fixpoint weakenCtx1 n A {RA:OTRelation A} ctx : Ctx :=
   end.
 Arguments weakenCtx1 !n A {RA} !ctx.
 
-(* Weakening a CtxElem *)
-Fixpoint weakenCtxElem1 n A {RA:OTRelation A} ctx :
-  CtxElem (weakenCtx1 n A ctx) -o> CtxElem ctx :=
-  match n return CtxElem (weakenCtx1 n A ctx) -o> CtxElem ctx with
-  | 0 => fst_pfun (H:=OTRelation_CtxElem _)
-  | S n' =>
-    match ctx return CtxElem (weakenCtx1 (S n') A ctx) -o> CtxElem ctx with
-    | CtxNil => const_pfun tt
-    | CtxCons B ctx' =>
-      pair_pfun (compose_pfun fst_pfun (weakenCtxElem1 n' A ctx')) snd_pfun
-    end
-  end.
-Arguments weakenCtxElem1 !n A {RA} !ctx.
-
 (* Weakening / lifting of ordered expressions *)
 Fixpoint weakenOExpr1 n A {RA:OTRelation A} (e:OExpr) : OExpr :=
   match e with
@@ -597,20 +687,191 @@ Arguments weakenOExpr1 n A {RA} !e.
 Definition weakenSemType n A {RA:OTRelation A} semTp : SemType :=
   {| semCtx := weakenCtx1 n A (semCtx semTp);
      semType := semType semTp; sem_OTRelation := _ |}.
+Arguments weakenSemType n A {RA} semTp /.
 
-(* Weakening a semantic value *)
-Definition weakenSemantics n A {RA:OTRelation A} semTp (sem:Semantics semTp) :
-  Semantics (weakenSemType n A semTp) :=
-  compose_pfun (weakenCtxElem1 n A (semCtx semTp)) sem.
-Arguments weakenSemantics n A {RA} semTp sem /.
+(* A context is valid iff its weakening with a valid OType is *)
+Lemma ValidCtx_weakenCtx1_iff n A `{OType A} ctx :
+  ValidCtx ctx <-> ValidCtx (weakenCtx1 n A ctx).
+Proof.
+  split; revert ctx; induction n; intros ctx valid; destruct ctx; simpl.
+  - typeclasses eauto.
+  - typeclasses eauto.
+  - typeclasses eauto.
+  - destruct (ValidCtxInd_inversion _ _ valid);
+      constructor; [ | apply IHn ]; assumption.
+  - typeclasses eauto.
+  - destruct (ValidCtxInd_inversion _ _ valid); assumption.
+  - apply ValidCtx_Nil.
+  - simpl in valid. destruct (ValidCtxInd_inversion _ _ valid).
+    constructor; [ | apply IHn ]; assumption.
+Qed.
+
+(* Instance version of the left-to-right of the above *)
+Instance ValidCtx_weakenCtx1 n A `{OType A} ctx `{ValidCtx ctx} :
+  ValidCtx (weakenCtx1 n A ctx).
+Proof.
+  apply ValidCtx_weakenCtx1_iff; assumption.
+Qed.
 
 (* Weakening commutes with nthCtx *)
+(*
 Lemma weaken_nthCtx n A {RA:OTRelation A} ctx v :
   nthCtx (weakenOVar1 n v) (weakenCtx1 n A ctx) = nthCtx v ctx.
   revert ctx v; induction n; intros; [ | destruct ctx; destruct v ];
     simpl; try reflexivity; apply IHn.
 Qed.
+*)
 
+(* nthCtx is the same after weakening as before *)
+Lemma weaken_nthCtx n A {RA:OTRelation A} ctx v :
+  mkTpRel (nthCtx (weakenOVar1 n v) (weakenCtx1 n A ctx))
+  = mkTpRel (nthCtx v ctx).
+  revert ctx v; induction n; intros; [ | destruct ctx; destruct v ];
+    try reflexivity; simpl.
+  - apply IHn.
+  - apply IHn.
+Qed.
+
+(* weakenCtx commutes with ctxTail by incrementing the weakening position *)
+Lemma weakenCtx1_ctxTail n A {RA:OTRelation A} ctx :
+  weakenCtx1 n A (ctxTail ctx) = ctxTail (weakenCtx1 (S n) A ctx).
+Proof.
+  revert ctx; induction n; intros; destruct ctx; reflexivity.
+Qed.
+
+(* The head of a weakened context at non-zero position is just the head of the
+original context *)
+Lemma ctxHead_weakenCtx1_S n A {RA:OTRelation A} ctx :
+  existT OTRelation (ctxHead (weakenCtx1 (S n) A ctx)) _ =
+  existT OTRelation (ctxHead ctx) _.
+Proof.
+  destruct ctx; reflexivity.
+Qed.
+
+(* The type of a weakened expression is just the weakening of its type *)
+Lemma weaken_OExpr_type n A {RA:OTRelation A} e :
+  OExpr_SemType (weakenOExpr1 n A e) = weakenSemType n A (OExpr_SemType e).
+  revert n; induction e; simpl; intros.
+  { apply split_eqSemType; [ reflexivity | apply weaken_nthCtx ]. }
+  { reflexivity. }
+  { rewrite (eqSemCtx (IHe2 _)). reflexivity. }
+  { rewrite (IHe _). rewrite weakenCtx1_ctxTail.
+    unfold weakenSemType; simpl.
+    generalize (semCtx (OExpr_SemType e)); intro.
+    dependent rewrite (ctxHead_weakenCtx1_S n A c).
+    reflexivity. }
+Qed.
+
+Lemma weaken_HasTypeVar n A {RA:OTRelation A} ctx tpRel v :
+  HasTypeVar ctx tpRel v ->
+  HasTypeVar (weakenCtx1 n A ctx) tpRel (weakenOVar1 n v).
+Proof.
+  revert ctx tpRel v; induction n; intros; destruct ctx; destruct v;
+    try assumption; simpl.
+  - apply IHn. assumption.
+  - apply IHn. assumption.
+Qed.
+
+Lemma weaken_HasType n A `{OType A} semTp e :
+  HasType semTp e -> HasType (weakenSemType n A semTp) (weakenOExpr1 n A e).
+  revert n semTp; induction e; intros n0 semTp.
+  { intros [ valid [ ctx_eq htv ]]; split; [ | split ].
+    - typeclasses eauto.
+    - simpl; rewrite ctx_eq; reflexivity.
+    - apply weaken_HasTypeVar; assumption. }
+  { intros [ valid [ otype eq_semTp ]]; split; [ | split ].
+    - typeclasses eauto.
+    - assumption.
+    - rewrite <- eq_semTp. reflexivity. }
+  { intros [[ eq_semTp otype ] [ ht1 ht2 ]]; split; split.
+    - rewrite eq_semTp; reflexivity.
+    - assumption.
+    - simpl. rewrite weaken_OExpr_type.
+      change
+        (HasType (weakenSemType n0 A
+                                {| semCtx := semCtx semTp;
+                                   semType := semType (OExpr_SemType e2) -o>
+                                              semType semTp;
+                                   sem_OTRelation := _ |}) (weakenOExpr1 n0 A e1)).
+      apply IHe1; assumption.
+    - simpl. rewrite weaken_OExpr_type. unfold weakenSemType; simpl.
+      change (HasType (weakenSemType n0 A
+                                     {| semCtx := semCtx semTp;
+                                        semType := semType (OExpr_SemType e2);
+                                        sem_OTRelation := _ |})
+                      (weakenOExpr1 n0 A e2)).
+      apply IHe2; assumption. }
+  { intros [ eq_semTp [ ctx_neq_nil hte ]]; split; [ | split ].
+    - simpl. rewrite weaken_OExpr_type.
+      unfold weakenSemType; simpl.
+      rewrite <- weakenCtx1_ctxTail.
+      dependent rewrite (ctxHead_weakenCtx1_S n0 A (semCtx (OExpr_SemType e))).
+      rewrite <- eq_semTp; simpl. reflexivity.
+    - simpl. rewrite weaken_OExpr_type. unfold weakenSemType; simpl.
+      case_eq (semCtx (OExpr_SemType e)); intros;
+        [ elimtype False; apply ctx_neq_nil; assumption | ].
+      discriminate.
+    - rewrite weaken_OExpr_type. apply IHe. assumption. }
+Qed.
+
+
+FIXME HERE NOW: write the weakening lemma!
+
+
+
+Lemma weaken_var_semTp n A {RA:OTRelation A} ctx v :
+  weakenSemType n A {| semCtx := ctx; semType := nthCtx v ctx;
+                       sem_OTRelation := _ |} =
+  {| semCtx := weakenCtx1 n A ctx;
+     semType := nthCtx (weakenOVar1 n v) (weakenCtx1 n A ctx);
+     sem_OTRelation := _ |}.
+  revert ctx v; induction n; intros; [ | destruct ctx; destruct v ];
+    simpl; try reflexivity; simpl in IHn.
+  - injection (IHn CtxNil v); intros; dependent rewrite <- H.
+    destruct v; reflexivity.
+  - injection (IHn ctx v); intros; dependent rewrite <- H0.
+    reflexivity.
+Qed.
+
+(*
+Lemma weaken_HasType n A `{OType A} e semTp :
+  HasType semTp e <-> HasType (weakenSemType n A semTp) (weakenOExpr1 n A e).
+Proof.
+  revert semTp; induction e; intros; simpl.
+  { rewrite <- ValidCtx_weakenCtx1_iff; try assumption.
+    split; intros [ valid semTp_eq ]; split; try assumption.
+    - rewrite <- semTp_eq; simpl. symmetry; apply weaken_var_semTp.
+    - 
+fold (weakenSemType n A semTp) in semTp_eq.
+      rewrite weaken_var_semTp in semTp_eq.
+inversion semTp_eq.
+
+    - apply ValidCtx_weakenCtx1; assumption.
+    - rewrite <- semTp_eq; simpl; symmetry; apply weaken_var_semTp.
+    - 
+*)
+
+(* Weakening a CtxElem *)
+Fixpoint pfun_weakening n A {RA:OTRelation A} ctx :
+  CtxElem (weakenCtx1 n A ctx) -o> CtxElem ctx :=
+  match n return CtxElem (weakenCtx1 n A ctx) -o> CtxElem ctx with
+  | 0 => fst_pfun (H:=OTRelation_CtxElem _)
+  | S n' =>
+    match ctx return CtxElem (weakenCtx1 (S n') A ctx) -o> CtxElem ctx with
+    | CtxNil => const_pfun tt
+    | CtxCons B ctx' =>
+      pair_pfun (compose_pfun fst_pfun (pfun_weakening n' A ctx')) snd_pfun
+    end
+  end.
+Arguments pfun_weakening !n A {RA} !ctx.
+
+(* Weakening a semantic value *)
+Definition weakenSemantics n A {RA:OTRelation A} semTp (sem:Semantics semTp) :
+  Semantics (weakenSemType n A semTp) :=
+  compose_pfun (pfun_weakening n A (semCtx semTp)) sem.
+Arguments weakenSemantics n A {RA} semTp sem /.
+
+(*
 Lemma weakenVarSemType_eq n A {RA:OTRelation A} ctx v :
   {| semCtx := weakenCtx1 n A ctx;
      semType := nthCtx (weakenOVar1 n v) (weakenCtx1 n A ctx);
@@ -633,7 +894,21 @@ Lemma variable_weakening n A `{OType A} ctx `{ValidCtx ctx} v :
                 (varSemantics (weakenCtx1 n A ctx) (weakenOVar1 n v)).
   revert ctx H0 v; induction n; intros ctx H0 v; destruct ctx; destruct v;
     try reflexivity; simpl.
-  { rewrite compose_const_pfun_f.
+  { rewrite compose_f_const_pfun.
+*)
+
+Lemma weakeaning n A {RA:OTRelation A} semTp e ht ht_w :
+  exprSemantics _ (weakenOExpr1 n A e) ht_w =o=
+  weakenSemantics n A _ (exprSemantics semTp e ht).
+  revert ht ht_w; induction e; intros; simpl.
+  - destruct ht as [ valid semTp_eq ]; revert ht_w;
+      rewrite <- semTp_eq; simpl; intros [ valid2 eq2 ]; simpl.
+
+
+(***
+ *** Substitution for Ordered Expressions
+ ***)
+
 
 (* Substitution for ordered expression variables *)
 (* FIXME HERE: write this!
