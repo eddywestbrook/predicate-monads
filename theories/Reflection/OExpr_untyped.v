@@ -406,26 +406,97 @@ Fixpoint ctxDelete n ctx {struct ctx} : Ctx :=
   end.
 Arguments ctxDelete !n !ctx.
 
-(* FIXME: explain this... *)
-Fixpoint subst_pfun ctx n :
-  CtxElem (ctxDelete n ctx) * ctxNth n ctx -o> CtxElem ctx :=
-  match ctx return
-        CtxElem (ctxDelete n ctx) * ctxNth n ctx -o> CtxElem ctx with
-  | CtxNil => fst_pfun
+Instance ValidCtx_ctxDelete n ctx {valid:ValidCtx ctx} :
+  ValidCtx (ctxDelete n ctx).
+Proof.
+  revert n valid; induction ctx; intros n valid;
+    [ | destruct n; destruct valid ]; simpl.
+  - apply I.
+  - assumption.
+  - split; [ | apply IHctx ]; assumption.
+Qed.
+
+(* The the n+1-th suffix of a context *)
+Fixpoint ctxSuffix n ctx {struct ctx} : Ctx :=
+  match ctx with
+  | CtxNil => CtxNil
   | CtxCons A ctx' =>
-    match n return
-          CtxElem (ctxDelete n (CtxCons _ _)) * ctxNth n (CtxCons _ _) -o>
-          CtxElem (CtxCons A ctx') with
-    | 0 => id_pfun
-    | S n' =>
-      pair_pfun
-        (compose_pfun
-           (pair_pfun (compose_pfun fst_pfun fst_pfun) snd_pfun)
-           (subst_pfun ctx' n'))
-        (compose_pfun fst_pfun snd_pfun)
+    match n with
+    | 0 => ctx'
+    | S n' => ctxSuffix n' ctx'
     end
   end.
-Arguments subst_pfun !ctx !n.
+
+Instance ValidCtx_ctxSuffix n ctx {valid:ValidCtx ctx} :
+  ValidCtx (ctxSuffix n ctx).
+Proof.
+  revert n valid; induction ctx; intros n valid;
+    [ | destruct n; destruct valid ]; simpl.
+  - apply I.
+  - assumption.
+  - apply IHctx; assumption.
+Qed.
+
+Fixpoint subst_pfun ctx n :
+  (CtxElem (ctxSuffix n ctx) -o> ctxNth n ctx) ->
+  CtxElem (ctxDelete n ctx) -o> CtxElem ctx :=
+  match ctx return
+        (CtxElem (ctxSuffix n ctx) -o> ctxNth n ctx) ->
+        CtxElem (ctxDelete n ctx) -o> CtxElem ctx with
+  | CtxNil => fun s => const_pfun tt
+  | CtxCons A ctx' =>
+    match n return
+        (CtxElem (ctxSuffix n (CtxCons A ctx')) -o> ctxNth n (CtxCons A ctx')) ->
+        CtxElem (ctxDelete n (CtxCons A ctx')) -o> CtxElem (CtxCons A ctx')
+    with
+    | 0 => fun s => pair_pfun id_pfun s
+    | S n' =>
+      fun s =>
+        pair_pfun (compose_pfun fst_pfun (subst_pfun ctx' n' s)) snd_pfun
+    end
+  end.
+
+(* Helper shortcut for the repeated types in subst_var_pfun *)
+Definition subst_var_tp ctx n v :=
+  (CtxElem (ctxSuffix n ctx) -o> ctxNth n ctx) ->
+  CtxElem (ctxDelete n ctx) -o> ctxNth v ctx.
+
+(* Substitute into a variable v, which may or may not equal n *)
+Fixpoint subst_var_pfun ctx n v {struct ctx} :
+  (CtxElem (ctxSuffix n ctx) -o> ctxNth n ctx) ->
+  CtxElem (ctxDelete n ctx) -o> ctxNth v ctx :=
+  match ctx return subst_var_tp ctx n v with
+  | CtxNil => fun s => const_pfun tt
+  | CtxCons A ctx' =>
+    match n return subst_var_tp (CtxCons A ctx') n v with
+    | 0 =>
+      match v return subst_var_tp (CtxCons A ctx') 0 v with
+      | 0 => fun s => s
+      | S v' => fun _ => nth_pfun ctx' v'
+      end
+    | S n' =>
+      match v return subst_var_tp (CtxCons A ctx') (S n') v with
+      | 0 => fun _ => snd_pfun
+      | S v' =>
+        fun s => compose_pfun fst_pfun (subst_var_pfun ctx' n' v' s)
+      end
+    end
+  end.
+
+Lemma subst_nth_pfun ctx n v s {valid:ValidCtx ctx} :
+  compose_pfun (subst_pfun ctx n s) (nth_pfun ctx v) =o=
+  subst_var_pfun ctx n v s.
+Proof.
+  revert n v s valid; induction ctx; intros;
+    [ | destruct n; destruct v; destruct valid ]; simpl.
+  - rewrite compose_const_pfun_f. reflexivity.
+  - apply compose_pair_snd.
+  - rewrite compose_compose_pfun. rewrite compose_pair_fst.
+    rewrite id_compose_pfun. reflexivity.
+  - apply compose_pair_snd.
+  - rewrite compose_compose_pfun. rewrite compose_pair_fst.
+    rewrite <- compose_compose_pfun. f_equiv. apply IHctx. assumption.
+Qed.
 
 
 (***
@@ -925,36 +996,33 @@ Qed.
  *** Substitution for Ordered Expressions
  ***)
 
-FIXME HERE NOW: write substitution!
-
 (* Substitution for ordered expression variables *)
-Fixpoint substOVar n (s:OExpr) lifting v : OExpr :=
+Fixpoint substOVar n (s:OExpr) vctx v : OExpr :=
   match n with
   | 0 =>
     match v with
     | 0 => s
-    | S v' => OVar (lifting + v')
+    | S v' => OVar (ctxTail vctx) v'
     end
   | S n' =>
     match v with
-    | 0 => OVar lifting
+    | 0 => OVar (ctxDelete n' (ctxTail vctx)) 0
     | S v' =>
-      substOVar n' (S lifting) s v
+      weakenOExpr 0 (ctxHead vctx) (substOVar n' s (ctxTail vctx) v')
     end
   end.
-*)
 
 (* Substitution for ordered expressions *)
-(*
 Fixpoint substOExpr n (s:OExpr) (e:OExpr) : OExpr :=
   match e with
-  | OVar v => substOVar n CtxNil s v
-  | OEmbed a => OEmbed a
-  | OApp A B f arg => OApp A B (substOExpr n s f) (substOExpr n s arg)
-  | OLam A B body => OLam A B (substOExpr (S n) s body)
+  | OVar vctx v => substOVar n s vctx v
+  | OEmbed ctx a => OEmbed (ctxDelete n ctx) a
+  | OApp B f arg => OApp B (substOExpr n s f) (substOExpr n s arg)
+  | OLam body => OLam (substOExpr (S n) s body)
   end.
- *)
 
+
+FIXME HERE NOW: prove correctness of substitution!
 
 
 FIXME HERE NOW: build quoting tactic
