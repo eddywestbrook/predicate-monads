@@ -2,7 +2,8 @@
 
 ./theories/Reflection/OrderedType.v
 ./theories/Reflection/OrderedContext.v
-./theories/Reflection/OExpr_untyped.v
+./theories/Reflection/OExpr_typed.v
+#./theories/Reflection/OExpr_untyped.v
 
 #./theories/Ordered8/OrderedType.v
 #./theories/Ordered8/Monad.v
