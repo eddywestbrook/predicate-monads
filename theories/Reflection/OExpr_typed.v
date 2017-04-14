@@ -1,170 +1,244 @@
 Require Export PredMonad.Reflection.OrderedType.
-Require Import Coq.Logic.Eqdep. (* We need Streicher's K / UIP *)
+Require Export PredMonad.Reflection.OrderedContext.
+Require Import Coq.Logic.ProofIrrelevance.
 
 Import EqNotations.
 Import ListNotations.
+Import ProofIrrelevanceTheory.
 
 
 (***
  *** Ordered Expressions
  ***)
 
-(* Expressions to represent proper functions. These are weakly typed, i.e., the
-variables are not necessarily correct; this makes substitution so much easier *)
-Inductive OExpr : forall A `{OTRelation A}, Type :=
-| OVar A {RA:OTRelation A} (n:nat) : OExpr A
-| OEmbed {A} {RA:OTRelation A} (a:A) : OExpr A
-| OApp (A B:Type) {RA:OTRelation A} {RB:OTRelation B}
-       (e1 : OExpr (A -o> B)) (e2 : OExpr A) : OExpr B
-| OLam (A B:Type) {RA:OTRelation A} {RB:OTRelation B}
-       (e: OExpr B) : OExpr (A -o> B)
+Inductive OVar A {RA:OTRelation A} : Ctx  -> Type :=
+| OVar_0 {ctx:Ctx} : OVar A (CtxCons A ctx)
+| OVar_S {ctx:Ctx} {B} {RB:OTRelation B} :
+    OVar A ctx -> OVar A (CtxCons B ctx)
 .
 
-(* Weakening / lifting of ordered expression variables *)
-Fixpoint weakenOVar n k (v:nat) {struct n} : nat :=
-  match n with
-  | 0 => v + k
-  | S n' =>
-    match v with
-    | 0 => 0
-    | S v' => weakenOVar n' k v'
-    end
-  end.
+Arguments OVar_0 {A RA ctx}.
+Arguments OVar_S {A RA ctx B RB} v.
 
-(* Weakening / lifting of ordered expressions *)
-Fixpoint weakenOExpr n k {A} `{OTRelation A} (e:OExpr A) : OExpr A :=
-  match e in OExpr A return OExpr A with
-  | OVar A v => OVar A (weakenOVar n k v)
-  | OEmbed a => OEmbed a
-  | OApp A B f arg => OApp A B (weakenOExpr n k f) (weakenOExpr n k arg)
-  | OLam A B f => OLam A B (weakenOExpr (S n) k f)
-  end.
+(* Expressions to represent proper functions *)
+Inductive OExpr (ctx:Ctx) : forall A {RA:OTRelation A}, Type :=
+| Var {A} {RA:OTRelation A} {valid:ValidCtx ctx} (v:OVar A ctx) : OExpr ctx A
+| Embed {A} {RA:OTRelation A} {OA:OType A} {valid:ValidCtx ctx} (a:A) : OExpr ctx A
+| App {A B:Type} {RA:OTRelation A} {OA:OType A} {RB:OTRelation B} {OB:OType B}
+      (e1 : OExpr ctx (A -o> B)) (e2 : OExpr ctx A) : OExpr ctx B
+| Lam {A B:Type} {RA:OTRelation A} {OA:OType A} {RB:OTRelation B} {OB:OType B}
+      {valid:ValidCtx ctx}
+      (e: OExpr (CtxCons A ctx) B) : OExpr ctx (A -o> B)
+.
 
-(* Substitution for ordered expression variables *)
-Fixpoint substOVar n lifting {A} `{OTRelation A} {B} `{OTRelation B}
-         (s:OExpr A) v : OExpr B :=
-  match n with
-  | 0 =>
-    match v with
-    | 0 => weakenOExpr 0 lifting s
-    | S v' => OVar v'
-    end
-  | S n' =>
-    match v with
-    | 0 => OVar lifting
-    | S v' =>
-      substOVar n' (S lifting) s v
-    end
-  end.
+Arguments Var {ctx} {A RA valid} v.
+Arguments Embed {ctx} {A RA OA valid} a.
+Arguments App {ctx} {A B RA OA RB OB} e1 e2.
+Arguments Lam {ctx} {A B RA OA RB OB valid} e.
 
-(* Substitution for ordered expressions *)
-Fixpoint substOExpr n (s:OExpr) (e:OExpr) : OExpr :=
-  match e with
-  | OVar v => substOVar n 0 s v
-  | OEmbed a => OEmbed a
-  | OApp A B f arg => OApp A B (substOExpr n s f) (substOExpr n s arg)
-  | OLam A B body => OLam A B (substOExpr (S n) s body)
-  end.
+
+(* The type of any OExpr is always an OType *)
+Instance OType_OExpr_type ctx A {RA} (e:@OExpr ctx A RA) : OType A.
+Proof.
+  induction e; try assumption.
+  - induction v; destruct valid; [ | apply IHv]; assumption.
+  - typeclasses eauto.
+Qed.
+
+(* The context of any OExpr is always valid *)
+Instance ValidCtx_OExpr_ctx ctx A {RA} (e:@OExpr ctx A RA) : ValidCtx ctx.
+Proof.
+  induction e; assumption.
+Qed.
 
 
 (***
- *** Typing for Ordered Expressions
+ *** Semantics of Ordered Expressions
  ***)
 
-(* A context here is just a list of types *)
-Inductive Ctx : Type :=
-| CtxNil
-| CtxCons A `{OTRelation A} (ctx:Ctx)
-.
-
-(* An element of a context is a nested tuple of elements of its types *)
-Fixpoint CtxElem (ctx:Ctx) : Type :=
-  match ctx with
-  | CtxNil => unit
-  | CtxCons A ctx' => A * CtxElem ctx'
+(* The semantics of a variable *)
+Fixpoint varSemantics {A} {RA:OTRelation A} {ctx} (v:OVar A ctx) :
+  CtxElem ctx -o> A :=
+  match v in OVar _ ctx return CtxElem ctx -o> A with
+  | OVar_0 => snd_pfun (A:=CtxElem _)
+  | OVar_S v' => compose_pfun fst_pfun (varSemantics v')
   end.
+Arguments varSemantics {A RA ctx} !v.
 
-(* OTRelation and OType instances for nil CtxElems *)
-Instance OTRelation_CtxElem_Nil : OTRelation (CtxElem CtxNil) := OTunit_R.
-Instance OType_CtxElem_Nil : OType (CtxElem CtxNil) := OTunit.
+(* The semantics of an ordered expression *)
+Fixpoint exprSemantics {ctx A} {RA:OTRelation A} (e:OExpr ctx A) :
+  CtxElem ctx -o> A :=
+  match e in OExpr _ A return CtxElem ctx -o> A with
+  | Var v => varSemantics v
+  | Embed a => const_pfun a
+  | App e1 e2 =>
+    pfun_apply (exprSemantics e1) (exprSemantics e2)
+  | Lam e => pfun_curry (exprSemantics e)
+  end.
+Arguments exprSemantics {ctx A RA} !e.
 
-(* OTRelation and OType instances for cons CtxElems *)
-Instance OTRelation_CtxElem_Cons A `{OType A} ctx `{OTRelation (CtxElem ctx)} :
-  OTRelation (CtxElem (CtxCons A ctx)) := OTpair_R _ _ _ _.
-Instance OType_CtxElem_Cons A `{OType A} ctx `{OType (CtxElem ctx)} :
-  OType (CtxElem (CtxCons A ctx)) := OTpair _ _ _ _.
 
-(* Proofs that a type is the nth element of a context *)
-Fixpoint HasTypeVar (v:nat) (ctx:Ctx) (B:Type) : Prop :=
-  match v with
+(***
+ *** Relating Ordered Expressions
+ ***)
+
+(* Two expressions are related iff their semantics are *)
+Definition oexpr_R {ctx A} {RA:OTRelation A} : relation (OExpr ctx A) :=
+  fun e1 e2 => exprSemantics e1 <o= exprSemantics e2.
+Arguments oexpr_R {ctx A RA} e1 e2 /.
+
+(* oexpr_R is a PreOrder *)
+Instance PreOrder_oexpr_R ctx A {RA} : PreOrder (@oexpr_R ctx A RA).
+Proof.
+  split; intro; intros;
+  assert (ValidCtx ctx) as valid; try eauto with typeclass_instances;
+    assert (OType A) as OA; try eauto with typeclass_instances;
+      unfold oexpr_R.
+  - reflexivity.
+  - transitivity (exprSemantics y); assumption.
+Qed.
+
+(* Two expressions are equivalent iff their semantics are *)
+Definition oexpr_eq {ctx A} {RA:OTRelation A} : relation (OExpr ctx A) :=
+  fun e1 e2 => exprSemantics e1 =o= exprSemantics e2.
+Arguments oexpr_eq {ctx A RA} e1 e2 /.
+
+(* oexpr_eq is an Equivalence *)
+Instance Equivalence_oexpr_eq ctx A {RA} : Equivalence (@oexpr_eq ctx A RA).
+Proof.
+  constructor; intro; intros;
+    assert (ValidCtx ctx) as valid; try eauto with typeclass_instances;
+      assert (OType A) as OA; try eauto with typeclass_instances;
+        unfold oexpr_eq.
+  { split; reflexivity. }
+  { symmetry; assumption. }
+  { transitivity (exprSemantics y); assumption. }
+Qed.
+
+(* The Embed constructor is Proper w.r.t. ot_R and oexpr_R *)
+Instance Proper_Embed ctx A {RA OA valid} :
+  Proper (ot_R ==> oexpr_R) (@Embed ctx A RA OA valid).
+Proof.
+  intros a1 a2 Ra. simpl. rewrite Ra. reflexivity.
+Qed.
+
+(* The Embed constructor is Proper w.r.t. ot_equiv and oexpr_eq *)
+Instance Proper_Embed_eq ctx A {RA OA valid} :
+  Proper (ot_equiv ==> oexpr_eq) (@Embed ctx A RA OA valid).
+Proof.
+  intros a1 a2 Ra. simpl. rewrite Ra. reflexivity.
+Qed.
+
+(* The App constructor is Proper *)
+Instance Proper_App ctx {A B RA OA RB OB} :
+  Proper (oexpr_R ==> oexpr_R ==> oexpr_R) (@App ctx A B RA OA RB OB).
+Proof.
+  intros f1 f2 Rf a1 a2 Ra. simpl in * |- *.
+  apply Proper_pfun_apply; assumption.
+Qed.
+
+(* The App constructor is Proper for equivalence *)
+Instance Proper_App_eq ctx {A B RA OA RB OB} :
+  Proper (oexpr_eq ==> oexpr_eq ==> oexpr_eq) (@App ctx A B RA OA RB OB).
+Proof.
+  intros f1 f2 Rf a1 a2 Ra. simpl in * |- *.
+  apply Proper_pfun_apply_equiv; assumption.
+Qed.
+
+(* The Lam constructor is Proper *)
+Instance Proper_Lam ctx {A B RA OA RB OB valid} :
+  Proper (oexpr_R ==> oexpr_R) (@Lam ctx A B RA OA RB OB valid).
+Proof.
+  intros e1 e2 Re. simpl in * |- *.
+  apply Proper_pfun_curry; assumption.
+Qed.
+
+(* The Lam constructor is Proper for equivalence *)
+Instance Proper_Lam_eq ctx {A B RA OA RB OB valid} :
+  Proper (oexpr_eq ==> oexpr_eq) (@Lam ctx A B RA OA RB OB valid).
+Proof.
+  intros e1 e2 Re. simpl in * |- *.
+  apply Proper_pfun_curry_equiv; assumption.
+Qed.
+
+
+(***
+ *** Substitution for Ordered Expressions
+ ***)
+
+(* Weakening / lifting of ordered expression variables *)
+Fixpoint weakenOVar w W {RW:OTRelation W} :
+  forall {ctx A} {RA:OTRelation A}, OVar A ctx -> OVar A (ctxInsert w W ctx) :=
+  match w return
+        forall ctx A {RA:OTRelation A}, OVar A ctx -> OVar A (ctxInsert w W ctx)
+  with
   | 0 =>
-    match ctx with
-    | CtxNil => False
-    | CtxCons A _ => A = B
-    end
-  | S v' =>
-    match ctx with
-    | CtxNil => False
-    | CtxCons _ ctx' => HasTypeVar v' ctx' B
-    end
+    fun _ _ {_} v => OVar_S v
+  | S w' =>
+    fun ctx A {RA} v =>
+      match v in OVar _ ctx return OVar A (ctxInsert (S w') W ctx) with
+      | OVar_0 => OVar_0
+      | OVar_S v' => OVar_S (weakenOVar w' W v')
+      end
   end.
 
-(* Typing proofs for ordered expressions *)
-Fixpoint HasType (e:OExpr) (ctx:Ctx) (B:Type) : Prop :=
+(* Weakening / lifting of ordered expressions *)
+Fixpoint weakenOExpr w W {RW:OTRelation W} {OW:OType W} {ctx} {A} {RA:OTRelation A}
+         (e:OExpr ctx A) : OExpr (ctxInsert w W ctx) A :=
+  match e in OExpr _ A return OExpr (ctxInsert w W ctx) A with
+  | Var v => Var (weakenOVar w W v)
+  | Embed a => Embed a
+  | App e1 e2 => App (weakenOExpr w W e1) (weakenOExpr w W e2)
+  | Lam e => Lam (weakenOExpr (S w) W e)
+  end.
+
+(* Substitution for ordered expression variables *)
+Fixpoint substOVar n {ctx} {A} {RA:OTRelation A} :
+  OVar A ctx ->
+  forall {valid:ValidCtx ctx}, OExpr (ctxSuffix n ctx) (ctxNth n ctx) ->
+  OExpr (ctxDelete n ctx) A :=
+  match n return
+        OVar A ctx ->
+        ValidCtx ctx -> OExpr (ctxSuffix n ctx) (ctxNth n ctx) ->
+        OExpr (ctxDelete n ctx) A
+  with
+  | 0 =>
+    fun v =>
+      match v in OVar _ ctx return
+            ValidCtx ctx ->
+            OExpr (ctxSuffix 0 ctx) (ctxNth 0 ctx) -> OExpr (ctxDelete 0 ctx) A
+      with
+      | OVar_0 => fun _ s => s
+      | OVar_S v' => fun valid _ => Var (valid:=proj2 valid) v'
+    end
+  | S n' =>
+    fun v =>
+      match v in OVar _ ctx return
+            ValidCtx ctx ->
+            OExpr (ctxSuffix (S n') ctx) (ctxNth (S n') ctx) ->
+            OExpr (ctxDelete (S n') ctx) A
+      with
+      | OVar_0 =>
+        fun valid _ =>
+          Var (valid:=ValidCtx_ctxDelete (S n') (CtxCons _ _)) OVar_0
+      | @OVar_S _ _ ctx' B RB v' =>
+        fun valid s =>
+          weakenOExpr 0 B (OW:=proj1 valid) (A:=A)
+                      (substOVar n' v' (valid:=proj2 valid) s)
+      end
+  end.
+
+(* Substitution for ordered expressions *)
+Fixpoint substOExpr n {ctx} {A} {RA:OTRelation A} (e:OExpr ctx A) :
+  OExpr (ctxSuffix n ctx) (ctxNth n ctx) -> OExpr (ctxDelete n ctx) A :=
   match e with
-  | OVar v => HasTypeVar v ctx B
-  | @OEmbed A a => A = B
-  | OApp A B' f arg =>
-    (A -o> B') = B /\ (HasType f ctx (A -o> B') /\ HasType arg ctx A)
-  | OLam A B' body => (A -o> B') = B /\ HasType body (CtxCons A ctx) B'
+  | Var v => fun s => substOVar n v s
+  | Embed a => fun _ => Embed a
+  | App e1 e2 => fun s => App (substOExpr n e1 s) (substOExpr n e2 s)
+  | Lam e => fun s => Lam (substOExpr (S n) e s)
   end.
 
-(* Lemma: each HasTypeVar proof is unique *)
-Lemma HasTypeVar_unique v ctx B (ht1 ht2: HasTypeVar v ctx B) : ht1 = ht2.
-  revert ctx ht1 ht2; induction v; destruct ctx; simpl; intros;
-    try apply UIP; try apply IHv; try destruct ht1.
-Qed.
 
-(* Lemma: each HasType proof is unique *)
-Lemma HasType_unique ctx B e (ht1 ht2: HasType e ctx B) : ht1 = ht2.
-  revert ctx B ht1 ht2; induction e; simpl; intros.
-  { apply HasTypeVar_unique. }
-  { apply UIP. }
-  { destruct ht1 as [ ht11 ht1 ]; destruct ht1;
-      destruct ht2 as [ ht21 ht2 ]; destruct ht2;
-        repeat f_equal; first [ apply UIP | apply IHe1 | apply IHe2 ]. }
-  { destruct ht1; destruct ht2. f_equal; [ apply UIP | apply IHe ]. }
-Qed.
-
-(* The semantics of a well-typed variable *)
-Fixpoint varSemantics v ctx B : HasTypeVar v ctx B -> CtxElem ctx -o> B :=
-  match v return HasTypeVar v ctx B -> CtxElem ctx -o> B with
-  | 0 =>
-    match ctx return HasTypeVar 0 ctx B -> CtxElem ctx -o> B with
-    | [] => fun ht => match ht with end
-    | A::ctx' => fun ht => rew ht in fst_pfun
-    end
-  | S v' =>
-    match ctx return HasTypeVar (S v') ctx B -> CtxElem ctx -o> B with
-    | [] => fun ht => match ht with end
-    | A::ctx' =>
-      fun ht =>
-        compose_pfun snd_pfun (varSemantics v' ctx' B ht)
-    end
-  end.
-
-(* The semantics of a well-typed expression *)
-Fixpoint exprSemantics e ctx B : HasType e ctx B -> CtxElem ctx -> B :=
-  match e return HasType e ctx B -> CtxElem ctx -> B with
-  | OVar v => varSemantics v ctx B
-  | OEmbed a => fun ht _ => rew ht in a
-  | OApp A B' f arg =>
-    fun ht celem =>
-      rew (proj1 ht) in
-        pfun_app (exprSemantics f ctx (A -o> B') (proj1 (proj2 ht)) celem)
-                 (exprSemantics arg ctx A (proj2 (proj2 ht)) celem)
-  | OLam A B' body =>
-    fun ht celem =>
-      rew (proj1 ht) in
-        exprSemantics body (A::ctx) B' (proj2 ht) celem
-  end.
+FIXME HERE NOW:
+- prove that weakening and substitution are correct
+- quoting tactic!
