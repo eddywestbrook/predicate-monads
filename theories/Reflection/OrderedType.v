@@ -322,6 +322,12 @@ Proof.
   intros b1 b2 Rb a1 a2 Ra. apply Rb.
 Qed.
 
+Instance Proper_const_pfun_equiv {A B} `{OTRelation A} `{OType B} :
+  Proper (ot_equiv ==> ot_equiv) (const_pfun (A:=A) (B:=B)).
+Proof.
+  intros b1 b2 Rb; split; intros a1 a2 Ra; apply Rb.
+Qed.
+
 (* Composing with the constant pfun on the left *)
 Lemma compose_const_pfun_f A B C `{OTRelation A} `{OType B} `{OType C}
       b (f : B -o> C) :
