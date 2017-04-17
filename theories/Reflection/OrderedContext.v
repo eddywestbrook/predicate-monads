@@ -302,7 +302,7 @@ Proof.
 Qed.
 
 (* Weakening preserves validity *)
-Instance ValidCtx_insert w W `{OType W} ctx {valid:ValidCtx ctx} :
+Instance ValidCtx_ctxInsert w W `{OType W} ctx {valid:ValidCtx ctx} :
   ValidCtx (ctxInsert w W ctx).
 Proof.
   apply ValidCtx_ctxInsert_iff; assumption.
@@ -428,6 +428,7 @@ Fixpoint ctxSuffix n ctx {struct ctx} : Ctx :=
     end
   end.
 
+(* ctxSuffix preserves ValidCtx *)
 Instance ValidCtx_ctxSuffix n ctx {valid:ValidCtx ctx} :
   ValidCtx (ctxSuffix n ctx).
 Proof.
@@ -438,6 +439,7 @@ Proof.
   - apply IHctx; assumption.
 Qed.
 
+(* Substitute into a context by providing a pfun for the nth value *)
 Fixpoint subst_pfun ctx n :
   (CtxElem (ctxSuffix n ctx) -o> ctxNth n ctx) ->
   CtxElem (ctxDelete n ctx) -o> CtxElem ctx :=
@@ -456,6 +458,25 @@ Fixpoint subst_pfun ctx n :
         pair_pfun (compose_pfun fst_pfun (subst_pfun ctx' n' s)) snd_pfun
     end
   end.
+
+(* Proper-ness of subst_pfun *)
+Instance Proper_subst_pfun ctx n : Proper (ot_R ==> ot_R) (subst_pfun ctx n).
+Proof.
+  revert n; induction ctx; intros; [ | destruct n ]; simpl; intros s1 s2 Rs.
+  - reflexivity.
+  - intros c1 c2 Rc; simpl. split; [ | apply Rs ]; assumption.
+  - intros c1 c2 Rc; simpl.
+    split; destruct Rc; [ apply IHctx | ]; assumption.
+Qed.
+
+(* Proper-ness of subst_pfun w.r.t equivalence *)
+Instance Proper_subst_pfun_equiv ctx n :
+  Proper (ot_equiv ==> ot_equiv) (subst_pfun ctx n).
+Proof.
+  intros s1 s2 Rs; destruct Rs; split; apply Proper_subst_pfun; assumption.
+Qed.
+
+(* FIXME HERE: delete subst_var_pfun? *)
 
 (* Helper shortcut for the repeated types in subst_var_pfun *)
 Definition subst_var_tp ctx n v :=
@@ -498,5 +519,3 @@ Proof.
   - rewrite compose_compose_pfun. rewrite compose_pair_fst.
     rewrite <- compose_compose_pfun. f_equiv. apply IHctx. assumption.
 Qed.
-
-
