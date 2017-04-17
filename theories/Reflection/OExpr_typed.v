@@ -11,7 +11,7 @@ Import ProofIrrelevanceTheory.
  *** Ordered Expressions
  ***)
 
-Inductive OVar A {RA:OTRelation A} : Ctx  -> Type :=
+Inductive OVar A {RA:OTRelation A} : Ctx -> Type :=
 | OVar_0 {ctx:Ctx} : OVar A (CtxCons A ctx)
 | OVar_S {ctx:Ctx} {B} {RB:OTRelation B} :
     OVar A ctx -> OVar A (CtxCons B ctx)
@@ -37,12 +37,16 @@ Arguments App {ctx} {A B RA OA RB OB} e1 e2.
 Arguments Lam {ctx} {A B RA OA RB OB valid} e.
 
 
+(* The type of any OVar in a ValidCtx is always an OType *)
+Instance OType_OVar_type A {RA} ctx (v:@OVar A RA ctx) `{ValidCtx ctx} : OType A.
+Proof.
+  revert H; induction v; intro valid; destruct valid; [ | apply IHv ]; assumption.
+Qed.
+
 (* The type of any OExpr is always an OType *)
 Instance OType_OExpr_type ctx A {RA} (e:@OExpr ctx A RA) : OType A.
 Proof.
-  induction e; try assumption.
-  - induction v; destruct valid; [ | apply IHv]; assumption.
-  - typeclasses eauto.
+  induction e; eauto with typeclass_instances.
 Qed.
 
 (* The context of any OExpr is always valid *)
@@ -115,6 +119,11 @@ Proof.
   { transitivity (exprSemantics y); assumption. }
 Qed.
 
+Notation "x <e= y" :=
+  (oexpr_R x y) (no associativity, at level 70).
+Notation "x =e= y" :=
+  (oexpr_eq x y) (no associativity, at level 70).
+
 (* The Embed constructor is Proper w.r.t. ot_R and oexpr_R *)
 Instance Proper_Embed ctx A {RA OA valid} :
   Proper (ot_R ==> oexpr_R) (@Embed ctx A RA OA valid).
@@ -163,7 +172,7 @@ Qed.
 
 
 (***
- *** Substitution for Ordered Expressions
+ *** Weakening for Ordered Expressions
  ***)
 
 (* Weakening / lifting of ordered expression variables *)
@@ -182,6 +191,19 @@ Fixpoint weakenOVar w W {RW:OTRelation W} :
       end
   end.
 
+(* Correctness of weakenOVar: it is equivalent to weaken_pfun *)
+Lemma weakenOVar_correct w W {RW} {OW:OType W} {ctx A RA}
+      {OA:OType A} {valid:ValidCtx ctx} v :
+  varSemantics (@weakenOVar w W RW ctx A RA v) =o=
+  compose_pfun (weaken_pfun w W ctx) (varSemantics v).
+Proof.
+  revert ctx valid v; induction w; intros; [ | destruct v; destruct valid ]; simpl.
+  - reflexivity.
+  - rewrite compose_pair_snd. reflexivity.
+  - rewrite compose_compose_pfun. rewrite compose_pair_fst.
+    rewrite <- compose_compose_pfun. f_equiv. apply IHw. assumption.
+Qed.
+
 (* Weakening / lifting of ordered expressions *)
 Fixpoint weakenOExpr w W {RW:OTRelation W} {OW:OType W} {ctx} {A} {RA:OTRelation A}
          (e:OExpr ctx A) : OExpr (ctxInsert w W ctx) A :=
@@ -191,6 +213,45 @@ Fixpoint weakenOExpr w W {RW:OTRelation W} {OW:OType W} {ctx} {A} {RA:OTRelation
   | App e1 e2 => App (weakenOExpr w W e1) (weakenOExpr w W e2)
   | Lam e => Lam (weakenOExpr (S w) W e)
   end.
+
+(* Correctness of weakenOExpr: it is equivalent to weaken_pfun *)
+Lemma weakenOExpr_correct w W {RW} {OW:OType W} {ctx A RA} e :
+  exprSemantics (@weakenOExpr w W RW OW ctx A RA e) =o=
+  compose_pfun (weaken_pfun w W ctx) (exprSemantics e).
+Proof.
+  revert w; induction e; intros; simpl.
+  - apply weakenOVar_correct; try assumption.
+    apply (OType_OExpr_type _ _ (Var v)).
+  - rewrite compose_f_const_pfun; [ reflexivity | typeclasses eauto ].
+  - assert (ValidCtx ctx) as valid; [ apply (ValidCtx_OExpr_ctx _ _ e1) | ].
+    rewrite compose_pfun_apply; try typeclasses eauto.
+    f_equiv; [ apply IHe1 | apply IHe2 ].
+  - rewrite compose_pfun_curry; try assumption. Unshelve.
+    f_equiv. apply (IHe (S w)).
+    typeclasses eauto.
+Qed.
+
+(* Proper-ness of weakenOExpr *)
+Instance Proper_weakenOExpr w W {RW} {OW:OType W} {ctx A RA} :
+  Proper (oexpr_R ==> oexpr_R) (@weakenOExpr w W RW OW ctx A RA).
+Proof.
+  intros e1 e2 Re. unfold oexpr_R.
+  assert (ValidCtx ctx) as valid; [ apply (ValidCtx_OExpr_ctx _ _ e1) | ].
+  assert (OType A) as OA; [ eauto with typeclass_instances | ].
+  repeat rewrite weakenOExpr_correct. f_equiv. assumption.
+Qed.
+
+(* Proper-ness of weakenOExpr *)
+Instance Proper_weakenOExpr_equiv w W {RW} {OW:OType W} {ctx A RA} :
+  Proper (oexpr_eq ==> oexpr_eq) (@weakenOExpr w W RW OW ctx A RA).
+Proof.
+  intros e1 e2 Re. destruct Re; split; apply Proper_weakenOExpr; assumption.
+Qed.
+
+
+(***
+ *** Substitution for Ordered Expressions
+ ***)
 
 (* Substitution for ordered expression variables *)
 Fixpoint substOVar n {ctx} {A} {RA:OTRelation A} :
@@ -227,6 +288,41 @@ Fixpoint substOVar n {ctx} {A} {RA:OTRelation A} :
                       (substOVar n' v' (valid:=proj2 valid) s)
       end
   end.
+Arguments substOVar !n {ctx A RA} !v {valid} s.
+
+(* Correctness of substOVar: it is equivalent to subst_pfun *)
+Lemma substOVar_correct n {ctx A RA} v {valid} s :
+  exprSemantics (@substOVar n ctx A RA v valid s) =o=
+  compose_pfun (subst_pfun ctx n (exprSemantics s)) (varSemantics v).
+Proof.
+  revert n valid s; induction v; intros; destruct n; destruct valid; simpl.
+  - rewrite compose_pair_snd. reflexivity.
+  - rewrite compose_pair_snd. reflexivity.
+  - assert (OType A) as OA; [ eauto with typeclass_instances | ].
+    rewrite compose_compose_pfun. rewrite compose_pair_fst.
+    rewrite id_compose_pfun. reflexivity.
+  - assert (OType A) as OA; [ eauto with typeclass_instances | ].
+    rewrite (weakenOExpr_correct 0). unfold weaken_pfun.
+    rewrite compose_compose_pfun. rewrite compose_pair_fst.
+    rewrite <- compose_compose_pfun. f_equiv. apply IHv.
+Qed.
+
+(* substOVar is Proper in its s argument *)
+Instance Proper_substOVar n {ctx A RA} v {valid} :
+  Proper (oexpr_R ==> oexpr_R) (@substOVar n ctx A RA v valid).
+Proof.
+  intros s1 s2; simpl; intro Rs.
+  assert (OType A) as OA; [ eauto with typeclass_instances | ].
+  repeat rewrite substOVar_correct. rewrite Rs. reflexivity.
+Qed.
+
+(* substOVar is Proper w.r.t. equivalence in its s argument *)
+Instance Proper_substOVar_equiv n {ctx A RA} v {valid} :
+  Proper (oexpr_eq ==> oexpr_eq) (@substOVar n ctx A RA v valid).
+Proof.
+  intros s1 s2 Rs; destruct Rs; split; apply Proper_substOVar; assumption.
+Qed.
+
 
 (* Substitution for ordered expressions *)
 Fixpoint substOExpr n {ctx} {A} {RA:OTRelation A} (e:OExpr ctx A) :
@@ -237,8 +333,32 @@ Fixpoint substOExpr n {ctx} {A} {RA:OTRelation A} (e:OExpr ctx A) :
   | App e1 e2 => fun s => App (substOExpr n e1 s) (substOExpr n e2 s)
   | Lam e => fun s => Lam (substOExpr (S n) e s)
   end.
+Arguments substOExpr n {ctx A RA} !e.
+
+(* Correctness of substOExpr: it is equivalent to subst_pfun *)
+Lemma substOExpr_correct n {ctx A RA} e s :
+  exprSemantics (@substOExpr n ctx A RA e s) =o=
+  compose_pfun (subst_pfun ctx n (exprSemantics s)) (exprSemantics e).
+Proof.
+  revert n s; induction e; intros; simpl.
+  - apply substOVar_correct.
+  - symmetry. apply compose_f_const_pfun. eauto with typeclass_instances.
+  - assert (ValidCtx ctx) as valid; [ apply (ValidCtx_OExpr_ctx _ _ e1) | ].
+    rewrite compose_pfun_apply; eauto with typeclass_instances.
+    rewrite IHe1. rewrite IHe2. reflexivity.
+  - rewrite compose_pfun_curry; eauto with typeclass_instances.
+    rewrite (IHe (S n)). reflexivity.
+Qed.
 
 
-FIXME HERE NOW:
-- prove that weakening and substitution are correct
-- quoting tactic!
+(* The Beta rule for ordered expressions *)
+Lemma OExpr_Beta ctx `{ValidCtx ctx} A `{OType A} B `{OType B}
+      (e1: OExpr (CtxCons A ctx) B) (e2: OExpr ctx A) :
+  App (Lam e1) e2 =e= substOExpr 0 e1 e2.
+Proof.
+  simpl. rewrite pfun_apply_pfun_curry; eauto with typeclass_instances.
+  rewrite (substOExpr_correct 0 (ctx:=CtxCons A ctx)). reflexivity.
+Qed.
+
+
+FIXME HERE NOW: quoting tactic!
