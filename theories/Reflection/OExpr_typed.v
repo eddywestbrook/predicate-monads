@@ -442,8 +442,8 @@ Ltac oquote :=
   | |- ?e1 =o= ?e2 =>
     let q1 := quote_oexpr_top e1 in
     let q2 := quote_oexpr_top e2 in
-    idtac q1 "=e=" q2;
-    try apply (quote_eq_lemma q1 q2)
+    (* idtac q1 "=e=" q2; *)
+    apply (quote_eq_lemma q1 q2)
   | |- ?e1 <o= ?e2 =>
     let q1 := quote_oexpr_top e1 in
     let q2 := quote_oexpr_top e2 in
