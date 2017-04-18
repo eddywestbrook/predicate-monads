@@ -361,4 +361,99 @@ Proof.
 Qed.
 
 
-FIXME HERE NOW: quoting tactic!
+(***
+ *** Quoting Tactic for Ordered Expressions
+ ***)
+
+Lemma quote_R_lemma {A RA} (e1 e2 : @OExpr CtxNil A RA) :
+  e1 <e= e2 -> (exprSemantics e1) @o@ tt <o= (exprSemantics e2) @o@ tt.
+Proof.
+  intro R12. apply R12. reflexivity.
+Qed.
+
+Lemma quote_eq_lemma {A RA} (e1 e2 : @OExpr CtxNil A RA) :
+  e1 =e= e2 -> (exprSemantics e1) @o@ tt =o= (exprSemantics e2) @o@ tt.
+Proof.
+  intro equiv.
+  destruct equiv; split; apply quote_R_lemma; assumption.
+Qed.
+
+Tactic Notation "unify'" open_constr(t) open_constr(u) :=
+  assert(t = u); [refine eq_refl|].
+
+(* Specially-marked versions of fst and snd just used for quote_oexpr *)
+Definition celem_head ctx A {RA} (celem: CtxElem (@CtxCons A RA ctx)) : A :=
+  let (_,head) := celem in head.
+Definition celem_rest ctx A {RA} (celem: CtxElem (@CtxCons A RA ctx)) :
+  CtxElem ctx :=
+  let (rest,_) := celem in rest.
+
+Ltac quote_ovar f :=
+  lazymatch f with
+  | (fun (celem:?ctype) => @celem_head ?ctx ?A ?RA _) =>
+    uconstr:(@OVar_0 A RA ctx)
+  | (fun (celem:?ctype) => @celem_rest ?ctx ?B ?RB ?f') =>
+    let qv := quote_ovar (fun (celem:ctype) => f') in
+    uconstr:(@OVar_S _ _ B RB ctx qv)
+  end.
+
+Ltac quote_oexpr f :=
+  lazymatch f with
+  | (fun (celem:?ctype) => ?e1 @o@ ?e2) =>
+    let q1 := quote_oexpr (fun (celem:ctype) => e1) in
+    let q2 := quote_oexpr (fun (celem:ctype) => e2) in
+    uconstr:(App q1 q2)
+  | (fun (celem:CtxElem ?ctx) => ofun (fun (x:?A) =>?g)) =>
+    let e_rec :=
+        (eval simpl in
+            (fun (celem':CtxElem (CtxCons A ctx)) =>
+               (fun (celem:CtxElem ctx) (x:A) => g)
+                 (celem_rest ctx A celem') (celem_head ctx A celem')))
+    in
+    let q := quote_oexpr e_rec in
+    uconstr:(Lam q)
+  | (fun (celem:?ctype) => celem_head _ _ _) =>
+    let qv := quote_ovar f in
+    uconstr:(Var qv)
+  | (fun (celem:?ctype) => celem_rest _ _ _) =>
+    let qv := quote_ovar f in
+    uconstr:(Var qv)
+  | (fun (celem:?ctype) => ?body) =>
+    (* For constants, just make a fresh evar, and let the unification of the
+    change tactic used later fill it in *)
+    uconstr:(Embed _)
+    (*
+    lazymatch type of (fun (celem:ctype) => body) with
+    | _ -> ?A =>
+      let ename := fresh "e" in
+      let res1 := evar (ename:_) in
+      let e := constr:(?ename) in
+      let res := unify' (fun celem => body) (fun _ => e) in
+      uconstr:(Embed (ctx:=CtxNil) e)
+    end
+     *)
+  end.
+
+Ltac quote_oexpr_top e :=
+  quote_oexpr (fun (celem:CtxElem CtxNil) => e).
+
+Ltac oquote :=
+  lazymatch goal with
+  | |- ?e1 =o= ?e2 =>
+    let q1 := quote_oexpr_top e1 in
+    let q2 := quote_oexpr_top e2 in
+    idtac q1 "=e=" q2;
+    try apply (quote_eq_lemma q1 q2)
+  | |- ?e1 <o= ?e2 =>
+    let q1 := quote_oexpr_top e1 in
+    let q2 := quote_oexpr_top e2 in
+    apply (quote_R_lemma q1 q2)
+  end.
+
+Lemma simple_quote_test A `{OType A} a : a =o= a.
+  oquote. reflexivity.
+Qed.
+
+Lemma beta_test2 A `{OType A} a : (ofun (A:=A) (fun x => x)) @o@ a =o= a.
+  oquote. rewrite OExpr_Beta; simpl. reflexivity.
+Qed.
