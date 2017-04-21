@@ -615,6 +615,38 @@ Qed.
  *** Ordered Terms and ProperPair Instances for Pair Operations
  ***)
 
+(* Proper function for fst *)
+Definition ofst {A B} `{OTRelation A} `{OTRelation B} : A * B -o> A :=
+  {| pfun_app := fst; pfun_Proper := _ |}.
+
+(* Proper function for snd *)
+Definition osnd {A B} `{OTRelation A} `{OTRelation B} : A * B -o> B :=
+  {| pfun_app := snd; pfun_Proper := _ |}.
+
+(* Proper function for pair *)
+Program Definition opair {A B} `{OType A} `{OType B} : A -o> B -o> A * B :=
+  {| pfun_app :=
+       fun a => {| pfun_app := fun b => pair a b;
+                   pfun_Proper := _ |};
+     pfun_Proper := _ |}.
+Next Obligation.
+  intros b1 b2 Rb. split; [ reflexivity | assumption ].
+Qed.
+Next Obligation.
+  intros a1 a2 Ra b1 b2 Rb. split; assumption.
+Qed.
+
+(* Notation for proper pairs *)
+Notation "( x ,o, y )" := (opair @o@ x @o@ y) (at level 0).
+
+(* FIXME: get this notation to work *)
+(*
+Notation "( x ,o, y ,o, .. ,o, z )" :=
+  (pfun_app opair .. (pfun_app (pfun_app opair x) y) .. z)
+                                         (at level 0).
+*)
+
+(*
 Instance ProperPair_fst A B `{OType A} `{OType B} (p1 p2: A*B)
          (pf: ProperPair (A*B) p1 p2) :
   ProperPair A (fst p1) (fst p2).
@@ -635,6 +667,7 @@ Instance ProperPair_pair A B `{OType A} `{OType B}
 Proof.
   split; assumption.
 Qed.
+ *)
 
 
 (***
@@ -693,15 +726,17 @@ Definition ex3 {A} `{OType A} : A -o> A -o> A :=
 (* Eval simpl in (fun (A:OType) x => pfun_app (pfun_app (@ex3 A) x)). *)
 
 Definition ex4 {A B} `{OType A} `{OType B} : (A * B -o> A) :=
-  ofun (fun p => fst p).
-(* Eval simpl in (fun (A B:OType) => pfun_app ex4 : A * B -> A). *)
+  ofun (fun p => ofst @o@ p).
+(* Eval simpl in (fun {A B} `{OType A} `{OType B} =>
+                 pfun_app ex4 : A * B -> A). *)
 
 Definition ex5 {A B} `{OType A} `{OType B} : A * B -o> B * A :=
-  ofun (fun p => (snd p , fst p)).
-(* Eval simpl in (fun (A B:OType) => pfun_app ex5 : A *o* B -> B *o* A). *)
+  ofun (fun p => (osnd @o@ p ,o, ofst @o@ p)).
+(* Eval simpl in (fun {A B} `{OType A} `{OType B} =>
+                 pfun_app ex5 : A * B -> B * A). *)
 
 Definition ex6 {A B C} `{OType A} `{OType B} `{OType C} : A * B * C -o> C * A :=
-  ofun (fun triple => (snd triple , fst (fst triple))).
+  ofun (fun triple => (osnd @o@ triple ,o, ofst @o@ (ofst @o@ triple))).
 
 Definition ex7 {A B C} `{OType A} `{OType B} `{OType C}
   : (A * B -o> C) -o> C -o> A -o> B -o> C :=
@@ -710,6 +745,6 @@ Definition ex7 {A B C} `{OType A} `{OType B} `{OType C}
                  (fun c =>
                     ofun
                       (fun a =>
-                         ofun (fun b => f @o@ (a , b))))).
+                         ofun (fun b => f @o@ (a ,o, b))))).
 
 End OTExamples.
