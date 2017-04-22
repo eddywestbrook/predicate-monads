@@ -188,7 +188,7 @@ Proof.
   destruct ctx.
   - typeclasses eauto.
   - exact (proj1 valid).
-Qed.
+Defined.
 
 (* Get the tail of a context, defaulting to the empty context *)
 Definition ctxTail ctx :=
@@ -202,7 +202,7 @@ Proof.
   destruct ctx.
   - typeclasses eauto.
   - exact (proj2 valid).
-Qed.
+Defined.
 
 (* Non-nil contexts equal cons of their heads and tails *)
 Lemma ctx_eq_head_tail ctx :
@@ -237,7 +237,7 @@ Instance OType_ctxNth n ctx `{valid:ValidCtx ctx} : OType (ctxNth n ctx).
 Proof.
   revert n valid; induction ctx; intros; simpl; try typeclasses eauto.
   destruct valid. destruct n; try assumption. apply IHctx; apply H1.
-Qed.
+Defined.
 
 (* The ctxNth of nil is always unit *)
 Lemma ctxNth_nil n : ctxNth n CtxNil =t= unit.
@@ -306,7 +306,7 @@ Instance ValidCtx_ctxInsert w W `{OType W} ctx {valid:ValidCtx ctx} :
   ValidCtx (ctxInsert w W ctx).
 Proof.
   apply ValidCtx_ctxInsert_iff; assumption.
-Qed.
+Defined.
 
 (* ctxInsert commutes with ctxTail by incrementing the weakening position *)
 Lemma ctxInsert_ctxTail n A {RA:OTRelation A} ctx :
@@ -415,7 +415,7 @@ Proof.
   - apply I.
   - assumption.
   - split; [ | apply IHctx ]; assumption.
-Qed.
+Defined.
 
 (* The the n+1-th suffix of a context *)
 Fixpoint ctxSuffix n ctx {struct ctx} : Ctx :=
@@ -437,7 +437,7 @@ Proof.
   - apply I.
   - assumption.
   - apply IHctx; assumption.
-Qed.
+Defined.
 
 (* Substitute into a context by providing a pfun for the nth value *)
 Fixpoint subst_pfun ctx n :
