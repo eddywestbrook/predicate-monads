@@ -38,19 +38,20 @@ Arguments Lam {ctx} {A B RA OA RB OB valid} e.
 
 
 (* The type of any OVar in a ValidCtx is always an OType *)
-Instance OType_OVar_type A {RA} ctx (v:@OVar A RA ctx) `{ValidCtx ctx} : OType A.
+Instance OType_OVar_type A {RA} ctx (v:@OVar A RA ctx) `{ValidCtx ctx}
+  : OType A | 5.
 Proof.
   revert H; induction v; intro valid; destruct valid; [ | apply IHv ]; assumption.
 Qed.
 
 (* The type of any OExpr is always an OType *)
-Instance OType_OExpr_type ctx A {RA} (e:@OExpr ctx A RA) : OType A.
+Instance OType_OExpr_type ctx A {RA} (e:@OExpr ctx A RA) : OType A | 5.
 Proof.
   induction e; eauto with typeclass_instances.
 Qed.
 
 (* The context of any OExpr is always valid *)
-Instance ValidCtx_OExpr_ctx ctx A {RA} (e:@OExpr ctx A RA) : ValidCtx ctx.
+Instance ValidCtx_OExpr_ctx ctx A {RA} (e:@OExpr ctx A RA) : ValidCtx ctx | 5.
 Proof.
   induction e; assumption.
 Qed.
@@ -362,6 +363,36 @@ Qed.
 
 
 (***
+ *** Other OExpr Rewrite Rules
+ ***)
+
+Lemma OExpr_fst_pair ctx `{ValidCtx ctx} A `{OType A} B `{OType B}
+      (e1: OExpr ctx A) (e2: OExpr ctx B) :
+  App (Embed (ofst (A:=A) (B:=B))) (App (App (Embed opair) e1) e2) =e= e1.
+Proof.
+  split; intros c1 c2 Rc; simpl; apply pfun_Proper; assumption.
+Qed.
+
+Lemma OExpr_snd_pair ctx `{ValidCtx ctx} A `{OType A} B `{OType B}
+      (e1: OExpr ctx A) (e2: OExpr ctx B) :
+  App (Embed (osnd (A:=A) (B:=B))) (App (App (Embed opair) e1) e2) =e= e2.
+Proof.
+  split; intros c1 c2 Rc; simpl; apply pfun_Proper; assumption.
+Qed.
+
+Lemma OExpr_pair_eta ctx `{ValidCtx ctx} A `{OType A} B `{OType B}
+      (e: OExpr ctx (A*B)) :
+  (App (App (Embed opair) (App (Embed ofst) e)) (App (Embed osnd) e))
+  =e= e.
+Proof.
+  split; intros c1 c2 Rc; split; simpl; rewrite Rc; reflexivity.
+Qed.
+
+Hint Rewrite OExpr_fst_pair OExpr_snd_pair OExpr_pair_eta : osimpl.
+Opaque ofst osnd opair.
+
+
+(***
  *** Quoting Tactic for Ordered Expressions
  ***)
 
@@ -388,15 +419,23 @@ Definition celem_rest ctx A {RA} (celem: CtxElem (@CtxCons A RA ctx)) :
   CtxElem ctx :=
   let (rest,_) := celem in rest.
 
+(* Get the return type of a pfun *)
+Ltac get_pfun_ret_type f :=
+  lazymatch type of f with
+  | _ -o> ?A => A
+  end.
+
+(* Quote an expression that we think corresponds to a variable *)
 Ltac quote_ovar f :=
   lazymatch f with
-  | (fun (celem:?ctype) => @celem_head ?ctx ?A ?RA _) =>
+  | (fun (celem:_) => @celem_head ?ctx ?A ?RA _) =>
     uconstr:(@OVar_0 A RA ctx)
   | (fun (celem:?ctype) => @celem_rest ?ctx ?B ?RB ?f') =>
     let qv := quote_ovar (fun (celem:ctype) => f') in
     uconstr:(@OVar_S _ _ B RB ctx qv)
   end.
 
+(* Quote an expression-in-context, returning an OExpr that corresponds to it *)
 Ltac quote_oexpr f :=
   lazymatch f with
   | (fun (celem:?ctype) => ?e1 @o@ ?e2) =>
@@ -434,9 +473,12 @@ Ltac quote_oexpr f :=
      *)
   end.
 
+(* Quote an expression at the top level by quoting it in the empty context *)
 Ltac quote_oexpr_top e :=
   quote_oexpr (fun (celem:CtxElem CtxNil) => e).
 
+(* Translate a problem about proper functions into one about OExprs, by
+"quoting" both sides *)
 Ltac oquote :=
   lazymatch goal with
   | |- ?e1 =o= ?e2 =>
@@ -450,10 +492,42 @@ Ltac oquote :=
     apply (quote_R_lemma q1 q2)
   end.
 
+Ltac oexpr_simpl :=
+  rewrite_strat (bottomup (choice (OExpr_Beta ; eval simpl) (hints osimpl))).
+
+(* Translate a problem about proper functions into one about OExprs by calling
+oquote, simplify both sides using the osimpl rewrite database, and then try to
+use reflexivity, going back to proper functions if that does not work *)
+Ltac osimpl := oquote; try oexpr_simpl; try reflexivity; simpl.
+
+
+(***
+ *** Testing the Quote Mechanism
+ ***)
+
+Module OQuoteTest.
+
+(* A simple test case for constant terms *)
 Lemma simple_quote_test A `{OType A} a : a =o= a.
-  oquote. reflexivity.
+  osimpl.
 Qed.
 
-Lemma beta_test2 A `{OType A} a : (ofun (A:=A) (fun x => x)) @o@ a =o= a.
-  oquote. rewrite OExpr_Beta; simpl. reflexivity.
+(* A simple test case with all 4 OExpr constructs, that does beta-reduction *)
+Lemma beta_test A `{OType A} a : (ofun (A:=A) (fun x => x)) @o@ a =o= a.
+  osimpl.
 Qed.
+
+(* A test case with the first projection of a product *)
+Lemma product_proj1_test A `{OType A} B `{OType B} (a:A) (b:B) :
+  ofst @o@ (a ,o, b) =o= a.
+  osimpl.
+Qed.
+
+(* A test case with with beta-reduction and projections + eta for products *)
+Lemma beta_product_test A `{OType A} B `{OType B} (p:A*B) :
+  ofun (fun p => (osnd @o@ p ,o, ofst @o@ p)) @o@ (osnd @o@ p ,o, ofst @o@ p)
+  =o= p.
+  osimpl.
+Qed.
+
+End OQuoteTest.
