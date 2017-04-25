@@ -396,22 +396,6 @@ Opaque ofst osnd opair.
  *** Quoting Tactic for Ordered Expressions
  ***)
 
-Lemma quote_R_lemma {A RA} (e1 e2 : @OExpr CtxNil A RA) :
-  e1 <e= e2 -> (exprSemantics e1) @o@ tt <o= (exprSemantics e2) @o@ tt.
-Proof.
-  intro R12. apply R12. reflexivity.
-Qed.
-
-Lemma quote_eq_lemma {A RA} (e1 e2 : @OExpr CtxNil A RA) :
-  e1 =e= e2 -> (exprSemantics e1) @o@ tt =o= (exprSemantics e2) @o@ tt.
-Proof.
-  intro equiv.
-  destruct equiv; split; apply quote_R_lemma; assumption.
-Qed.
-
-Tactic Notation "unify'" open_constr(t) open_constr(u) :=
-  assert(t = u); [refine eq_refl|].
-
 (* Specially-marked versions of fst and snd just used for quote_oexpr *)
 Definition celem_head ctx A {RA} (celem: CtxElem (@CtxCons A RA ctx)) : A :=
   let (_,head) := celem in head.
@@ -419,28 +403,121 @@ Definition celem_rest ctx A {RA} (celem: CtxElem (@CtxCons A RA ctx)) :
   CtxElem ctx :=
   let (rest,_) := celem in rest.
 
-(* Get the return type of a pfun *)
-Ltac get_pfun_ret_type f :=
-  lazymatch type of f with
-  | _ -o> ?A => A
+(* Dummy typeclass used to guide the quoting mechanism, below *)
+Class QuotesToVar {ctx1 ctx2 ctx3 A} {RA:OTRelation A}
+      (f: CtxElem ctx1 -> CtxElem ctx2) (v: OVar A ctx3) : Prop :=
+  quotesToVar : True.
+
+(* Dummy typeclass used to guide the quoting mechanism, below *)
+Class QuotesTo {ctx A} {RA:OTRelation A}
+      (f: CtxElem ctx -> A) (e: OExpr ctx A) : Prop :=
+  quotesTo : True.
+
+Instance QuotesToVar0 {ctx1 ctx3 A} {RA:OTRelation A} :
+  QuotesToVar (ctx1:=ctx1) (ctx3:=CtxCons A ctx3) (fun c => c) OVar_0 := I.
+
+Instance QuotesToVarS {ctx1 ctx2 ctx3 A B} {RA:OTRelation A} {RB:OTRelation B}
+         (f: CtxElem ctx1 -> CtxElem (CtxCons B ctx2)) (v: OVar A ctx3)
+         (q: QuotesToVar f v) :
+  QuotesToVar (fun c => celem_rest ctx2 B (f c)) (OVar_S v) := I.
+
+Instance QuotesTo_Var {ctx1 ctx2 A} {RA:OTRelation A} {valid:ValidCtx ctx1}
+         (f: CtxElem ctx1 -> CtxElem (CtxCons A ctx2)) v
+         (q: QuotesToVar f v) :
+  QuotesTo (fun c => celem_head ctx2 A (f c)) (Var v) | 1 := I.
+
+Instance QuotesTo_Embed {ctx A} `{OType A} {valid:ValidCtx ctx} (a:A) :
+  QuotesTo (fun _ => a) (Embed a) | 2 := I.
+
+Instance QuotesTo_App {ctx A B} `{OType A} `{OType B}
+         (f1: CtxElem ctx -> A -o> B) (f2: CtxElem ctx -> A) e1 e2
+         (q1: QuotesTo f1 e1) (q2: QuotesTo f2 e2) :
+  QuotesTo (fun c => (f1 c) @o@ (f2 c)) (App e1 e2) | 1 := I.
+
+Instance QuotesTo_Lam {ctx A B} `{OType A} `{OType B} `{ValidCtx ctx}
+         (f: CtxElem ctx -> A -> B) prp e
+         (q: QuotesTo (fun c => f (celem_rest _ _ c) (celem_head _ _ c)) e) :
+  QuotesTo (fun c => ofun (f c) (prp:=prp c)) (Lam e) | 1 := I.
+
+Lemma oquote_R {A} {RA:OTRelation A} {f1 f2 : A} {e1 e2: OExpr CtxNil A}
+      {q1: QuotesTo (fun _ => f1) e1} {q2: QuotesTo (fun _ => f2) e2} :
+  f1 = exprSemantics e1 @o@ tt -> f2 = exprSemantics e2 @o@ tt ->
+  e1 <e= e2 -> f1 <o= f2.
+Proof.
+  intros eq1 eq2 R12. rewrite eq1. rewrite eq2. apply R12. reflexivity.
+Defined.
+
+Lemma oquote_eq {A} {RA:OTRelation A} {f1 f2 : A} {e1 e2: OExpr CtxNil A}
+      {q1: QuotesTo (fun _ => f1) e1} {q2: QuotesTo (fun _ => f2) e2} :
+  f1 = exprSemantics e1 @o@ tt -> f2 = exprSemantics e2 @o@ tt ->
+  e1 =e= e2 -> f1 =o= f2.
+Proof.
+  intros eq1 eq2 R12. rewrite eq1. rewrite eq2.
+  destruct R12 as [ R12l R12r ]; split; [ apply R12l | apply R12r ]; reflexivity.
+Defined.
+
+(* Translate a problem about proper functions into one about OExprs, by
+"quoting" both sides *)
+Ltac oquote :=
+  lazymatch goal with
+  | |- ?e1 =o= ?e2 =>
+    apply oquote_eq; [ apply eq_refl | apply eq_refl | ]
+  | |- ?e1 <o= ?e2 =>
+    apply oquote_R; [ apply eq_refl | apply eq_refl | ]
   end.
 
+Ltac oexpr_simpl :=
+  rewrite_strat (bottomup (choice (OExpr_Beta ; eval simpl) (hints osimpl))).
+
+(* Translate a problem about proper functions into one about OExprs by calling
+oquote, simplify both sides using the osimpl rewrite database, and then try to
+use reflexivity, going back to proper functions if that does not work *)
+Ltac osimpl := oquote; try oexpr_simpl; try reflexivity; simpl.
+
+Lemma product_proj1_test A `{OType A} B `{OType B} (a:A) (b:B) :
+  ofst @o@ (a ,o, b) =o= a.
+  osimpl.
+Qed.
+
+
+(***
+ *** Old Version of Quoting Tactic, using Ltac Directly
+ ***)
+
+(*
+Tactic Notation "unify'" open_constr(t) open_constr(u) :=
+  assert(t = u); [refine eq_refl|].
+*)
+
+Lemma ltac_oquote_R {A RA} (e1 e2 : @OExpr CtxNil A RA) :
+  e1 <e= e2 -> (exprSemantics e1) @o@ tt <o= (exprSemantics e2) @o@ tt.
+Proof.
+  intro R12. apply R12. reflexivity.
+Qed.
+
+Lemma ltac_oquote_eq {A RA} (e1 e2 : @OExpr CtxNil A RA) :
+  e1 =e= e2 -> (exprSemantics e1) @o@ tt =o= (exprSemantics e2) @o@ tt.
+Proof.
+  intro equiv.
+  destruct equiv; split; apply ltac_oquote_R; assumption.
+Qed.
+
 (* Quote an expression that we think corresponds to a variable *)
-Ltac quote_ovar f :=
+Ltac ltac_quote_ovar f :=
   lazymatch f with
   | (fun (celem:_) => @celem_head ?ctx ?A ?RA _) =>
     uconstr:(@OVar_0 A RA ctx)
   | (fun (celem:?ctype) => @celem_rest ?ctx ?B ?RB ?f') =>
-    let qv := quote_ovar (fun (celem:ctype) => f') in
+    let qv := ltac_quote_ovar (fun (celem:ctype) => f') in
     uconstr:(@OVar_S _ _ B RB ctx qv)
   end.
 
 (* Quote an expression-in-context, returning an OExpr that corresponds to it *)
-Ltac quote_oexpr f :=
+Ltac ltac_quote_oexpr f :=
   lazymatch f with
   | (fun (celem:?ctype) => ?e1 @o@ ?e2) =>
-    let q1 := quote_oexpr (fun (celem:ctype) => e1) in
-    let q2 := quote_oexpr (fun (celem:ctype) => e2) in
+    let q1 := ltac_quote_oexpr (fun (celem:ctype) => e1) in
+    let q2 := ltac_quote_oexpr (fun (celem:ctype) => e2) in
     uconstr:(App q1 q2)
   | (fun (celem:CtxElem ?ctx) => ofun (fun (x:?A) =>?g)) =>
     let e_rec :=
@@ -449,13 +526,13 @@ Ltac quote_oexpr f :=
                (fun (celem:CtxElem ctx) (x:A) => g)
                  (celem_rest ctx A celem') (celem_head ctx A celem')))
     in
-    let q := quote_oexpr e_rec in
+    let q := ltac_quote_oexpr e_rec in
     uconstr:(Lam q)
   | (fun (celem:?ctype) => celem_head _ _ _) =>
-    let qv := quote_ovar f in
+    let qv := ltac_quote_ovar f in
     uconstr:(Var qv)
   | (fun (celem:?ctype) => celem_rest _ _ _) =>
-    let qv := quote_ovar f in
+    let qv := ltac_quote_ovar f in
     uconstr:(Var qv)
   | (fun (celem:?ctype) => ?body) =>
     (* For constants, just make a fresh evar, and let the unification of the
@@ -474,31 +551,28 @@ Ltac quote_oexpr f :=
   end.
 
 (* Quote an expression at the top level by quoting it in the empty context *)
-Ltac quote_oexpr_top e :=
-  quote_oexpr (fun (celem:CtxElem CtxNil) => e).
+Ltac ltac_quote_oexpr_top e :=
+  ltac_quote_oexpr (fun (celem:CtxElem CtxNil) => e).
 
 (* Translate a problem about proper functions into one about OExprs, by
 "quoting" both sides *)
-Ltac oquote :=
+Ltac ltac_oquote :=
   lazymatch goal with
   | |- ?e1 =o= ?e2 =>
-    let q1 := quote_oexpr_top e1 in
-    let q2 := quote_oexpr_top e2 in
+    let q1 := ltac_quote_oexpr_top e1 in
+    let q2 := ltac_quote_oexpr_top e2 in
     (* idtac q1 "=e=" q2; *)
-    apply (quote_eq_lemma q1 q2)
+    apply (ltac_oquote_eq q1 q2)
   | |- ?e1 <o= ?e2 =>
-    let q1 := quote_oexpr_top e1 in
-    let q2 := quote_oexpr_top e2 in
-    apply (quote_R_lemma q1 q2)
+    let q1 := ltac_quote_oexpr_top e1 in
+    let q2 := ltac_quote_oexpr_top e2 in
+    apply (ltac_oquote_R q1 q2)
   end.
-
-Ltac oexpr_simpl :=
-  rewrite_strat (bottomup (choice (OExpr_Beta ; eval simpl) (hints osimpl))).
 
 (* Translate a problem about proper functions into one about OExprs by calling
 oquote, simplify both sides using the osimpl rewrite database, and then try to
 use reflexivity, going back to proper functions if that does not work *)
-Ltac osimpl := oquote; try oexpr_simpl; try reflexivity; simpl.
+Ltac ltac_osimpl := ltac_oquote; try oexpr_simpl; try reflexivity; simpl.
 
 
 (***
@@ -527,7 +601,7 @@ Qed.
 Lemma beta_product_test A `{OType A} B `{OType B} (p:A*B) :
   ofun (fun p => (osnd @o@ p ,o, ofst @o@ p)) @o@ (osnd @o@ p ,o, ofst @o@ p)
   =o= p.
-  osimpl.
+  oquote. oexpr_simpl. reflexivity.
 Qed.
 
 End OQuoteTest.
