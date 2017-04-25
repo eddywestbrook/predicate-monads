@@ -3,15 +3,10 @@
 ./theories/Reflection/OrderedType.v
 ./theories/Reflection/OrderedContext.v
 ./theories/Reflection/OExpr.v
-#./theories/Reflection/OExpr_untyped.v
 
-#./theories/Ordered8/OrderedType.v
-#./theories/Ordered8/Monad.v
-#./theories/Ordered8/MonadState.v
-
-./theories/Unordered/SemiPreOrder.v
-./theories/Unordered/Monad.v
-# MonadState is really slow!
-#./theories/Unordered/MonadState.v
-./theories/Unordered/PredMonad.v
-./theories/Unordered/PredMonadState.v
+# ./theories/Unordered/SemiPreOrder.v
+# ./theories/Unordered/Monad.v
+# # MonadState is really slow!
+# #./theories/Unordered/MonadState.v
+# ./theories/Unordered/PredMonad.v
+# ./theories/Unordered/PredMonadState.v
