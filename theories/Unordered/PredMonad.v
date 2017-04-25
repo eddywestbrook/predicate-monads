@@ -97,8 +97,8 @@ Section PredMonad.
 
 End PredMonad.
 
-Arguments PredMonadOps M PM {_} {_} : clear implicits.
-Arguments PredMonad M PM {_} {_} {_} : clear implicits.
+Arguments PredMonadOps M PM {_} {_}.
+Arguments PredMonad M PM {_} {_} {_}.
 
 
 (***
