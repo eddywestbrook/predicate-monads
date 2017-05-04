@@ -396,24 +396,21 @@ Opaque ofst osnd opair.
  *** Quoting Tactic for Ordered Expressions
  ***)
 
-(* Specially-marked versions of fst and snd just used for quote_oexpr *)
+(* Specially-marked versions of fst and snd just used for quoting OExprs *)
 Definition celem_head ctx A {RA} (celem: CtxElem (@CtxCons A RA ctx)) : A :=
   let (_,head) := celem in head.
 Definition celem_rest ctx A {RA} (celem: CtxElem (@CtxCons A RA ctx)) :
   CtxElem ctx :=
   let (rest,_) := celem in rest.
 
-(* Dummy typeclass used to guide the quoting mechanism, below *)
+(* Typeclass for incrementally quoting functions into OExpr variables, by
+peeling off the celem_rest projections one at a time and adding them as OVar_S
+constructors to the input variable to build the output variable *)
 Class QuotesToVar {ctx1 ctx2 A} {RA:OTRelation A}
       (f: CtxElem ctx1 -> CtxElem ctx2) (vin: OVar A ctx2)
       (vout: OVar A ctx1) : Prop :=
   quotesToVar :
     forall c, varSemantics vin @o@ (f c) = varSemantics vout @o@ c.
-
-(* Dummy typeclass used to guide the quoting mechanism, below *)
-Class QuotesTo {ctx A} {RA:OTRelation A}
-      (f: CtxElem ctx -> A) (e: OExpr ctx A) : Prop :=
-  quotesTo : forall c, f c =o= exprSemantics e @o@ c.
 
 Instance QuotesToVar_Base {ctx A} {RA:OTRelation A} v :
   QuotesToVar (ctx1:=ctx) (fun c => c) v v.
@@ -429,29 +426,104 @@ Proof.
   intro. apply q.
 Qed.
 
+(* Class for quoting functions to OExprs *)
+Class QuotesTo {ctx A} {RA:OTRelation A}
+      (f: CtxElem ctx -> A) (e: OExpr ctx A) : Prop :=
+  quotesTo : forall c, f c =o= exprSemantics e @o@ c.
+
+(* Logically the same as QuotesTo, but we never build lambdas in this one, i.e.,
+this only builds "atomic" OExprs *)
+Class QuotesToAtomic {ctx A} {RA:OTRelation A}
+      (f: CtxElem ctx -> A) (e: OExpr ctx A) : Prop :=
+  quotesToAtomic : forall c, f c =o= exprSemantics e @o@ c.
+
+(* Quote any term of functional type to a lambda *)
+Instance QuotesTo_Lam {ctx A B} `{OType A} `{OType B} `{ValidCtx ctx}
+      (f: CtxElem ctx -> A -o> B) e
+      (q: QuotesTo (fun c => f (celem_rest _ _ c) @o@ (celem_head _ _ c)) e) :
+  QuotesTo f (Lam e) | 1.
+Proof.
+  intros c; split; intros a1 a2 Ra; simpl.
+  - rewrite <- (q (c, a2)). rewrite Ra. reflexivity.
+  - rewrite <- (q (c, a1)). rewrite <- Ra. reflexivity.
+Qed.
+
+(* Quote any non-function term as an atomic OExpr *)
+Instance QuotesTo_Atomic {ctx A} {RA:OTRelation A} (f: CtxElem ctx -> A) e
+         (q: QuotesToAtomic f e) :
+  QuotesTo f e | 2 := q.
+
+(*
+Ltac solve_QuotesTo :=
+  first [ apply QuotesTo_Lam_ofun | apply QuotesTo_Lam | apply QuotesTo_Atomic ].
+
+Hint Extern 1 (QuotesTo _ _) => solve_QuotesTo : typeclass_instances.
+ *)
+
+(* Quote any use of celem_head as a var *)
 Instance QuotesTo_Var {ctx1 ctx2 A} {RA:OTRelation A} {valid:ValidCtx ctx1}
          (f: CtxElem ctx1 -> CtxElem (CtxCons A ctx2)) v
          (q: QuotesToVar f OVar_0 v) :
-  QuotesTo (fun c => celem_head ctx2 A (f c)) (Var v) | 1.
+  QuotesToAtomic (fun c => celem_head ctx2 A (f c)) (Var v) | 1.
 Proof.
   assert (OType A) as OA; [ apply (OType_OVar_type _ _ v) | ].
   intro. simpl. rewrite <- (q c). reflexivity.
 Qed.
 
-Instance QuotesTo_Embed {ctx A} `{OType A} {valid:ValidCtx ctx} (a:A) :
-  QuotesTo (fun _ => a) (Embed a) | 2.
-Proof.
-  intro. reflexivity.
-Qed.
-
+(* Quote applications as OExpr applications, where the function must still be
+atomic but the argument need not  be *)
 Instance QuotesTo_App {ctx A B} `{OType A} `{OType B}
          (f1: CtxElem ctx -> A -o> B) (f2: CtxElem ctx -> A) e1 e2
-         (q1: QuotesTo f1 e1) (q2: QuotesTo f2 e2) :
-  QuotesTo (fun c => (f1 c) @o@ (f2 c)) (App e1 e2) | 1.
+         (q1: QuotesToAtomic f1 e1) (q2: QuotesTo f2 e2) :
+  QuotesToAtomic (fun c => (f1 c) @o@ (f2 c)) (App e1 e2) | 1.
 Proof.
   intro c. simpl. rewrite <- (q1 c). rewrite <- (q2 c). reflexivity.
 Qed.
 
+(* Quote ofuns in atomic position as lambdas *)
+Instance QuotesTo_ofun {ctx A B} `{OType A} `{OType B} `{ValidCtx ctx}
+         (f: CtxElem ctx -> A -> B) prp e
+         (q: QuotesTo (fun c => f (celem_rest _ _ c) (celem_head _ _ c)) e) :
+  QuotesToAtomic (fun c => ofun (f c) (prp:=prp c)) (Lam e) | 1.
+Proof.
+  apply QuotesTo_Lam. assumption.
+Qed.
+
+(* Quote objects that are independent of the context as embedded objects, but at
+low priority *)
+Instance QuotesTo_Embed {ctx A} `{OType A} {valid:ValidCtx ctx} (a:A) :
+  QuotesToAtomic (fun _ => a) (Embed a) | 2.
+Proof.
+  intro. reflexivity.
+Qed.
+
+(* Quote pairs as applications of opair *)
+Instance QuotesTo_pair {ctx A B} `{OType A} `{OType B} `{ValidCtx ctx}
+         (a: CtxElem ctx -> A) (b: CtxElem ctx -> B) e1 e2
+         (q1: QuotesTo a e1) (q2: QuotesTo b e2) :
+  QuotesToAtomic (fun c => (a c, b c)) (App (App (Embed opair) e1) e2) | 1.
+Proof.
+  intro c. simpl. rewrite <- (q1 c). rewrite <- (q2 c). reflexivity.
+Qed.
+
+(* Quote applications of fst as applications of ofst *)
+Instance QuotesTo_fst {ctx A B} `{OType A} `{OType B} `{ValidCtx ctx}
+         (f: CtxElem ctx -> A * B) e (q: QuotesTo f e) :
+  QuotesToAtomic (fun c => fst (f c)) (App (Embed ofst) e) | 1.
+Proof.
+  intro c. simpl. rewrite <- (q c). reflexivity.
+Qed.
+
+(* Quote applications of fst as applications of ofst *)
+Instance QuotesTo_snd {ctx A B} `{OType A} `{OType B} `{ValidCtx ctx}
+         (f: CtxElem ctx -> A * B) e (q: QuotesTo f e) :
+  QuotesToAtomic (fun c => snd (f c)) (App (Embed osnd) e) | 1.
+Proof.
+  intro c. simpl. rewrite <- (q c). reflexivity.
+Qed.
+
+
+(*
 Instance QuotesTo_Lam1 {ctx A B} `{OType A} `{OType B} `{ValidCtx ctx}
          (f: CtxElem ctx -> A -> B) prp e
          (q: QuotesTo (fun c => f (celem_rest _ _ c) (celem_head _ _ c)) e) :
@@ -469,6 +541,7 @@ Instance QuotesTo_Lam2 {ctx A B} `{OType A} `{OType B} `{ValidCtx ctx}
 Proof.
   unfold ofun. apply QuotesTo_Lam1. assumption.
 Qed.
+*)
 
 
 Lemma oquote_R {A} {RA:OTRelation A} {f1 f2 : A} {e1 e2: OExpr CtxNil A}
@@ -502,7 +575,7 @@ Ltac oexpr_simpl :=
 (* Translate a problem about proper functions into one about OExprs by calling
 oquote, simplify both sides using the osimpl rewrite database, and then try to
 use reflexivity, going back to proper functions if that does not work *)
-Ltac osimpl := oquote; try oexpr_simpl; try reflexivity; simpl.
+Ltac osimpl := simpl; oquote; try oexpr_simpl; try reflexivity; simpl.
 
 Lemma product_proj1_test A `{OType A} B `{OType B} (a:A) (b:B) :
   ofst @o@ (a ,o, b) =o= a.
@@ -618,7 +691,7 @@ Qed.
 
 (* A simple test case with all 4 OExpr constructs, that does beta-reduction *)
 Lemma beta_test A `{OType A} a : (ofun (A:=A) (fun x => x)) @o@ a =o= a.
-  osimpl.
+  simpl. osimpl.
 Qed.
 
 (* A test case with the first projection of a product *)
@@ -633,13 +706,24 @@ Lemma beta_product_test A `{OType A} B `{OType B} (p:A*B) :
   =o= p.
   (* osimpl *)
   (* NOTE: we write this out to see how long each step takes... *)
-  oquote. oexpr_simpl. reflexivity.
+  simpl. oquote. oexpr_simpl. reflexivity.
 Qed.
 
 Lemma double_lambda_test A `{OType A} :
   (ofun (fun (f : A -o> A) => ofun (fun x => f @o@ x))) @o@ (ofun (fun y => y))
   =o= ofun (fun x => x).
   osimpl.
+Qed.
+
+(* A test case with with beta-reduction and projections for products *)
+Lemma beta_product_test2 A `{OType A} B `{OType B} :
+  ofun (fun a =>
+          ofun (fun b =>
+                  ofun (fun p => (osnd @o@ p ,o, ofst @o@ p)) @o@ (b ,o, a)))
+  =o= opair.
+  (* osimpl *)
+  (* NOTE: we write this out to see how long each step takes... *)
+  simpl. oquote. oexpr_simpl. reflexivity.
 Qed.
 
 End OQuoteTest.
