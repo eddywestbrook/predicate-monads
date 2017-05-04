@@ -3,6 +3,7 @@
 ./theories/Reflection/OrderedType.v
 ./theories/Reflection/OrderedContext.v
 ./theories/Reflection/OExpr.v
+./theories/Reflection/Monad.v
 
 # ./theories/Unordered/SemiPreOrder.v
 # ./theories/Unordered/Monad.v
