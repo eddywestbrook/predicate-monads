@@ -404,56 +404,86 @@ Definition celem_rest ctx A {RA} (celem: CtxElem (@CtxCons A RA ctx)) :
   let (rest,_) := celem in rest.
 
 (* Dummy typeclass used to guide the quoting mechanism, below *)
-Class QuotesToVar {ctx1 ctx2 ctx3 A} {RA:OTRelation A}
-      (f: CtxElem ctx1 -> CtxElem ctx2) (v: OVar A ctx3) : Prop :=
-  quotesToVar : True.
+Class QuotesToVar {ctx1 ctx2 A} {RA:OTRelation A}
+      (f: CtxElem ctx1 -> CtxElem ctx2) (vin: OVar A ctx2)
+      (vout: OVar A ctx1) : Prop :=
+  quotesToVar :
+    forall c, varSemantics vin @o@ (f c) = varSemantics vout @o@ c.
 
 (* Dummy typeclass used to guide the quoting mechanism, below *)
 Class QuotesTo {ctx A} {RA:OTRelation A}
       (f: CtxElem ctx -> A) (e: OExpr ctx A) : Prop :=
-  quotesTo : True.
+  quotesTo : forall c, f c =o= exprSemantics e @o@ c.
 
-Instance QuotesToVar0 {ctx1 ctx3 A} {RA:OTRelation A} :
-  QuotesToVar (ctx1:=ctx1) (ctx3:=CtxCons A ctx3) (fun c => c) OVar_0 := I.
+Instance QuotesToVar_Base {ctx A} {RA:OTRelation A} v :
+  QuotesToVar (ctx1:=ctx) (fun c => c) v v.
+Proof.
+  intro; reflexivity.
+Qed.
 
-Instance QuotesToVarS {ctx1 ctx2 ctx3 A B} {RA:OTRelation A} {RB:OTRelation B}
-         (f: CtxElem ctx1 -> CtxElem (CtxCons B ctx2)) (v: OVar A ctx3)
-         (q: QuotesToVar f v) :
-  QuotesToVar (fun c => celem_rest ctx2 B (f c)) (OVar_S v) := I.
+Instance QuotesToVar_Step {ctx1 ctx2 A B} {RA:OTRelation A} {RB:OTRelation B}
+         (f: CtxElem ctx1 -> CtxElem (CtxCons B ctx2)) vin vout
+         (q: QuotesToVar f (OVar_S vin) vout) :
+  QuotesToVar (fun c => celem_rest _ _ (f c)) vin vout.
+Proof.
+  intro. apply q.
+Qed.
 
 Instance QuotesTo_Var {ctx1 ctx2 A} {RA:OTRelation A} {valid:ValidCtx ctx1}
          (f: CtxElem ctx1 -> CtxElem (CtxCons A ctx2)) v
-         (q: QuotesToVar f v) :
-  QuotesTo (fun c => celem_head ctx2 A (f c)) (Var v) | 1 := I.
+         (q: QuotesToVar f OVar_0 v) :
+  QuotesTo (fun c => celem_head ctx2 A (f c)) (Var v) | 1.
+Proof.
+  assert (OType A) as OA; [ apply (OType_OVar_type _ _ v) | ].
+  intro. simpl. rewrite <- (q c). reflexivity.
+Qed.
 
 Instance QuotesTo_Embed {ctx A} `{OType A} {valid:ValidCtx ctx} (a:A) :
-  QuotesTo (fun _ => a) (Embed a) | 2 := I.
+  QuotesTo (fun _ => a) (Embed a) | 2.
+Proof.
+  intro. reflexivity.
+Qed.
 
 Instance QuotesTo_App {ctx A B} `{OType A} `{OType B}
          (f1: CtxElem ctx -> A -o> B) (f2: CtxElem ctx -> A) e1 e2
          (q1: QuotesTo f1 e1) (q2: QuotesTo f2 e2) :
-  QuotesTo (fun c => (f1 c) @o@ (f2 c)) (App e1 e2) | 1 := I.
+  QuotesTo (fun c => (f1 c) @o@ (f2 c)) (App e1 e2) | 1.
+Proof.
+  intro c. simpl. rewrite <- (q1 c). rewrite <- (q2 c). reflexivity.
+Qed.
 
-Instance QuotesTo_Lam {ctx A B} `{OType A} `{OType B} `{ValidCtx ctx}
+Instance QuotesTo_Lam1 {ctx A B} `{OType A} `{OType B} `{ValidCtx ctx}
          (f: CtxElem ctx -> A -> B) prp e
          (q: QuotesTo (fun c => f (celem_rest _ _ c) (celem_head _ _ c)) e) :
-  QuotesTo (fun c => ofun (f c) (prp:=prp c)) (Lam e) | 1 := I.
+  QuotesTo (fun c => {| pfun_app := f c; pfun_Proper := prp c |}) (Lam e) | 1.
+Proof.
+  intros c; split; intros a1 a2 Ra; simpl.
+  - rewrite <- (q (c, a2)). rewrite Ra. reflexivity.
+  - rewrite <- (q (c, a1)). rewrite <- Ra. reflexivity.
+Qed.
+
+Instance QuotesTo_Lam2 {ctx A B} `{OType A} `{OType B} `{ValidCtx ctx}
+         (f: CtxElem ctx -> A -> B) prp e
+         (q: QuotesTo (fun c => f (celem_rest _ _ c) (celem_head _ _ c)) e) :
+  QuotesTo (fun c => ofun (f c) (prp:=prp c)) (Lam e)| 1.
+Proof.
+  unfold ofun. apply QuotesTo_Lam1. assumption.
+Qed.
+
 
 Lemma oquote_R {A} {RA:OTRelation A} {f1 f2 : A} {e1 e2: OExpr CtxNil A}
       {q1: QuotesTo (fun _ => f1) e1} {q2: QuotesTo (fun _ => f2) e2} :
-  f1 = exprSemantics e1 @o@ tt -> f2 = exprSemantics e2 @o@ tt ->
   e1 <e= e2 -> f1 <o= f2.
 Proof.
-  intros eq1 eq2 R12. rewrite eq1. rewrite eq2. apply R12. reflexivity.
+  intro R12. assert (OType A) as OT; [ eauto with typeclass_instances | ].
+  rewrite (q1 tt). rewrite (q2 tt). apply R12. reflexivity.
 Defined.
 
 Lemma oquote_eq {A} {RA:OTRelation A} {f1 f2 : A} {e1 e2: OExpr CtxNil A}
       {q1: QuotesTo (fun _ => f1) e1} {q2: QuotesTo (fun _ => f2) e2} :
-  f1 = exprSemantics e1 @o@ tt -> f2 = exprSemantics e2 @o@ tt ->
   e1 =e= e2 -> f1 =o= f2.
 Proof.
-  intros eq1 eq2 R12. rewrite eq1. rewrite eq2.
-  destruct R12 as [ R12l R12r ]; split; [ apply R12l | apply R12r ]; reflexivity.
+  intros eq12; destruct eq12; split; apply oquote_R; assumption.
 Defined.
 
 (* Translate a problem about proper functions into one about OExprs, by
@@ -461,9 +491,9 @@ Defined.
 Ltac oquote :=
   lazymatch goal with
   | |- ?e1 =o= ?e2 =>
-    apply oquote_eq; [ apply eq_refl | apply eq_refl | ]
+    apply oquote_eq
   | |- ?e1 <o= ?e2 =>
-    apply oquote_R; [ apply eq_refl | apply eq_refl | ]
+    apply oquote_R
   end.
 
 Ltac oexpr_simpl :=
@@ -601,7 +631,15 @@ Qed.
 Lemma beta_product_test A `{OType A} B `{OType B} (p:A*B) :
   ofun (fun p => (osnd @o@ p ,o, ofst @o@ p)) @o@ (osnd @o@ p ,o, ofst @o@ p)
   =o= p.
+  (* osimpl *)
+  (* NOTE: we write this out to see how long each step takes... *)
   oquote. oexpr_simpl. reflexivity.
+Qed.
+
+Lemma double_lambda_test A `{OType A} :
+  (ofun (fun (f : A -o> A) => ofun (fun x => f @o@ x))) @o@ (ofun (fun y => y))
+  =o= ofun (fun x => x).
+  osimpl.
 Qed.
 
 End OQuoteTest.
