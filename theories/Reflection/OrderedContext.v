@@ -291,22 +291,38 @@ Fixpoint ctxInsert w W {RW:OTRelation W} ctx : Ctx :=
   end.
 Arguments ctxInsert !w W {RW} !ctx.
 
+(* FIXME: move these somewhere sensible! *)
+Ltac destruct_ands :=
+  repeat (lazymatch goal with | H:_ /\ _ |- _ => destruct H | _ => idtac end).
+Ltac split_ands :=
+  repeat (lazymatch goal with | |- _ /\ _ => split | _ => idtac end).
+
 (* A context is valid iff its weakening with a valid OType is *)
-Lemma ValidCtx_ctxInsert_iff n W `{OType W} ctx :
-  ValidCtx ctx <-> ValidCtx (ctxInsert n W ctx).
+Lemma ValidCtx_ctxInsert_iff n W `{OTRelation W} ctx :
+  (OType W /\ ValidCtx ctx) <-> ValidCtx (ctxInsert n W ctx).
 Proof.
   split; revert ctx; induction n; intro ctx; destruct ctx; simpl; intro valid;
-    repeat (lazymatch goal with | |- _ /\ _ => split | _ => idtac end);
-    repeat (lazymatch goal with | H:_ /\ _ |- _ => destruct H | _ => idtac end);
-    try typeclasses eauto; apply I.
+    destruct_ands; split_ands;
+    try typeclasses eauto; try apply I.
+  - apply IHn; split; auto.
+  - apply IHn; split; assumption.
+  - apply (proj1 (IHn CtxNil H1)).
+  - apply (proj1 (IHn _ H2)).
+  - apply (proj2 (IHn _ H2)).
 Qed.
 
 (* Weakening preserves validity *)
 Instance ValidCtx_ctxInsert w W `{OType W} ctx {valid:ValidCtx ctx} :
   ValidCtx (ctxInsert w W ctx).
 Proof.
-  apply ValidCtx_ctxInsert_iff; assumption.
+  apply ValidCtx_ctxInsert_iff; split; assumption.
 Defined.
+
+Lemma OType_ctxInsert n W `{OTRelation W} ctx `{ValidCtx (ctxInsert n W ctx)} :
+  OType W.
+Proof.
+  exact (proj1 ((proj2 (ValidCtx_ctxInsert_iff n W ctx)) H0)).
+Qed.
 
 (* ctxInsert commutes with ctxTail by incrementing the weakening position *)
 Lemma ctxInsert_ctxTail n A {RA:OTRelation A} ctx :
