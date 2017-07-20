@@ -441,17 +441,27 @@ Class QuotesToAtomic {ctx A} {RA:OTRelation A}
 Instance QuotesTo_Lam {ctx A B} `{OType A} `{OType B} `{ValidCtx ctx}
       (f: CtxElem ctx -> A -o> B) e
       (q: QuotesTo (fun c => f (celem_rest _ _ c) @o@ (celem_head _ _ c)) e) :
-  QuotesTo f (Lam e) | 1.
+  QuotesTo f (Lam e) | 2.
 Proof.
   intros c; split; intros a1 a2 Ra; simpl.
   - rewrite <- (q (c, a2)). rewrite Ra. reflexivity.
   - rewrite <- (q (c, a1)). rewrite <- Ra. reflexivity.
 Qed.
 
+(* Special case: quote ofuns as lambdas, destructuring the ofun *)
+Instance QuotesTo_Lam_ofun {ctx A B} `{OType A} `{OType B} `{ValidCtx ctx}
+         (f: CtxElem ctx -> A -> B) prp e
+         (q: QuotesTo (fun c => f (celem_rest _ _ c) (celem_head _ _ c)) e) :
+  QuotesTo (fun c => ofun (f c) (prp:=prp c)) (Lam e) | 1.
+Proof.
+  apply QuotesTo_Lam. assumption.
+Qed.
+
+
 (* Quote any non-function term as an atomic OExpr *)
 Instance QuotesTo_Atomic {ctx A} {RA:OTRelation A} (f: CtxElem ctx -> A) e
          (q: QuotesToAtomic f e) :
-  QuotesTo f e | 2 := q.
+  QuotesTo f e | 3 := q.
 
 (*
 Ltac solve_QuotesTo :=
@@ -468,6 +478,13 @@ Instance QuotesTo_Var {ctx1 ctx2 A} {RA:OTRelation A} {valid:ValidCtx ctx1}
 Proof.
   assert (OType A) as OA; [ apply (OType_OVar_type _ _ v) | ].
   intro. simpl. rewrite <- (q c). reflexivity.
+Qed.
+
+(* Special case for an eta-reduced celem_head application *)
+Instance QuotesTo_Var0 {ctx A} `{OType A} {valid:ValidCtx ctx} :
+  QuotesToAtomic (celem_head ctx A) (Var OVar_0) | 1.
+Proof.
+  intro. reflexivity.
 Qed.
 
 (* Quote applications as OExpr applications, where the function must still be
