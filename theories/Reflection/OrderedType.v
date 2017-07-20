@@ -543,9 +543,11 @@ Lemma compose_pfun_curry A B C D `{OType A} `{OType B} `{OType C} `{OType D}
   split; intros a1 a2 Ra c1 c2 Rc; simpl; rewrite Ra; rewrite Rc; reflexivity.
 Qed.
 
-(* Applying a const is just composition *)
+(* Applying a const is just composition. Note that we add the extra OType
+constraint to quantify over all possible proofs that B -o> C is an OType, so
+this rule applies independently of this aOType proof. *)
 Lemma pfun_apply_const A B C `{OType A} `{OType B} `{OType C}
-      (f: B -o> C) (g: A -o> B) :
+      {OBC: OType (B -o> C)} (f: B -o> C) (g: A -o> B) :
   ot_equiv (pfun_apply (A:=A) (const_pfun f) g) (compose_pfun g f).
   split; intros a1 a2 Ra; simpl; rewrite Ra; reflexivity.
 Qed.
