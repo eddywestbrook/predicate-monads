@@ -70,12 +70,31 @@ Instance StateT_MonadOps St `{OType St} M `{MonadOps M} : MonadOps (StateT St M)
                               f @o@ (osnd @o@ s_x) @o@ (ofst @o@ s_x))))
   }.
 
-Arguments opair {A B} {_ _ _ _} : simpl never.
+Typeclasses Opaque celem_head celem_rest.
 
 (* The Monad instance for StateT *)
 Instance StateT_Monad St `{OType St} M `{Monad M} : Monad (StateT St M).
 Proof.
   constructor; intros.
-  - unfold bindM, returnM, StateT_MonadOps, StateT. osimpl. assumption.
   - unfold bindM, returnM, StateT_MonadOps, StateT.
-    simpl. oquote. oexpr_simpl.
+    simpl. oquote. oexpr_simpl. simpl. try reflexivity. assumption.
+  - unfold bindM, returnM, StateT_MonadOps, StateT.
+    simpl. oquote. oexpr_simpl. try reflexivity. assumption.
+  - unfold bindM, returnM, StateT_MonadOps, StateT.
+    simpl.
+    oquote. oexpr_simpl. unfold weakenOExpr, weakenOVar.
+    repeat first [ reflexivity | apply Proper_Lam_eq
+                   | apply Proper_App_eq | simpl; reflexivity ].
+    simpl.
+
+reflexivity.
+apply (Proper_Lam_eq _ _).
+
+    simpl. reflexivity.
+Set Printing All. idtac. simpl.
+    reflexivity.
+    apply Proper_Lam_eq. apply Proper_App_eq; try reflexivity.
+
+reflexivity.
+
+try reflexivity. assumption.

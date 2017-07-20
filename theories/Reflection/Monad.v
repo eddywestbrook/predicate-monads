@@ -48,10 +48,15 @@ Qed.
 (* Bind-return law for OExprs *)
 Lemma monad_bind_return_OExpr
       {ctx} `{ValidCtx ctx} `{Monad} {A} `{OType A} (m: OExpr ctx (M A _ _)) :
-  App (App (Embed bindM) m) (Embed returnM) =e= m.
+  App (App (Embed bindM) m) (Lam (App (Embed returnM) (Var OVar_0))) =e= m.
 Proof.
-  simpl; split; intros c1 c2 Rc; simpl;
-    rewrite monad_bind_return; rewrite Rc; reflexivity.
+  simpl; split; intros c1 c2 Rc; simpl.
+  - etransitivity; [ apply pfun_Proper
+                   | rewrite monad_bind_return; rewrite Rc; reflexivity ].
+    intros a1 a2 Ra. simpl. apply pfun_Proper. assumption.
+  - etransitivity; [ | apply pfun_Proper ];
+      [ rewrite monad_bind_return; apply pfun_Proper; assumption | ].
+    intros a1 a2 Ra. simpl. apply pfun_Proper. assumption.
 Qed.
 
 (* Associativity law for OExprs *)
