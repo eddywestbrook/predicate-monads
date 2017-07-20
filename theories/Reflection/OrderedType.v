@@ -316,6 +316,7 @@ Qed.
 Program Definition const_pfun {A B} `{OTRelation A} `{OType B} b : A -o> B :=
   {| pfun_app := fun _ => b; pfun_Proper := fun _ _ _ => ltac:(reflexivity) |}.
 
+(* FIXME: this proper-ness proof should include irrelevance of the OType arg *)
 Instance Proper_const_pfun {A B} `{OTRelation A} `{OType B} :
   Proper (ot_R ==> ot_R) (const_pfun (A:=A) (B:=B)).
 Proof.
