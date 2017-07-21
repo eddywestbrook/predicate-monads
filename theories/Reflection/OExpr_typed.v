@@ -362,6 +362,14 @@ Proof.
   apply weakenOExpr_equiValid. assumption.
 Qed.
 
+(* Commonly-used special case of ValidOExpr_weakenOExpr *)
+Instance ValidOExpr_weakenOExpr0 W {RW:OTRelation W}
+         {ctx A RA} (e:@OExpr ctx A RA) {validE:ValidOExpr e} :
+  ValidOExpr (ctx:=CtxCons W ctx) (@weakenOExpr 0 W RW ctx A RA e).
+Proof.
+  apply (ValidOExpr_weakenOExpr 0 W (ctx:=ctx)). assumption.
+Qed.
+
 (* Correctness of weakenOExpr: it is equivalent to weaken_pfun *)
 Lemma weakenOExpr_correct w W {RW} {ctx A RA} (e:OExpr ctx A)
       {validC:ValidCtx ctx} {validE:ValidOExpr e}
@@ -494,7 +502,6 @@ Instance ValidOExpr_substOVar n ctx A RA (v:@OVar A RA ctx) {OA:OType A}
 Proof.
   revert ctx v s validS; induction n; destruct v; intros; simpl;
     eauto with typeclass_instances.
-  apply (ValidOExpr_weakenOExpr 0 B). apply IHn. assumption.
 Qed.
 
 (* substOVar is Proper in its s argument *)
