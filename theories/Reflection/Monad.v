@@ -1,6 +1,6 @@
 Require Export PredMonad.Reflection.OrderedType.
 Require Export PredMonad.Reflection.OrderedContext.
-Require Export PredMonad.Reflection.OExpr.
+Require Export PredMonad.Reflection.OExpr_typed.
 
 
 (***
@@ -24,10 +24,10 @@ Class Monad M `{MonadOps M} : Prop :=
 
     monad_assoc :
       forall A B C `{OType A} `{OType B} `{OType C}
-             m (f: A -o> M B _ _) (g: B -o> M C _ _),
+             m (f: A -o> M B _ _) (g: B -o> M C _ _) prp,
         bindM @o@ (bindM @o@ m @o@ f) @o@ g
         =o=
-        bindM @o@ m @o@ (ofun (fun x => bindM @o@ (f @o@ x) @o@ g));
+        bindM @o@ m @o@ (ofun (fun x => bindM @o@ (f @o@ x) @o@ g) (prp:=prp));
   }.
 
 (* Helpful bind notation *)
@@ -41,27 +41,36 @@ Lemma monad_return_bind_OExpr
   App (App (Embed bindM) (App (Embed returnM) x)) f
   =e= (App f x).
 Proof.
-  simpl; split; intros c1 c2 Rc; simpl;
-    rewrite monad_return_bind; rewrite Rc; reflexivity.
+  split.
+  - split; simpl; intro; destruct_ands; split_ands; typeclasses eauto.
+  - intros; split; intros c1 c2 Rc; simpl;
+      rewrite monad_return_bind; rewrite Rc;
+        f_equiv; f_equiv; apply exprSemantics_irrel.
 Qed.
 
 (* Bind-return law for OExprs *)
 Lemma monad_bind_return_OExpr
-      {ctx} `{ValidCtx ctx} `{Monad} {A} `{OType A} (m: OExpr ctx (M A _ _)) :
+      {ctx} `{Monad} {A} `{OType A} (m: OExpr ctx (M A _ _)) :
   App (App (Embed bindM) m) (Lam (App (Embed returnM) (Var OVar_0))) =e= m.
 Proof.
-  simpl; split; intros c1 c2 Rc; simpl.
-  - etransitivity; [ apply pfun_Proper
-                   | rewrite monad_bind_return; rewrite Rc; reflexivity ].
-    intros a1 a2 Ra. simpl. apply pfun_Proper. assumption.
-  - etransitivity; [ | apply pfun_Proper ];
-      [ rewrite monad_bind_return; apply pfun_Proper; assumption | ].
-    intros a1 a2 Ra. simpl. apply pfun_Proper. assumption.
+  split.
+  - split; simpl; intro; destruct_ands; split_ands; typeclasses eauto.
+  - intros; split; intros c1 c2 Rc; simpl.
+    + etransitivity; [ apply pfun_Proper
+                     | rewrite monad_bind_return; rewrite Rc;
+                       f_equiv; apply exprSemantics_irrel ].
+      intros a1 a2 Ra. simpl. apply pfun_Proper. assumption.
+    + etransitivity; [ rewrite <- monad_bind_return; rewrite Rc;
+                       f_equiv; apply exprSemantics_irrel
+                     | ].
+      f_equiv; [ f_equiv; f_equiv; apply exprSemantics_irrel | ].
+      intros a1 a2 Ra. simpl. apply pfun_Proper. assumption.
 Qed.
+
 
 (* Associativity law for OExprs *)
 Lemma monad_assoc_OExpr
-      {ctx} `{ValidCtx ctx} `{Monad} {A B C} `{OType A} `{OType B} `{OType C}
+      {ctx} `{Monad} {A B C} `{OType A} `{OType B} `{OType C}
       m (f: OExpr ctx (A -o> M B _ _)) (g: OExpr ctx (B -o> M C _ _)) :
   App (App (Embed bindM) (App (App (Embed bindM) m) f)) g =e=
   App (App (Embed bindM) m)
@@ -69,12 +78,21 @@ Lemma monad_assoc_OExpr
                      (App (weakenOExpr 0 A f) (Var OVar_0)))
                 (weakenOExpr 0 A g))).
 Proof.
-  simpl; split; intros c1 c2 Rc; simpl; rewrite monad_assoc; f_equiv;
-    try (rewrite Rc; reflexivity);
-    intros a1 a2 Ra; simpl; repeat f_equiv; try assumption; rewrite Rc;
-      try rewrite (weakenOExpr_correct 0 A f);
-      try rewrite (weakenOExpr_correct 0 A g);
-      intros x1 x2 Rx; simpl; rewrite Rx; reflexivity.
+  split.
+  - split; simpl; intro; destruct_ands; split_ands; try typeclasses eauto.
+    + rewrite (weakenOExpr_equiValid 0). apply H14.
+    + rewrite (weakenOExpr_equiValid 0). apply H11.
+  - intros; split; intros c1 c2 Rc; simpl.
+    + etransitivity; [ apply monad_assoc | ]. f_equiv.
+      -- f_equiv; f_equiv; [ apply exprSemantics_irrel | assumption ].
+      -- intros a1 a2 Ra. simpl.
+         repeat f_equiv; try assumption; rewrite (weakenOExpr_correct 0); simpl;
+           f_equiv; assumption.
+    + etransitivity; [ | apply monad_assoc ]. f_equiv.
+      -- f_equiv; f_equiv; [ apply exprSemantics_irrel | assumption ].
+      -- intros a1 a2 Ra. simpl.
+         repeat f_equiv; try assumption; rewrite (weakenOExpr_correct 0); simpl;
+           f_equiv; assumption.
 Qed.
 
 (* Add the monad laws to the OT rewrite set *)
