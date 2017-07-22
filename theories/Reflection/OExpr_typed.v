@@ -699,8 +699,7 @@ Qed.
 Class QuotesTo {ctx A} {RA:OTRelation A}
       (f: CtxElem ctx -> A) (e: OExpr ctx A) : Prop :=
   {
-    quotesValidCtx :> ValidCtx ctx;
-    quotesValidOExpr :> ValidOExpr e;
+    quotesToValid : ValidOExpr e;
     quotesTo : forall vc ve c,
         f c =o= exprSemantics (validC:=vc) e (validE:=ve) @o@ c
   }.
@@ -718,10 +717,9 @@ Instance QuotesTo_Lam {ctx A B} `{OType A} `{OTRelation B}
   QuotesTo f (Lam e) | 2.
 Proof.
   split.
-  - apply q.
-  - split; typeclasses eauto.
+  - apply ValidOExpr_Lam; try assumption. apply quotesToValid.
   - assert (OType B);
-      [ apply (OType_ValidOExpr (quotesValidOExpr (QuotesTo:=q))) | ].
+      [ apply (OType_ValidOExpr (quotesToValid (QuotesTo:=q))) | ].
     intros; split; intro; intros; simpl;
       rewrite <- H2; rewrite <- (quotesTo (QuotesTo:=q)); reflexivity.
 Qed.
@@ -775,17 +773,15 @@ Instance QuotesTo_App {ctx A B} `{OTRelation A} `{OType B}
   QuotesToAtomic (fun c => (f1 c) @o@ (f2 c)) (App e1 e2) | 1.
 Proof.
   split.
-  - apply q1.
-  - simpl; split_ands; try typeclasses eauto.
-    apply (OType_ValidOExpr (e:=e2)).
-    apply (quotesValidOExpr (QuotesTo:=q2)).
-  - intros. simpl. rewrite <- (quotesTo (QuotesTo:=q1)).
-    rewrite <- (quotesTo (QuotesTo:=q2)).
-    reflexivity.
+  - simpl; split_ands; [ | assumption | apply q1 | apply q2 ].
+    apply (OType_ValidOExpr (e:=e2)). apply q2.
+  - intros. simpl. f_equiv.
+    + apply (quotesTo (QuotesTo:=q1)).
+    + apply (quotesTo (QuotesTo:=q2)).
 Qed.
 
 (* Quote ofuns in atomic position as lambdas *)
-Instance QuotesTo_ofun {ctx A B} `{OType A} `{OTRelation B}
+Instance QuotesToAtomic_ofun {ctx A B} `{OType A} `{OTRelation B}
          (f: CtxElem ctx -> A -> B) prp e
          (q: QuotesTo (fun c => f (celem_rest _ _ c) (celem_head _ _ c)) e) :
   QuotesToAtomic (fun c => ofun (f c) (prp:=prp c)) (Lam e) | 1.
@@ -798,7 +794,7 @@ low priority *)
 Instance QuotesTo_Embed {ctx A} `{OType A} {valid:ValidCtx ctx} (a:A) :
   QuotesToAtomic (ctx:=ctx) (fun _ => a) (Embed a) | 2.
 Proof.
-  split; try assumption.
+  split; [ assumption | ].
   intros. reflexivity.
 Qed.
 
@@ -808,11 +804,9 @@ Instance QuotesTo_pair {ctx A B} `{OType A} `{OType B}
          (q1: QuotesTo a e1) (q2: QuotesTo b e2) :
   QuotesToAtomic (fun c => (a c, b c)) (App (App (Embed opair) e1) e2) | 1.
 Proof.
-  split.
-  - apply q1.
-  - simpl; split_ands; typeclasses eauto.
-  - intros. simpl. rewrite <- (quotesTo (QuotesTo:=q1)).
-    rewrite <- (quotesTo (QuotesTo:=q2)). reflexivity.
+  destruct q1. destruct q2.
+  split; [ simpl; split_ands; typeclasses eauto | ].
+  intros. simpl. rewrite <- quotesTo0. rewrite <- quotesTo1. reflexivity.
 Qed.
 
 (* Quote applications of fst as applications of ofst *)
@@ -820,10 +814,9 @@ Instance QuotesTo_fst {ctx A B} `{OType A} `{OType B}
          (f: CtxElem ctx -> A * B) e (q: QuotesTo f e) :
   QuotesToAtomic (fun c => fst (f c)) (App (Embed ofst) e) | 1.
 Proof.
-  split.
-  - apply q.
-  - simpl; split_ands; typeclasses eauto.
-  - intros. simpl. rewrite <- (quotesTo (QuotesTo:=q)). reflexivity.
+  destruct q.
+  split; [ simpl; split_ands; typeclasses eauto | ].
+  intros. simpl. rewrite <- quotesTo0. reflexivity.
 Qed.
 
 (* Quote applications of fst as applications of ofst *)
@@ -831,10 +824,9 @@ Instance QuotesTo_snd {ctx A B} `{OType A} `{OType B}
          (f: CtxElem ctx -> A * B) e (q: QuotesTo f e) :
   QuotesToAtomic (fun c => snd (f c)) (App (Embed osnd) e) | 1.
 Proof.
-  split.
-  - apply q.
-  - simpl; split_ands; typeclasses eauto.
-  - intros. simpl. rewrite <- (quotesTo (QuotesTo:=q)). reflexivity.
+  destruct q.
+  split; [ simpl; split_ands; typeclasses eauto | ].
+  intros. simpl. rewrite <- quotesTo0. reflexivity.
 Qed.
 
 
@@ -864,7 +856,8 @@ Lemma oquote_R {A} {RA:OTRelation A} {f1 f2 : A} {e1 e2: OExpr CtxNil A}
   e1 <e= e2 -> f1 <o= f2.
 Proof.
   intro R12.
-  assert (OType A) as OT; [ eapply OType_ValidOExpr; apply q1 | ].
+  assert (ValidOExpr e1); [ apply q1 | ].
+  assert (ValidOExpr e2); [ apply q2 | ].
   transitivity (exprSemantics e1 @o@ tt);
     [ | transitivity (exprSemantics e2 @o@ tt) ].
   - apply (quotesTo (QuotesTo:=q1)).
@@ -899,9 +892,135 @@ use reflexivity, going back to proper functions if that does not work *)
 Ltac osimpl :=
   simpl; oquote; try oexpr_simpl; try reflexivity; try typeclasses eauto; simpl.
 
-Lemma product_proj1_test A `{OType A} B `{OType B} (a:A) (b:B) :
-  ofst @o@ (a ,o, b) =o= a.
-  osimpl.
+
+(***
+ *** Unquoting
+ ***)
+
+(* Class for unquoting OVars to functions *)
+Class UnQuotesToVar {ctx A} {RA:OTRelation A}
+      (v: OVar A ctx) (f: CtxElem ctx -> A) : Prop :=
+  { unQuotesToVarProper : Proper (ot_R ==> ot_R) f;
+    unQuotesToVar : forall c, f c = varSemantics v @o@ c }.
+
+Instance UnQuotesToVar_Base A RA ctx :
+  UnQuotesToVar (@OVar_0 A RA ctx) snd.
+Proof.
+  split.
+  - typeclasses eauto.
+  - intros; reflexivity.
+Qed.
+
+Instance UnQuotesToVar_Step A RA ctx B RB (v:OVar A ctx) f
+         (q: UnQuotesToVar v f) :
+  UnQuotesToVar (@OVar_S A RA ctx B RB v) (fun c => f (fst c)).
+Proof.
+  split.
+  - intros c1 c2 Rc. apply (unQuotesToVarProper (UnQuotesToVar:=q)).
+    f_equiv. assumption.
+  - intros; apply q.
+Qed.
+
+
+(* Class for unquoting OExprs to functions *)
+Class UnQuotesTo {ctx A} {RA:OTRelation A}
+      (e: OExpr ctx A) (f: CtxElem ctx -> A) : Prop :=
+  {
+    unQuotesToValidC : ValidCtx ctx;
+    unQuotesToValidE : ValidOExpr e;
+    unQuotesTo : forall vc ve c,
+        f c =o= exprSemantics (validC:=vc) e (validE:=ve) @o@ c
+  }.
+
+Instance UnQuotesTo_Var ctx `{ValidCtx ctx} A `{OType A} (v:OVar A ctx) f
+         (q: UnQuotesToVar v f) :
+  UnQuotesTo (Var v) f | 1.
+Proof.
+  split; [ assumption | apply H0 | ].
+  intros. rewrite (unQuotesToVar (UnQuotesToVar:=q) c). reflexivity.
+Qed.
+
+Instance UnQuotesTo_Embed ctx `{ValidCtx ctx} A `{OType A} (a:A) :
+  UnQuotesTo (@Embed ctx A _ a) (fun _ => a) | 1.
+Proof.
+  split; try assumption.
+  intros. reflexivity.
+Qed.
+
+Instance UnQuotesTo_App {ctx A B} `{OTRelation A} `{OType B}
+         e1 e2 (f1: CtxElem ctx -> A -o> B) (f2: CtxElem ctx -> A)
+         (q1: UnQuotesTo e1 f1) (q2: UnQuotesTo e2 f2) :
+  UnQuotesTo (App e1 e2) (fun c => (f1 c) @o@ (f2 c)) | 1.
+Proof.
+  split.
+  - apply q1.
+  - simpl; split_ands; [ | assumption | apply q1 | apply q2 ].
+    apply (OType_ValidOExpr (e:=e2)). apply q2.
+  - intros. simpl. f_equiv.
+    + apply (unQuotesTo (UnQuotesTo:=q1)).
+    + apply (unQuotesTo (UnQuotesTo:=q2)).
+Qed.
+
+Lemma Proper_unQuotesTo {ctx A B} `{OTRelation A} `{OTRelation B}
+      {e: OExpr (CtxCons A ctx) B} {f} (q: UnQuotesTo e f) c :
+  Proper (ot_R ==> ot_R) (fun a => f (c, a)).
+Proof.
+  intros a1 a2 Ra.
+  assert (ValidOExpr e); [ apply q | ].
+  destruct (unQuotesToValidC (UnQuotesTo:=q)).
+  etransitivity; [ apply (unQuotesTo (UnQuotesTo:=q)) | ].
+  etransitivity; [ | apply (unQuotesTo (UnQuotesTo:=q)) ].
+  f_equiv. split; [ reflexivity | assumption ].
+Qed.
+
+Instance UnQuotesTo_Lam {ctx A B} `{OTRelation A} `{OTRelation B}
+      (e: OExpr (CtxCons A ctx) B) f (q: UnQuotesTo e f) :
+  UnQuotesTo (Lam e) (fun c =>
+                        ofun (fun a => f (c, a))
+                             (prp:=Proper_unQuotesTo q c)) | 1.
+Proof.
+  destruct (unQuotesToValidC (UnQuotesTo:=q)).
+  split.
+  - assumption.
+  - apply ValidOExpr_Lam; apply q.
+  - assert (OType B);
+      [ apply (OType_ValidOExpr (unQuotesToValidE (UnQuotesTo:=q))) | ].
+    intros; split; intros a1 a2 Ra; simpl.
+    + etransitivity.
+      -- apply (Proper_unQuotesTo q); apply Ra.
+      -- apply (unQuotesTo (UnQuotesTo:=q)).
+    + etransitivity.
+      -- apply (unQuotesTo (UnQuotesTo:=q)).
+      -- apply (Proper_unQuotesTo q); apply Ra.
+Qed.
+
+(* This instance is meant to only apply to Coq-level variables of OExpr type *)
+Instance UnQuotesTo_MetaVar {ctx A} {RA:OTRelation A} `{ValidCtx ctx}
+         (e:OExpr ctx A) {validE:ValidOExpr e} :
+  UnQuotesTo e (fun c => exprSemantics e @o@ c) | 2.
+Proof.
+  split; try assumption.
+  intros. f_equiv. apply exprSemantics_irrel.
+Qed.
+
+Lemma unquote_R {ctx A} {RA:OTRelation A} {e1 e2: OExpr ctx A}
+      {f1 f2 : CtxElem ctx -> A} {q1: UnQuotesTo e1 f1} {q2: UnQuotesTo e2 f2} :
+  (forall c, f1 c <o= f2 c) -> e1 <e= e2.
+Proof.
+  intro R12.
+  split; [ split; intros; try apply q1; apply q2 | ].
+  intros. intros c1 c2 Rc. rewrite Rc.
+  transitivity (f1 c2); [ apply (unQuotesTo (UnQuotesTo:=q1)) | ].
+  transitivity (f2 c2); [ | apply (unQuotesTo (UnQuotesTo:=q2)) ].
+  apply R12.
+Qed.
+
+Lemma unquote_eq {ctx A} {RA:OTRelation A} {e1 e2: OExpr ctx A}
+      {f1 f2 : CtxElem ctx -> A} {q1: UnQuotesTo e1 f1} {q2: UnQuotesTo e2 f2} :
+  (forall c, f1 c =o= f2 c) -> e1 =e= e2.
+Proof.
+  intro R12. apply oexpr_R_oexpr_eq.
+  split; apply unquote_R; apply R12.
 Qed.
 
 

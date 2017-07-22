@@ -19,8 +19,8 @@ Class Monad M `{MonadOps M} : Prop :=
         bindM @o@ (returnM @o@ x) @o@ f =o= f @o@ x;
 
     monad_bind_return :
-      forall A `{OType A} m,
-        bindM @o@ m @o@ returnM =o= m;
+      forall A `{OType A} m prp,
+        bindM @o@ m @o@ (ofun (fun x => returnM @o@ x) (prp:=prp)) =o= m;
 
     monad_assoc :
       forall A B C `{OType A} `{OType B} `{OType C}
@@ -37,41 +37,30 @@ Notation "'do' x <- m1 ; m2" :=
 (* Return-bind law for OExprs *)
 Lemma monad_return_bind_OExpr
       {ctx} `{ValidCtx ctx} `{Monad} {A B} `{OType A} `{OType B}
-      (f: OExpr ctx (A -o> M B _ _)) (x: OExpr ctx A) :
+      (f: OExpr ctx (A -o> M B _ _)) (x: OExpr ctx A)
+      {validF: ValidOExpr f} {validX: ValidOExpr x} :
   App (App (Embed bindM) (App (Embed returnM) x)) f
   =e= (App f x).
 Proof.
-  split.
-  - split; simpl; intro; destruct_ands; split_ands; typeclasses eauto.
-  - intros; split; intros c1 c2 Rc; simpl;
-      rewrite monad_return_bind; rewrite Rc;
-        f_equiv; f_equiv; apply exprSemantics_irrel.
+  apply unquote_eq. intro. apply monad_return_bind.
 Qed.
 
 (* Bind-return law for OExprs *)
 Lemma monad_bind_return_OExpr
-      {ctx} `{Monad} {A} `{OType A} (m: OExpr ctx (M A _ _)) :
+      {ctx} `{ValidCtx ctx} `{Monad} {A} `{OType A} (m: OExpr ctx (M A _ _))
+      {validM: ValidOExpr m} :
   App (App (Embed bindM) m) (Lam (App (Embed returnM) (Var OVar_0))) =e= m.
 Proof.
-  split.
-  - split; simpl; intro; destruct_ands; split_ands; typeclasses eauto.
-  - intros; split; intros c1 c2 Rc; simpl.
-    + etransitivity; [ apply pfun_Proper
-                     | rewrite monad_bind_return; rewrite Rc;
-                       f_equiv; apply exprSemantics_irrel ].
-      intros a1 a2 Ra. simpl. apply pfun_Proper. assumption.
-    + etransitivity; [ rewrite <- monad_bind_return; rewrite Rc;
-                       f_equiv; apply exprSemantics_irrel
-                     | ].
-      f_equiv; [ f_equiv; f_equiv; apply exprSemantics_irrel | ].
-      intros a1 a2 Ra. simpl. apply pfun_Proper. assumption.
+  apply unquote_eq. intro. apply monad_bind_return.
 Qed.
 
 
 (* Associativity law for OExprs *)
+Typeclasses eauto := debug.
 Lemma monad_assoc_OExpr
-      {ctx} `{Monad} {A B C} `{OType A} `{OType B} `{OType C}
-      m (f: OExpr ctx (A -o> M B _ _)) (g: OExpr ctx (B -o> M C _ _)) :
+      {ctx} `{ValidCtx ctx} `{Monad} {A B C} `{OType A} `{OType B} `{OType C}
+      m (f: OExpr ctx (A -o> M B _ _)) (g: OExpr ctx (B -o> M C _ _))
+      {validM: ValidOExpr m} {validF: ValidOExpr f} {validG: ValidOExpr g} :
   App (App (Embed bindM) (App (App (Embed bindM) m) f)) g =e=
   App (App (Embed bindM) m)
       (Lam (App (App (Embed bindM)
