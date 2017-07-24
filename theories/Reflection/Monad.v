@@ -56,32 +56,18 @@ Qed.
 
 
 (* Associativity law for OExprs *)
-Typeclasses eauto := debug.
 Lemma monad_assoc_OExpr
       {ctx} `{ValidCtx ctx} `{Monad} {A B C} `{OType A} `{OType B} `{OType C}
       m (f: OExpr ctx (A -o> M B _ _)) (g: OExpr ctx (B -o> M C _ _))
-      {validM: ValidOExpr m} {validF: ValidOExpr f} {validG: ValidOExpr g} :
+      {validM: @ValidOExpr ctx (M A _ _) _ m}
+      {validF: ValidOExpr f} {validG: ValidOExpr g} :
   App (App (Embed bindM) (App (App (Embed bindM) m) f)) g =e=
   App (App (Embed bindM) m)
       (Lam (App (App (Embed bindM)
                      (App (weakenOExpr 0 A f) (Var OVar_0)))
                 (weakenOExpr 0 A g))).
 Proof.
-  split.
-  - split; simpl; intro; destruct_ands; split_ands; try typeclasses eauto.
-    + rewrite (weakenOExpr_equiValid 0). apply H14.
-    + rewrite (weakenOExpr_equiValid 0). apply H11.
-  - intros; split; intros c1 c2 Rc; simpl.
-    + etransitivity; [ apply monad_assoc | ]. f_equiv.
-      -- f_equiv; f_equiv; [ apply exprSemantics_irrel | assumption ].
-      -- intros a1 a2 Ra. simpl.
-         repeat f_equiv; try assumption; rewrite (weakenOExpr_correct 0); simpl;
-           f_equiv; assumption.
-    + etransitivity; [ | apply monad_assoc ]. f_equiv.
-      -- f_equiv; f_equiv; [ apply exprSemantics_irrel | assumption ].
-      -- intros a1 a2 Ra. simpl.
-         repeat f_equiv; try assumption; rewrite (weakenOExpr_correct 0); simpl;
-           f_equiv; assumption.
+  apply unquote_eq. intro. simpl. apply monad_assoc.
 Qed.
 
 (* Add the monad laws to the OT rewrite set *)

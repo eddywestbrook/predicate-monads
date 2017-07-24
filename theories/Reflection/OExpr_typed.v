@@ -666,9 +666,9 @@ Opaque ofst osnd opair.
  ***)
 
 (* Specially-marked versions of fst and snd just used for quoting OExprs *)
-Definition celem_head ctx A {RA} (celem: CtxElem (@CtxCons A RA ctx)) : A :=
+Definition celem_head {ctx A RA} (celem: CtxElem (@CtxCons A RA ctx)) : A :=
   let (_,head) := celem in head.
-Definition celem_rest ctx A {RA} (celem: CtxElem (@CtxCons A RA ctx)) :
+Definition celem_rest {ctx A RA} (celem: CtxElem (@CtxCons A RA ctx)) :
   CtxElem ctx :=
   let (rest,_) := celem in rest.
 
@@ -690,7 +690,7 @@ Qed.
 Instance QuotesToVar_Step {ctx1 ctx2 A B} {RA:OTRelation A} {RB:OTRelation B}
          (f: CtxElem ctx1 -> CtxElem (CtxCons B ctx2)) vin vout
          (q: QuotesToVar f (OVar_S vin) vout) :
-  QuotesToVar (fun c => celem_rest _ _ (f c)) vin vout.
+  QuotesToVar (fun c => celem_rest (f c)) vin vout.
 Proof.
   intro. apply q.
 Qed.
@@ -713,7 +713,7 @@ Class QuotesToAtomic {ctx A} {RA:OTRelation A}
 (* Quote any term of functional type to a lambda *)
 Instance QuotesTo_Lam {ctx A B} `{OType A} `{OTRelation B}
       (f: CtxElem ctx -> A -o> B) e
-      (q: QuotesTo (fun c => f (celem_rest _ _ c) @o@ (celem_head _ _ c)) e) :
+      (q: QuotesTo (fun c => f (celem_rest c) @o@ (celem_head c)) e) :
   QuotesTo f (Lam e) | 2.
 Proof.
   split.
@@ -727,7 +727,7 @@ Qed.
 (* Special case: quote ofuns as lambdas, destructuring the ofun *)
 Instance QuotesTo_Lam_ofun {ctx A B} `{OType A} `{OTRelation B}
          (f: CtxElem ctx -> A -> B) prp e
-         (q: QuotesTo (fun c => f (celem_rest _ _ c) (celem_head _ _ c)) e) :
+         (q: QuotesTo (fun c => f (celem_rest c) (celem_head c)) e) :
   QuotesTo (fun c => ofun (f c) (prp:=prp c)) (Lam e) | 1.
 Proof.
   apply QuotesTo_Lam. assumption.
@@ -750,7 +750,7 @@ Hint Extern 1 (QuotesTo _ _) => solve_QuotesTo : typeclass_instances.
 Instance QuotesTo_Var {ctx1 ctx2 A} `{OType A} {valid:ValidCtx ctx1}
          (f: CtxElem ctx1 -> CtxElem (CtxCons A ctx2)) v
          (q: QuotesToVar f OVar_0 v) :
-  QuotesToAtomic (fun c => celem_head ctx2 A (f c)) (Var v) | 1.
+  QuotesToAtomic (fun c => celem_head (f c)) (Var v) | 1.
 Proof.
   split; try assumption.
   intros; rewrite <- (quotesToVar (QuotesToVar:=q)). simpl.
@@ -759,7 +759,7 @@ Qed.
 
 (* Special case for an eta-reduced celem_head application *)
 Instance QuotesTo_Var0 {ctx A} `{OType A} {valid:ValidCtx ctx} :
-  QuotesToAtomic (celem_head ctx A) (Var OVar_0) | 1.
+  QuotesToAtomic (@celem_head ctx A _) (Var OVar_0) | 1.
 Proof.
   split; try typeclasses eauto.
   intros. reflexivity.
@@ -783,7 +783,7 @@ Qed.
 (* Quote ofuns in atomic position as lambdas *)
 Instance QuotesToAtomic_ofun {ctx A B} `{OType A} `{OTRelation B}
          (f: CtxElem ctx -> A -> B) prp e
-         (q: QuotesTo (fun c => f (celem_rest _ _ c) (celem_head _ _ c)) e) :
+         (q: QuotesTo (fun c => f (celem_rest c) (celem_head c)) e) :
   QuotesToAtomic (fun c => ofun (f c) (prp:=prp c)) (Lam e) | 1.
 Proof.
   apply QuotesTo_Lam. assumption.
@@ -833,7 +833,7 @@ Qed.
 (*
 Instance QuotesTo_Lam1 {ctx A B} `{OType A} `{OType B} `{ValidCtx ctx}
          (f: CtxElem ctx -> A -> B) prp e
-         (q: QuotesTo (fun c => f (celem_rest _ _ c) (celem_head _ _ c)) e) :
+         (q: QuotesTo (fun c => f (celem_rest c) (celem_head c)) e) :
   QuotesTo (fun c => {| pfun_app := f c; pfun_Proper := prp c |}) (Lam e) | 1.
 Proof.
   intros c; split; intros a1 a2 Ra; simpl.
@@ -843,7 +843,7 @@ Qed.
 
 Instance QuotesTo_Lam2 {ctx A B} `{OType A} `{OType B} `{ValidCtx ctx}
          (f: CtxElem ctx -> A -> B) prp e
-         (q: QuotesTo (fun c => f (celem_rest _ _ c) (celem_head _ _ c)) e) :
+         (q: QuotesTo (fun c => f (celem_rest c) (celem_head c)) e) :
   QuotesTo (fun c => ofun (f c) (prp:=prp c)) (Lam e)| 1.
 Proof.
   unfold ofun. apply QuotesTo_Lam1. assumption.
@@ -992,6 +992,20 @@ Proof.
     + etransitivity.
       -- apply (unQuotesTo (UnQuotesTo:=q)).
       -- apply (Proper_unQuotesTo q); apply Ra.
+Qed.
+
+
+Instance UnQuotesTo_weakenOExpr {ctx A} {RA:OTRelation A} w W `{OType W}
+         (e: OExpr ctx A) f (q: UnQuotesTo e f) :
+  UnQuotesTo (weakenOExpr w W e) (fun c => f (weaken_pfun w W _ @o@ c)) | 1.
+Proof.
+  split.
+  - apply ValidCtx_ctxInsert; [ assumption | apply q ].
+  - apply ValidOExpr_weakenOExpr. apply q.
+  - intros. rewrite weakenOExpr_correct. simpl.
+    rewrite (unQuotesTo (UnQuotesTo:=q)). reflexivity.
+    Unshelve.
+    apply q. apply q.
 Qed.
 
 (* This instance is meant to only apply to Coq-level variables of OExpr type *)
