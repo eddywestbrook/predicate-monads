@@ -207,3 +207,58 @@ Instance Proper_subst_pfun_equiv ctx n :
 Proof.
   intros s1 s2 Rs; destruct Rs; split; apply Proper_subst_pfun; assumption.
 Qed.
+
+
+(***
+ *** Quoting Mechanism for Types
+ ***)
+
+Class QuotesToType (A:Type) `{OType A} tp : Prop :=
+  quotesToType : otype tp = Build_OTypeSem A _ _.
+
+(* Quote the unit type to OTpUnit *)
+Instance QuotesToType_unit : QuotesToType unit OTpUnit | 1 := eq_refl.
+
+(* Quote anything that doesn't match another rule using OTpEmbed *)
+Instance QuotesToType_embed A `{OType A} : QuotesToType A (OTpEmbed A) | 3 :=
+  eq_refl.
+
+(* Quote products, sums, and arrows accordingly *)
+Instance QuotesToType_pair A1 A2 `(OType A1) `(OType A2)
+         tp1 tp2 (q1:QuotesToType A1 tp1) (q2:QuotesToType A2 tp2) :
+  QuotesToType (A1 * A2) (OTpPair tp1 tp2) | 1.
+Proof.
+  unfold QuotesToType in * |- *. simpl. rewrite q1. rewrite q2. reflexivity.
+Qed.
+
+Instance QuotesToType_sum A1 A2 `(OType A1) `(OType A2)
+         tp1 tp2 (q1:QuotesToType A1 tp1) (q2:QuotesToType A2 tp2) :
+  QuotesToType (A1 + A2) (OTpSum tp1 tp2) | 1.
+Proof.
+  unfold QuotesToType in * |- *. simpl. rewrite q1. rewrite q2. reflexivity.
+Qed.
+
+Instance QuotesToType_arrow A1 A2 `(OType A1) `(OType A2)
+         tp1 tp2 (q1:QuotesToType A1 tp1) (q2:QuotesToType A2 tp2) :
+  QuotesToType (A1 -o> A2) (OTpArrow tp1 tp2) | 1.
+Proof.
+  unfold QuotesToType in * |- *. simpl. rewrite q1. rewrite q2. reflexivity.
+Qed.
+
+Instance QuotesToType_apply (TF: forall A `{OType A}, Type) `{OTypeF TF}
+         A `(OType A) tp (q:QuotesToType A tp) :
+  QuotesToType (TF A) (OTpApply TF tp) | 1.
+Proof.
+  unfold QuotesToType in * |- *. simpl. rewrite q. reflexivity.
+Qed.
+
+
+(*
+Definition quote_type_test A `{OType A} {tp:OTypeExpr} `{QuotesToType A tp} :=
+  tp.
+
+Eval compute in (fun A `(OType A) => quote_type_test (A -o> A * unit)).
+
+Eval compute in (fun TF `(OTypeF TF) A `(OType A) =>
+                   quote_type_test (TF (A + unit)%type _ _ -o> A * unit)).
+ *)
