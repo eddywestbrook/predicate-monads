@@ -362,13 +362,15 @@ Proof.
   apply weakenOExpr_equiValid. assumption.
 Qed.
 
-(* Commonly-used special case of ValidOExpr_weakenOExpr *)
-Instance ValidOExpr_weakenOExpr0 W {RW:OTRelation W}
-         {ctx A RA} (e:@OExpr ctx A RA) {validE:ValidOExpr e} :
-  ValidOExpr (ctx:=CtxCons W ctx) (@weakenOExpr 0 W RW ctx A RA e).
-Proof.
-  apply (ValidOExpr_weakenOExpr 0 W (ctx:=ctx)). assumption.
-Qed.
+(* The above instance generally will not fire, because the implicit ctx argument
+to ValidOExpr is of the form (ctxInsert w W ctx), but this will generally be
+already simplified away in the goal, making it hard for Coq to match. The
+following instructs Coq how to do the match by supplying the w argument. *)
+Hint Extern 1 (@ValidOExpr _ _ _ (weakenOExpr _ _ _)) =>
+(lazymatch goal with
+ | |- ValidOExpr (weakenOExpr ?w _ _) =>
+   apply (ValidOExpr_weakenOExpr w)
+ end) : typeclass_instances.
 
 (* Correctness of weakenOExpr: it is equivalent to weaken_pfun *)
 Lemma weakenOExpr_correct w W {RW} {ctx A RA} (e:OExpr ctx A)
@@ -995,6 +997,10 @@ Proof.
 Qed.
 
 
+(* The above instance generally will not fire, because the implicit ctx argument
+to UnQuotesTo is of the form (ctxInsert w W ctx), but this will generally be
+already simplified away in the goal, making it hard for Coq to match. The
+following instructs Coq how to do the match by supplying the w argument. *)
 Instance UnQuotesTo_weakenOExpr {ctx A} {RA:OTRelation A} w W `{OType W}
          (e: OExpr ctx A) f (q: UnQuotesTo e f) :
   UnQuotesTo (weakenOExpr w W e) (fun c => f (weaken_pfun w W _ @o@ c)) | 1.
@@ -1007,6 +1013,16 @@ Proof.
     Unshelve.
     apply q. apply q.
 Qed.
+
+(* The above instance will generally not fire because the ctxInsert implicit
+argument to UnQuotesTo will already be simplified, and so Coq will not be able
+to match it; this, we make an explicit extern tactic to do the matching *)
+Hint Extern 1 (@UnQuotesTo _ _ _ (weakenOExpr _ _ _) _) =>
+(lazymatch goal with
+ | |- UnQuotesTo (weakenOExpr ?w ?W _) _ =>
+   apply (UnQuotesTo_weakenOExpr w W)
+ end) : typeclass_instances.
+
 
 (* This instance is meant to only apply to Coq-level variables of OExpr type *)
 Instance UnQuotesTo_MetaVar {ctx A} {RA:OTRelation A} `{ValidCtx ctx}
