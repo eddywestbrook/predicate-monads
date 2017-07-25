@@ -34,6 +34,11 @@ Class Monad M `{MonadOps M} : Prop :=
 Notation "'do' x <- m1 ; m2" :=
   (bindM @o@ m1 @o@ (ofun (fun x => m2))) (at level 60, right associativity).
 
+
+(***
+ *** The Monad Laws for OExprs
+ ***)
+
 (* Return-bind law for OExprs *)
 Lemma monad_return_bind_OExpr
       {ctx} `{ValidCtx ctx} `{Monad} {A B} `{OType A} `{OType B}
