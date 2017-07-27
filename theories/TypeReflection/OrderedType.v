@@ -57,7 +57,8 @@ Proof.
   transitivity a1; [ assumption | ]. transitivity b1; assumption.
 Qed.
 
-Instance Subrelation_ot_equiv_ot_R A `{OType A} : subrelation (@ot_equiv A _) ot_R.
+Instance Subrelation_ot_equiv_ot_R A `{OTRelation A} :
+  subrelation (@ot_equiv A _) ot_R.
 Proof.
   intros a1 a2 Ra; destruct Ra; assumption.
 Qed.
@@ -183,10 +184,23 @@ Proof.
   repeat intro; split; assumption.
 Qed.
 
+Instance Proper_pair_equiv A B `{OTRelation A} `{OTRelation B} :
+  Proper (ot_equiv ==> ot_equiv ==> ot_equiv) (pair : A -> B -> A*B).
+Proof.
+  intros a1 a2 Ra b1 b2 Rb; destruct Ra; destruct Rb; split; split; assumption.
+Qed.
+
 Instance Proper_fst A B `{OTRelation A} `{OTRelation B} :
   Proper (ot_R ==> ot_R) (fst : A*B -> A).
 Proof.
   intros p1 p2 Rp; destruct Rp; assumption.
+Qed.
+
+Instance Proper_fst_equiv A B `{OTRelation A} `{OTRelation B} :
+  Proper (ot_equiv ==> ot_equiv) (fst : A*B -> A).
+Proof.
+  intros p1 p2 Rp. destruct Rp.
+  split; eapply Proper_fst; assumption.
 Qed.
 
 Instance Proper_snd A B `{OTRelation A} `{OTRelation B} :
@@ -195,6 +209,12 @@ Proof.
   intros p1 p2 Rp; destruct Rp; assumption.
 Qed.
 
+Instance Proper_snd_equiv A B `{OTRelation A} `{OTRelation B} :
+  Proper (ot_equiv ==> ot_equiv) (snd : A*B -> B).
+Proof.
+  intros p1 p2 Rp. destruct Rp.
+  split; eapply Proper_snd; assumption.
+Qed.
 
 
 (***
@@ -689,27 +709,226 @@ Notation "'pfun' x =o> t" :=
 
 
 (***
- *** Ordered Type Functions
+ *** First-Order Ordered Type Functors
  ***)
 
-(*
-Definition ot_fun_app (TF: forall A `{OType A}, Type) A `{OType A} := TF A.
+(* A type portion of a first-order functor of a given arity *)
+Fixpoint OTFunctor1 arity : Type :=
+  match arity with
+  | 0 => Type
+  | S arity' => forall A {RA:OTRelation A}, OTFunctor1 arity'
+  end.
 
-Notation "F @t@ A" :=
-  (ot_fun_app F A%type) (left associativity, at level 20).
-*)
+(* A relation portion of a first-order functor of a given arity *)
+Fixpoint OTRelationF1Fun arity : OTFunctor1 arity -> Type :=
+  match arity with
+  | 0 => OTRelation
+  | S arity' =>
+    fun F => forall A {RA:OTRelation A}, OTRelationF1Fun arity' (F A RA)
+  end.
 
-Class OTRelationF (TF: forall A `{OType A}, Type) : Type :=
-  ot_rel_app : forall A `{OType A}, OTRelation (TF A).
+(* Typeclass version of OTRelationF1Fun *)
+Class OTRelationF1 arity (F:OTFunctor1 arity) : Type :=
+  otRelationF1 : OTRelationF1Fun arity F.
 
-Instance OTRelation_ot_rel_app TF `(OTRelationF TF) A `(OType A) :
-  OTRelation (TF A _ _) := ot_rel_app A.
+(* A valid OTFunctor is one that yields valid output types when applied to valid
+input types *)
+Fixpoint OTypeF1Fun arity : forall F (RF:OTRelationF1 arity F), Prop :=
+  match arity with
+  | 0 => fun A RA => @OType A RA
+  | S arity' =>
+    fun F RF => forall A {RA:OTRelation A} {OA:OType A},
+        OTypeF1Fun arity' (F A RA) (RF A RA)
+  end.
 
-Class OTypeF (TF: forall A `{OType A}, Type) `{OTRelationF TF} : Prop :=
-  otype_app : forall A `{OType A}, OType (TF A).
+(* Typeclass version of OTypeF1Fun *)
+Class OTypeF1 arity F `{RF:OTRelationF1 arity F} : Prop :=
+  otypeF1 : OTypeF1Fun arity F RF.
 
-Instance OType_otype_app TF `(OTypeF TF) A `(OType A) :
-  OType (TF A _ _) := otype_app A.
+(* A list of arguments to a first-order functor *)
+Inductive OTArgs : Type :=
+| ArgsNil
+| ArgsCons A {RA:OTRelation A} (args:OTArgs)
+.
+
+(* Get the head argument of a list, or unit if we ran out *)
+Definition OTArgs_head (args:OTArgs) : Type :=
+  match args with
+  | ArgsNil => unit
+  | ArgsCons A args' => A
+  end.
+
+(* Get the head OTRelation of a list, or unit if we ran out *)
+Definition OTArgs_headRel (args:OTArgs) : OTRelation (OTArgs_head args) :=
+  match args with
+  | ArgsNil => _
+  | ArgsCons A args' => _
+  end.
+
+Instance OTRelation_OTArgs_head args : OTRelation (OTArgs_head args) :=
+  OTArgs_headRel args.
+
+(* Get the tail of a list of arguments, or the empty list if we ran out *)
+Definition OTArgs_tail (args:OTArgs) : OTArgs :=
+  match args with
+  | ArgsNil => ArgsNil
+  | ArgsCons A args' => args'
+  end.
+
+(* The predicate saying all args in a list are valid *)
+Fixpoint OTArgsValidFun (args:OTArgs) : Prop :=
+  match args with
+  | ArgsNil => True
+  | ArgsCons A args' => OType A /\ OTArgsValidFun args'
+  end.
+
+(* Typeclass for the above *)
+Class OTArgsValid args : Prop :=
+  otArgsValid : OTArgsValidFun args.
+
+(* Instances for building OTArgsValid proofs *)
+Instance OTArgsValid_Nil : OTArgsValid ArgsNil := I.
+Instance OTArgsValid_Cons A args `(OType A) (valid:OTArgsValid args) :
+  OTArgsValid (ArgsCons A args) := conj _ valid.
+
+(* Apply a functor to a list of arguments. Note that we do not actually care how
+long the list is, as we will just supply unit types if we run out of args. *)
+Fixpoint OTFunctorApply arity : forall F:OTFunctor1 arity, OTArgs -> Type :=
+  match arity return forall F:OTFunctor1 arity, OTArgs -> Type with
+  | 0 => fun A _ => A
+  | S arity' =>
+    fun F args =>
+      OTFunctorApply arity' (F (OTArgs_head args) _) (OTArgs_tail args)
+  end.
+
+(* Get out the OTRelation from applying a functor *)
+Instance OTRelation_OTFunctorApply arity F (RF:OTRelationF1 arity F) As :
+  OTRelation (OTFunctorApply arity F As).
+Proof.
+  revert F RF As; induction arity; intros; simpl.
+  - assumption.
+  - apply IHarity. apply RF.
+Defined.
+
+(* Applying a valid functor to valid types is always valid *)
+Instance OType_OTFunctorApply arity F `(OF:OTypeF1 arity F) As `(OTArgsValid As) :
+  OType (OTFunctorApply arity F As).
+Proof.
+  revert F RF OF As H; induction arity; intros; simpl.
+  - apply OF.
+  - apply IHarity.
+    + apply OF. destruct As; [ | destruct H]; typeclasses eauto.
+    + destruct As; [ | destruct H]; typeclasses eauto.
+Qed.
+
+
+(***
+ *** Ordered Type Functors of Higher Kinds
+ ***)
+
+(* The language of kinds for type functors, built from * and -> *)
+Inductive OKind : Type :=
+| OKStar
+| OKArrow (k1 k2:OKind)
+.
+
+(* The "semantics" of a kind, which is a type A plus a dependent type on A *)
+Definition OKindSem := {A:Type & A -> Type}.
+
+(* Typeclass for elements of the dependent type in an OKindSem *)
+Class OKindSemRelation (sem:OKindSem) (A:projT1 sem) : Type :=
+  okindSemRelation : projT2 sem A.
+
+(* The type and relation types associated with kind k *)
+Fixpoint OTFunctorTypes k : {A:Type & A -> Type} :=
+  match k with
+  | OKStar => existT _ Type OTRelation
+  | OKArrow k1 k2 =>
+    existT
+      (fun A => A -> Type)
+      (forall A1 (R1:OKindSemRelation (OTFunctorTypes k1) A1),
+          projT1 (OTFunctorTypes k2))
+      (fun f => forall A1 R1, OKindSemRelation (OTFunctorTypes k2) (f A1 R1))
+  end.
+Arguments OTFunctorTypes !k.
+
+(* Ordered type functors of kind k *)
+Definition OTFunctor k : Type := projT1 (OTFunctorTypes k).
+
+(* The relation portion of an ordered type functor of kind k *)
+Class OTFunctorRel k (F: OTFunctor k) : Type :=
+  otFunctorRel : projT2 (OTFunctorTypes k) F.
+
+(* An OTFunctorRel at kind * is the same as an OTRelation *)
+Definition OTRelation_OKindSemRelation
+           A (RA: OKindSemRelation (OTFunctorTypes OKStar) A) :
+  OTRelation A := RA.
+
+(* Only apply OTRelation_OKindSemRelation when we have an OKindSemRelation in
+the context *)
+Hint Immediate OTRelation_OKindSemRelation : typeclass_instances.
+
+(* A valid OTFunctor is one whose final output is a valid OType *)
+Fixpoint OTFunctorValidFun k : forall F (RF:OTFunctorRel k F), Prop :=
+  match k return forall F (RF:OTFunctorRel k F), Prop with
+  | OKStar => @OType
+  | OKArrow k1 k2 =>
+    fun F RF =>
+      forall F1 (RF1:OTFunctorRel k1 F1),
+        OTFunctorValidFun k1 F1 RF1 ->
+        OTFunctorValidFun k2 (F F1 RF1) (RF F1 RF1)
+  end.
+
+(* Typeclass version of OTFunctorValidFun *)
+Class OTFunctorValid k F {RF:OTFunctorRel k F} : Prop :=
+  otFunctorValid : OTFunctorValidFun k F RF.
+
+(* An OTFunctorValid at kind * is the same as an OType *)
+Definition OType_OTFunctorValid A RA (OA: @OTFunctorValid OKStar A RA) :
+  OType A := OA.
+
+(* Only apply OType_OTFunctorValid when we have an OTFunctorValid available *)
+Hint Immediate OType_OTFunctorValid : typeclass_instances.
+
+
+(* The unit type forms a trivial OTFunctor *)
+Instance OTFunctorRel_unit : OTFunctorRel OKStar unit := OTunit_R.
+Instance OTFunctorValid_unit : OTFunctorValid OKStar unit := OTunit.
+
+(* Products form an OTFunctor *)
+Instance OTFunctorRel_prod : OTFunctorRel
+                               (OKArrow OKStar (OKArrow OKStar OKStar))
+                               (fun A _ B _ => prod A B) :=
+  fun A RA B RB => OTpair_R A B RA RB.
+
+Instance OTFunctorValid_prod : OTFunctorValid
+                                 (OKArrow OKStar (OKArrow OKStar OKStar))
+                                 (fun A _ B _ => prod A B) :=
+  fun A RA OA B RB OB => OTpair A B OA OB.
+
+
+(* Sums form an OTFunctor *)
+Instance OTFunctorRel_sum : OTFunctorRel
+                               (OKArrow OKStar (OKArrow OKStar OKStar))
+                               (fun A _ B _ => sum A B) :=
+  fun A RA B RB => OTsum_R A B RA RB.
+
+Instance OTFunctorValid_sum : OTFunctorValid
+                                (OKArrow OKStar (OKArrow OKStar OKStar))
+                                (fun A _ B _ => sum A B) :=
+  fun A RA OA B RB OB => OTsum A B OA OB.
+
+
+(* Pfuns form an OTFunctor *)
+Instance OTFunctorRel_pfun : OTFunctorRel
+                               (OKArrow OKStar (OKArrow OKStar OKStar))
+                               (fun A _ B _ => A -o> B) :=
+  fun A RA B RB => OTarrow_R A B.
+
+Instance OTFunctorValid_pfun : OTFunctorValid
+                                 (OKArrow OKStar (OKArrow OKStar OKStar))
+                                 (fun A _ B _ => A -o> B) :=
+  fun A RA OA B RB OB => OTarrow A B.
 
 
 (***

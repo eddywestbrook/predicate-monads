@@ -5,57 +5,86 @@ Require Export PredMonad.TypeReflection.OrderedType.
  *** Ordered Type Expressions
  ***)
 
-Inductive OTypeExpr : Type :=
-
-(* The unit type *)
-| OTpUnit
-
-(* Embedding an ordered type *)
-| OTpEmbed A `{OType A}
-
-(* Products, sums, and functions *)
-| OTpPair (tp1 tp2:OTypeExpr)
-| OTpSum (tp1 tp2:OTypeExpr)
-| OTpArrow (tp1 tp2:OTypeExpr)
-
-(* Application of an embedded functor *)
-| OTpApply (TF: forall A `{OType A}, Type) `{OTypeF TF} (tp:OTypeExpr)
+Inductive OTypeExprInd : forall A {RA:OTRelation A}, Type :=
+| OTpUnit : OTypeExprInd unit
+| OTpEmbed A `{OType A} : OTypeExprInd A
+| OTpPair {A} {RA:OTRelation A} {B} {RB:OTRelation B}
+          (tp1: OTypeExprInd A) (tp2: OTypeExprInd B) : OTypeExprInd (A * B)
+| OTpSum {A} {RA:OTRelation A} {B} {RB:OTRelation B}
+         (tp1: OTypeExprInd A) (tp2: OTypeExprInd B) : OTypeExprInd (A + B)
+| OTpArrow {A} {RA:OTRelation A} {B} {RB:OTRelation B}
+           (tp1: OTypeExprInd A) (tp2: OTypeExprInd B) : OTypeExprInd (A -o> B)
+| OTpApply {arity} F `{OTypeF1 arity F} As (tps:OTypeExprInds As) :
+    OTypeExprInd (OTFunctorApply arity F As)
+with
+OTypeExprInds : OTArgs -> Type :=
+| OTpNil : OTypeExprInds ArgsNil
+| OTpCons {A} {RA:OTRelation A} {As} (tp: OTypeExprInd A) (tps:OTypeExprInds As) :
+    OTypeExprInds (ArgsCons A As)
 .
 
-(* The semantics of an OTypeExpr *)
-Record OTypeSem :=
-  {
-    otypeSem :> Type;
-    otypeSemRelation :> OTRelation otypeSem;
-    otypeSemValid :> OType otypeSem
-  }.
-Arguments otypeSem !o.
+(* Define the mutual recursion / induction schemes for OTypeExprInd *)
+Scheme OTypeExpr_OTypeExprs_rec := Induction for OTypeExprInd Sort Type
+  with OTypeExprs_OTypeExpr_rec := Induction for OTypeExprInds Sort Type.
 
-Instance OTRelation_OTypeSem sem : OTRelation (otypeSem sem) :=
-  otypeSemRelation _.
-Instance OType_OTypeSem sem : OType (otypeSem sem) :=
-  otypeSemValid _.
-
-(* Interpret an OTypeExpr as a type plus relation *)
-Fixpoint otype (tp:OTypeExpr) : OTypeSem :=
-  match tp with
-  | OTpUnit => Build_OTypeSem unit _ _
-  | OTpEmbed A => Build_OTypeSem A _ _
-  | OTpPair tp1 tp2 =>
-    Build_OTypeSem (prod (otype tp1) (otype tp2)) _ _
-  | OTpSum tp1 tp2 =>
-    Build_OTypeSem (sum (otype tp1) (otype tp2)) _ _
-  | OTpArrow tp1 tp2 =>
-    Build_OTypeSem
-      (@Pfun (otypeSem (otype tp1)) (otypeSem (otype tp2)) _ _) _ _
-  | OTpApply TF tp =>
-    Build_OTypeSem
-      (TF (otypeSem (otype tp)) _ _)
-      _ _
+(* Apply a predicate to all OTypeExprs in an OTypeExprs list *)
+Fixpoint forall_OTypeExprInds (P: forall A RA, @OTypeExprInd A RA -> Type)
+         args (tps:OTypeExprInds args) : Type :=
+  match tps with
+  | OTpNil => True
+  | OTpCons tp tps => P _ _ tp * forall_OTypeExprInds P _ tps
   end.
-Arguments otype !tp.
 
-Coercion otype : OTypeExpr >-> OTypeSem.
+(* Mutual induction scheme for OTypeExprInd *)
+Definition OTypeExprInd_rect' P f1 f2 f3 f4 f5 f6 :=
+  OTypeExpr_OTypeExprs_rec P (forall_OTypeExprInds P)
+                           f1 f2 f3 f4 f5 f6 I
+                           (fun _ _ _ _ x _ xs => (x,xs)).
+
+(* Typeclass version of OTypeExprInd *)
+Class OTypeExpr A {RA:OTRelation A} : Type :=
+  otypeExpr : @OTypeExprInd A RA.
+
+(* Instances for building OTypeExprs *)
+(*
+Instance OTypeExpr_unit : OTypeExpr unit := OTpUnit.
+Instance OTypeExpr_pair A RA (tpA:@OTypeExpr A RA) B RB (tpB:@OTypeExpr B RB) :
+  OTypeExpr (A*B) | 1 := OTpPair tpA tpB.
+Instance OTypeExpr_sum A RA (tpA:@OTypeExpr A RA) B RB (tpB:@OTypeExpr B RB) :
+  OTypeExpr (A+B) | 1 := OTpSum tpA tpB.
+Instance OTypeExpr_arrow A RA (tpA:@OTypeExpr A RA) B RB (tpB:@OTypeExpr B RB) :
+  OTypeExpr (A -o> B) | 1 := OTpArrow tpA tpB.
+Instance OTypeExpr_embed A `{OType A} : OTypeExpr A | 2 := OTpEmbed A.
+ *)
+
+Ltac prove_OTypeExpr :=
+  match goal with
+  | |- OTypeExprInd _ => assumption
+  | |- @OTypeExprInd ?A ?RA => change (@OTypeExpr A RA); try prove_OTypeExpr
+  | |- OTypeExpr _ => assumption
+  | |- OTypeExpr unit => apply OTpUnit
+  | |- OTypeExpr (_ * _) => apply OTpPair; try prove_OTypeExpr
+  | |- OTypeExpr (_ + _) => apply OTpSum; try prove_OTypeExpr
+  | |- OTypeExpr (_ -o> _) => apply OTpArrow; try prove_OTypeExpr
+  | |- OTypeExpr (?F _ _) =>
+    refine (OTpApply F (OTpCons _ OTpNil)); try prove_OTypeExpr
+  | |- OTypeExpr _ => apply OTpEmbed; try prove_OTypeExpr
+  end.
+
+Hint Extern 1 (OTypeExpr _) => prove_OTypeExpr : typeclass_instances.
+Hint Extern 1 (OTypeExprInd _) => prove_OTypeExpr : typeclass_instances.
+
+(* Any type + relation with an OTypeExpr representation is valid *)
+Lemma OType_OTypeExpr A (RA:OTRelation A) (tp:OTypeExpr A) : OType A.
+Proof.
+  apply
+    (OTypeExpr_OTypeExprs_rec (fun A RA _ => @OType A RA)
+                              (fun As _ => OTArgsValid As));
+    try typeclasses eauto.
+Qed.
+
+(* Only apply OType_OTypeExpr when there are OTypeExprs in the context *)
+Hint Immediate OType_OTypeExpr : typeclass_instances.
 
 
 (***
@@ -65,14 +94,14 @@ Coercion otype : OTypeExpr >-> OTypeSem.
 (* A context here is just a list of type expressions *)
 Inductive Ctx : Type :=
 | CtxNil
-| CtxCons (tp:OTypeExpr) (ctx:Ctx)
+| CtxCons {A RA} (tp:@OTypeExpr A RA) (ctx:Ctx)
 .
 
 (* An element of a context is a nested tuple of elements of its types *)
 Fixpoint CtxElem (ctx:Ctx) : Type :=
   match ctx with
   | CtxNil => unit
-  | CtxCons tp ctx' => CtxElem ctx' * tp
+  | @CtxCons A _ tp ctx' => CtxElem ctx' * A
   end.
 
 (* OTRelation instance for any CtxElem type *)
@@ -83,30 +112,50 @@ Defined.
 
 Instance OType_CtxElem ctx : OType (CtxElem ctx).
 Proof.
-  induction ctx; typeclasses eauto.
+  induction ctx; simpl; [ typeclasses eauto | ].
+  apply OTpair; [ typeclasses eauto | ]. apply OType_OTypeExpr. assumption.
 Qed.
 
 (* Map from an element of a context to an element of its head. This is just
 fst_pfun, but writing it this way helps the Coq unifier. *)
-Definition ctx_head_pfun {tp ctx} : CtxElem (CtxCons tp ctx) -o> tp :=
+Definition ctx_head_pfun {ctx A RA} {tp:@OTypeExpr A RA} :
+  CtxElem (CtxCons tp ctx) -o> A :=
   snd_pfun.
 
 (* Map from an element of a context to an element of its tail. This is just
 fst_pfun, but writing it this way helps the Coq unifier. *)
-Definition ctx_tail_pfun {tp ctx} : CtxElem (CtxCons tp ctx) -o> CtxElem ctx :=
+Definition ctx_tail_pfun {ctx A RA} {tp:@OTypeExpr A RA} :
+  CtxElem (CtxCons tp ctx) -o> CtxElem ctx :=
   fst_pfun.
 
 (* Look up the nth type in a Ctx, returning the unit type as a default *)
-Fixpoint ctxNth n ctx {struct ctx} : OTypeExpr :=
+Fixpoint ctxNth n ctx {struct ctx} : Type :=
   match ctx with
-  | CtxNil => OTpUnit
-  | CtxCons A ctx' =>
+  | CtxNil => unit
+  | @CtxCons A _ _ ctx' =>
     match n with
     | 0 => A
     | S n' => ctxNth n' ctx'
     end
   end.
 Arguments ctxNth !n !ctx.
+
+Instance OTRelation_ctxNth n ctx : OTRelation (ctxNth n ctx).
+Proof.
+  revert n; induction ctx; [ | destruct n ]; intros; typeclasses eauto.
+Defined.
+
+(* Look up the nth OTypeExpr in a Ctx *)
+Fixpoint ctxNthExpr n ctx {struct ctx} : OTypeExpr (ctxNth n ctx) :=
+  match ctx with
+  | CtxNil => OTpUnit
+  | CtxCons tp ctx' =>
+    match n with
+    | 0 => tp
+    | S n' => ctxNthExpr n' ctx'
+    end
+  end.
+Arguments ctxNthExpr !n !ctx.
 
 (* Pfun to extract the nth element of a context *)
 Fixpoint nth_pfun ctx n : CtxElem ctx -o> ctxNth n ctx :=
@@ -119,10 +168,10 @@ Fixpoint nth_pfun ctx n : CtxElem ctx -o> ctxNth n ctx :=
       compose_pfun ctx_tail_pfun (nth_pfun ctx' n')
     end
   end.
-Arguments nth_pfun !ctx !n.
+Arguments nth_pfun ctx n : simpl nomatch.
 
 (* Weaken a context by inserting a type at point w *)
-Fixpoint ctxInsert w tpW ctx {struct w} : Ctx :=
+Fixpoint ctxInsert w {W RW} (tpW:@OTypeExpr W RW) ctx {struct w} : Ctx :=
   match w with
   | 0 => CtxCons tpW ctx
   | S w' =>
@@ -131,11 +180,11 @@ Fixpoint ctxInsert w tpW ctx {struct w} : Ctx :=
     | CtxCons tp ctx' => CtxCons tp (ctxInsert w' tpW ctx')
     end
   end.
-Arguments ctxInsert w tpW ctx : simpl nomatch.
+Arguments ctxInsert w {W RW} tpW ctx : simpl nomatch.
 
 (* Map from a weaker to a stronger context, by dropping the new element *)
-Fixpoint weaken_pfun w tpW ctx :
-  CtxElem (ctxInsert w tpW ctx) -o> CtxElem ctx :=
+Fixpoint weaken_pfun w {W RW} tpW ctx :
+  CtxElem (@ctxInsert w W RW tpW ctx) -o> CtxElem ctx :=
   match w return CtxElem (ctxInsert w tpW ctx) -o> CtxElem ctx with
   | 0 => ctx_tail_pfun
   | S w' =>
@@ -146,7 +195,7 @@ Fixpoint weaken_pfun w tpW ctx :
                 ctx_head_pfun
     end
   end.
-Arguments weaken_pfun !w tpW !ctx.
+Arguments weaken_pfun !w {W RW} tpW !ctx.
 
 (* Delete the nth element of a context *)
 Fixpoint ctxDelete n ctx {struct ctx} : Ctx :=
@@ -158,7 +207,7 @@ Fixpoint ctxDelete n ctx {struct ctx} : Ctx :=
     | S n' => CtxCons tp (ctxDelete n' ctx')
     end
   end.
-Arguments ctxDelete !n !ctx.
+Arguments ctxDelete n ctx : simpl nomatch.
 
 (* The the n+1-th suffix of a context *)
 Fixpoint ctxSuffix n ctx {struct ctx} : Ctx :=
@@ -170,6 +219,7 @@ Fixpoint ctxSuffix n ctx {struct ctx} : Ctx :=
     | S n' => ctxSuffix n' ctx'
     end
   end.
+Arguments ctxSuffix n ctx : simpl nomatch.
 
 (* Substitute into a context by providing a pfun for the nth value *)
 Fixpoint subst_pfun ctx n :
@@ -190,6 +240,7 @@ Fixpoint subst_pfun ctx n :
         pair_pfun (compose_pfun fst_pfun (subst_pfun ctx' n' s)) snd_pfun
     end
   end.
+Arguments subst_pfun ctx n : simpl nomatch.
 
 (* Proper-ness of subst_pfun *)
 Instance Proper_subst_pfun ctx n : Proper (ot_R ==> ot_R) (subst_pfun ctx n).
@@ -207,58 +258,3 @@ Instance Proper_subst_pfun_equiv ctx n :
 Proof.
   intros s1 s2 Rs; destruct Rs; split; apply Proper_subst_pfun; assumption.
 Qed.
-
-
-(***
- *** Quoting Mechanism for Types
- ***)
-
-Class QuotesToType (A:Type) `{OType A} tp : Prop :=
-  quotesToType : otype tp = Build_OTypeSem A _ _.
-
-(* Quote the unit type to OTpUnit *)
-Instance QuotesToType_unit : QuotesToType unit OTpUnit | 1 := eq_refl.
-
-(* Quote anything that doesn't match another rule using OTpEmbed *)
-Instance QuotesToType_embed A `{OType A} : QuotesToType A (OTpEmbed A) | 3 :=
-  eq_refl.
-
-(* Quote products, sums, and arrows accordingly *)
-Instance QuotesToType_pair A1 A2 `(OType A1) `(OType A2)
-         tp1 tp2 (q1:QuotesToType A1 tp1) (q2:QuotesToType A2 tp2) :
-  QuotesToType (A1 * A2) (OTpPair tp1 tp2) | 1.
-Proof.
-  unfold QuotesToType in * |- *. simpl. rewrite q1. rewrite q2. reflexivity.
-Qed.
-
-Instance QuotesToType_sum A1 A2 `(OType A1) `(OType A2)
-         tp1 tp2 (q1:QuotesToType A1 tp1) (q2:QuotesToType A2 tp2) :
-  QuotesToType (A1 + A2) (OTpSum tp1 tp2) | 1.
-Proof.
-  unfold QuotesToType in * |- *. simpl. rewrite q1. rewrite q2. reflexivity.
-Qed.
-
-Instance QuotesToType_arrow A1 A2 `(OType A1) `(OType A2)
-         tp1 tp2 (q1:QuotesToType A1 tp1) (q2:QuotesToType A2 tp2) :
-  QuotesToType (A1 -o> A2) (OTpArrow tp1 tp2) | 1.
-Proof.
-  unfold QuotesToType in * |- *. simpl. rewrite q1. rewrite q2. reflexivity.
-Qed.
-
-Instance QuotesToType_apply (TF: forall A `{OType A}, Type) `{OTypeF TF}
-         A `(OType A) tp (q:QuotesToType A tp) :
-  QuotesToType (TF A) (OTpApply TF tp) | 1.
-Proof.
-  unfold QuotesToType in * |- *. simpl. rewrite q. reflexivity.
-Qed.
-
-
-(*
-Definition quote_type_test A `{OType A} {tp:OTypeExpr} `{QuotesToType A tp} :=
-  tp.
-
-Eval compute in (fun A `(OType A) => quote_type_test (A -o> A * unit)).
-
-Eval compute in (fun TF `(OTypeF TF) A `(OType A) =>
-                   quote_type_test (TF (A + unit)%type _ _ -o> A * unit)).
- *)

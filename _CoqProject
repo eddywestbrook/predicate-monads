@@ -2,6 +2,7 @@
 
 ./theories/TypeReflection/OrderedType.v
 ./theories/TypeReflection/OTypeExpr.v
+./theories/TypeReflection/OExpr.v
 
 # ./theories/Reflection/OrderedType.v
 # ./theories/Reflection/OrderedContext.v
