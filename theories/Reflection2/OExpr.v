@@ -1,5 +1,5 @@
-Require Export PredMonad.TypeReflection2.OrderedType.
-Require Export PredMonad.TypeReflection2.OrderedContext.
+Require Export PredMonad.Reflection2.OrderedType.
+Require Export PredMonad.Reflection2.OrderedContext.
 
 
 (***
@@ -182,7 +182,7 @@ Proof.
 Qed.
 
 (* Weakening / lifting of ordered expressions *)
-Fixpoint weakenOExpr w W {RW ctx A RA}
+Fixpoint weakenOExpr w W {RW:OType W} {ctx A RA}
          (e:@OExpr ctx A RA) : OExpr (ctxInsert w W ctx) A :=
   match e in OExpr _ A return OExpr (ctxInsert w W ctx) A with
   | Var v => Var (weakenOVar w W v)
@@ -229,20 +229,18 @@ Qed.
  *** Substitution for Ordered Variables
  ***)
 
-FIXME HERE NOW: get this to work!
-
 (* Substitution for ordered expression variables *)
 Fixpoint substOVar n {ctx A RA} :
-  @OVar A RA ctx -> OExpr (ctxSuffix n ctx) (ctxNth n ctx) ->
+  @OVar A RA ctx -> @OExpr (ctxSuffix n ctx) (ctxNth ctx n) (ctxNthOType ctx n) ->
   OExpr (ctxDelete n ctx) A :=
   match n return
-        OVar A ctx -> OExpr (ctxSuffix n ctx) (ctxNth n ctx) ->
+        OVar A ctx -> OExpr (ctxSuffix n ctx) (ctxNth ctx n) ->
         OExpr (ctxDelete n ctx) A
   with
   | 0 =>
     fun v =>
       match v in OVar _ ctx return
-            OExpr (ctxSuffix 0 ctx) (ctxNth 0 ctx) ->
+            OExpr (ctxSuffix 0 ctx) (ctxNth ctx 0) ->
             OExpr (ctxDelete 0 ctx) A
       with
       | OVar_0 => fun s => s
@@ -251,19 +249,19 @@ Fixpoint substOVar n {ctx A RA} :
   | S n' =>
     fun v =>
       match v in OVar _ ctx return
-            OExpr (ctxSuffix (S n') ctx) (ctxNth (S n') ctx) ->
+            OExpr (ctxSuffix (S n') ctx) (ctxNth ctx (S n')) ->
             OExpr (ctxDelete (S n') ctx) A
       with
       | OVar_0 => fun _ => Var OVar_0
       | @OVar_S _ _ B RB ctx' v' =>
-        fun (s:@OExpr (ctxSuffix n' ctx') (ctxNth n' ctx') (OType_ctxNth n' ctx')) =>
-          weakenOExpr 0 B (substOVar n' v' s)
+        fun (s: @OExpr _ _ (ctxNthOType _ _)) =>
+          weakenOExpr 0 B (substOVar n' (ctx:=ctx') v' s)
       end
   end.
 Arguments substOVar !n {ctx A RA} !v s.
 
 (* Correctness of substOVar: it is equivalent to subst_pfun *)
-Lemma substOVar_correct n {ctx A RA tp} (v:@OVar A RA tp ctx) s :
+Lemma substOVar_correct n {ctx A RA} (v:@OVar A RA ctx) s :
   exprSemantics (substOVar n v s) =o=
   compose_pfun (subst_pfun ctx n (exprSemantics s)) (varSemantics v).
 Proof.
@@ -278,8 +276,8 @@ Proof.
 Qed.
 
 (* substOVar is Proper in its s argument *)
-Instance Proper_substOVar n {ctx A RA tp} v :
-  Proper (oexpr_R ==> oexpr_R) (@substOVar n ctx A RA tp v).
+Instance Proper_substOVar n {ctx A RA} v :
+  Proper (oexpr_R ==> oexpr_R) (@substOVar n ctx A RA v).
 Proof.
   revert ctx v; induction n; intros; destruct v; intros e1 e2 Re; simpl.
   - assumption.
@@ -289,8 +287,8 @@ Proof.
 Qed.
 
 (* substOVar is Proper in its s argument *)
-Instance Proper_substOVar_equiv n {ctx A RA tp} v :
-  Proper (oexpr_eq ==> oexpr_eq) (@substOVar n ctx A RA tp v).
+Instance Proper_substOVar_equiv n {ctx A RA} v :
+  Proper (oexpr_eq ==> oexpr_eq) (@substOVar n ctx A RA v).
 Proof.
   intros e1 e2 Re; destruct Re; split; apply Proper_substOVar; assumption.
 Qed.
@@ -301,24 +299,24 @@ Qed.
  ***)
 
 (* Substitution for ordered expressions *)
-Fixpoint substOExpr n {ctx A RA tp} (e:@OExpr ctx A RA tp) :
-  OExpr (ctxSuffix n ctx) (ctxNthExpr n ctx) -> OExpr (ctxDelete n ctx) tp :=
+Fixpoint substOExpr n {ctx A RA} (e:@OExpr ctx A RA) :
+  OExpr (ctxSuffix n ctx) (ctxNth ctx n) -> OExpr (ctxDelete n ctx) A :=
   match e with
   | Var v => fun s => substOVar n v s
   | Embed a => fun _ => Embed a
   | App e1 e2 => fun s => App (substOExpr n e1 s) (substOExpr n e2 s)
   | Lam e => fun s => Lam (substOExpr (S n) e s)
   end.
-Arguments substOExpr n {ctx A RA tp} !e.
+Arguments substOExpr n {ctx A RA} !e.
 
 (* Correctness of substOExpr: it is equivalent to subst_pfun *)
-Lemma substOExpr_correct n {ctx A RA tp} (e:@OExpr ctx A RA tp) s :
+Lemma substOExpr_correct n {ctx A RA} (e:@OExpr ctx A RA) s :
   exprSemantics (substOExpr n e s) =o=
   compose_pfun (subst_pfun ctx n (exprSemantics s)) (exprSemantics e).
 Proof.
   revert n s; induction e; intros; simpl.
   - apply substOVar_correct.
-  - symmetry. apply compose_f_const_pfun. typeclasses eauto.
+  - symmetry. apply compose_f_const_pfun.
   - etransitivity; [ | symmetry; apply compose_pfun_apply ];
       try typeclasses eauto.
     apply Proper_pfun_apply_equiv; [ apply IHe1 | apply IHe2 ].
@@ -334,8 +332,8 @@ Qed.
  ***)
 
 (* The Beta rule for ordered expressions *)
-Lemma OExpr_Beta ctx A RA tpA B RB tpB
-      (e1: @OExpr (@CtxCons A RA tpA ctx) B RB tpB) (e2: @OExpr ctx A RA tpA) :
+Lemma OExpr_Beta ctx A RA B RB
+      (e1: @OExpr (@CtxCons A RA ctx) B RB) (e2: @OExpr ctx A RA) :
   App (Lam e1) e2 =e= substOExpr 0 e1 e2.
 Proof.
   unfold oexpr_eq; simpl.
@@ -361,22 +359,21 @@ Definition OPair {ctx A B} : OExpr ctx (OTpArrow A (OTpArrow B (OTpPair A B))) :
 Typeclasses Opaque OFst OSnd OPair.
 *)
 
-Lemma OExpr_fst_pair ctx A RA tpA B RB tpB
-      (e1: @OExpr ctx A RA tpA) (e2: @OExpr ctx B RB tpB) :
+Lemma OExpr_fst_pair ctx A RA B RB
+      (e1: @OExpr ctx A RA) (e2: @OExpr ctx B RB) :
   App (Embed ofst) (App (App (Embed opair) e1) e2) =e= e1.
 Proof.
   split; intros a1 a2 Ra; simpl; f_equiv; assumption.
 Qed.
 
-Lemma OExpr_snd_pair ctx A RA tpA B RB tpB
-      (e1: @OExpr ctx A RA tpA) (e2: @OExpr ctx B RB tpB) :
+Lemma OExpr_snd_pair ctx A RA B RB
+      (e1: @OExpr ctx A RA) (e2: @OExpr ctx B RB) :
   App (Embed osnd) (App (App (Embed opair) e1) e2) =e= e2.
 Proof.
   split; intros a1 a2 Ra; simpl; f_equiv; assumption.
 Qed.
 
-Lemma OExpr_pair_eta ctx A RA (tpA:@OTypeExpr A RA) B RB (tpB:@OTypeExpr B RB)
-      (e: OExpr ctx (OTpPair tpA tpB)) :
+Lemma OExpr_pair_eta ctx A (RA:OType A) B (RB:OType B) (e: OExpr ctx (A * B)) :
   (App (App (Embed opair) (App (Embed ofst) e)) (App (Embed osnd) e)) =e= e.
 Proof.
   split; intros a1 a2 Ra; split; simpl; f_equiv; f_equiv; assumption.
@@ -390,32 +387,31 @@ Hint Rewrite OExpr_fst_pair OExpr_snd_pair OExpr_pair_eta : osimpl.
  ***)
 
 (* Specially-marked versions of fst and snd just used for quoting OExprs *)
-Definition celem_head {ctx A RA tpA}
-           (celem: CtxElem (@CtxCons A RA tpA ctx)) : A :=
+Definition celem_head {ctx A RA}
+           (celem: CtxElem (@CtxCons A RA ctx)) : A :=
   let (_,head) := celem in head.
-Definition celem_rest {ctx A RA tpA}
-           (celem: CtxElem (@CtxCons A RA tpA ctx)) : CtxElem ctx :=
+Definition celem_rest {ctx A RA}
+           (celem: CtxElem (@CtxCons A RA ctx)) : CtxElem ctx :=
   let (rest,_) := celem in rest.
 
 (* Typeclass for incrementally quoting functions into OExpr variables, by
 peeling off the celem_rest projections one at a time and adding them as OVar_S
 constructors to the input variable to build the output variable *)
-Class QuotesToVar {ctx1 ctx2 A RA} {tpA:@OTypeExprInd A RA}
+Class QuotesToVar {ctx1 ctx2 A} {RA:OType A}
       (f: CtxElem ctx1 -> CtxElem ctx2)
-      (vin: OVar tpA ctx2) (vout: OVar tpA ctx1) : Prop :=
+      (vin: OVar A ctx2) (vout: OVar A ctx1) : Prop :=
   quotesToVar :
     forall c, varSemantics vin @o@ (f c) = varSemantics vout @o@ c.
 
-Instance QuotesToVar_Base {ctx A RA} {tpA:@OTypeExprInd A RA}
-         (v:@OVar A RA tpA ctx) : QuotesToVar (fun c => c) v v.
+Instance QuotesToVar_Base {ctx A RA}
+         (v:@OVar A RA ctx) : QuotesToVar (fun c => c) v v.
 Proof.
   intro; reflexivity.
 Qed.
 
-Instance QuotesToVar_Step {ctx1 ctx2 A RA} {tpA:@OTypeExprInd A RA}
-         {B RB} {tpB:@OTypeExprInd B RB}
-         (f: CtxElem ctx1 -> CtxElem (@CtxCons B RB tpB ctx2)) vin vout
-         (q: @QuotesToVar _ _ A RA tpA f (OVar_S vin) vout) :
+Instance QuotesToVar_Step {ctx1 ctx2 A} {RA:OType A} {B} {RB:OType B}
+         (f: CtxElem ctx1 -> CtxElem (@CtxCons B RB ctx2)) vin vout
+         (q: @QuotesToVar _ _ A RA f (OVar_S vin) vout) :
   QuotesToVar (fun c => celem_rest (f c)) vin vout.
 Proof.
   intro. apply q.
@@ -423,20 +419,17 @@ Qed.
 
 
 (* Class for quoting functions to OExprs *)
-Class QuotesTo {ctx A RA} {tpA:@OTypeExprInd A RA} (f: CtxElem ctx -> A)
-      (e: @OExpr ctx A RA tpA) : Prop :=
+Class QuotesTo {ctx A RA} (f: CtxElem ctx -> A) (e: @OExpr ctx A RA) : Prop :=
   quotesTo : forall c, f c =o= exprSemantics e @o@ c.
 
 (* Logically the same as QuotesTo, but we never build lambdas in this one, i.e.,
 this only builds "atomic" OExprs *)
-Class QuotesToAtomic {ctx A RA} {tpA:@OTypeExprInd A RA}
-      (f: CtxElem ctx -> A) (e: @OExpr ctx A RA tpA) :=
+Class QuotesToAtomic {ctx A RA} (f: CtxElem ctx -> A) (e: @OExpr ctx A RA) :=
   quotesToAtomic : QuotesTo f e.
 
 (* Quote any term of functional type to a lambda *)
-Instance QuotesTo_Lam {ctx A RA} {tpA:@OTypeExprInd A RA}
-         {B RB} {tpB:@OTypeExprInd B RB} (f: CtxElem ctx -> A -o> B)
-         (e: OExpr (CtxCons tpA ctx) tpB)
+Instance QuotesTo_Lam {ctx A RA B RB} (f: CtxElem ctx -> A -o> B)
+         (e: @OExpr (@CtxCons A RA ctx) B RB)
          (q: QuotesTo (fun c => f (celem_rest c) @o@ (celem_head c)) e) :
   QuotesTo f (Lam e) | 2.
 Proof.
@@ -445,9 +438,8 @@ Proof.
 Qed.
 
 (* Special case: quote ofuns as lambdas, destructuring the ofun *)
-Instance QuotesTo_Lam_ofun {ctx A RA} {tpA:@OTypeExprInd A RA}
-         {B RB} {tpB:@OTypeExprInd B RB} (f: CtxElem ctx -> A -> B) prp
-         (e: OExpr (CtxCons tpA ctx) tpB)
+Instance QuotesTo_Lam_ofun {ctx A RA B RB} (f: CtxElem ctx -> A -> B) prp
+         (e: @OExpr (@CtxCons A RA ctx) B RB)
          (q: QuotesTo (fun c => f (celem_rest c) (celem_head c)) e) :
   QuotesTo (fun c => ofun (f c) (prp:=prp c)) (Lam e) | 1.
 Proof.
@@ -456,45 +448,44 @@ Qed.
 
 
 (* Quote any non-function term as an atomic OExpr *)
-Instance QuotesTo_Atomic {ctx A RA} {tpA:@OTypeExprInd A RA}
-         (f: CtxElem ctx -> A) e (q: QuotesToAtomic f e) :
-  QuotesTo (tpA:=tpA) f e | 3 := q.
+Instance QuotesTo_Atomic {ctx A} {RA:OType A} (f: CtxElem ctx -> A)
+         e (q: QuotesToAtomic f e) :
+  QuotesTo f e | 3 := q.
 
 (* Quote any use of celem_head as a var *)
-Instance QuotesTo_Var {ctx1 ctx2 A RA} {tpA:@OTypeExprInd A RA}
-         (f: CtxElem ctx1 -> CtxElem (CtxCons tpA ctx2)) v
+Instance QuotesTo_Var {ctx1 ctx2 A} {RA:OType A}
+         (f: CtxElem ctx1 -> CtxElem (CtxCons A ctx2)) v
          (q: QuotesToVar f OVar_0 v) :
   QuotesToAtomic (fun c => celem_head (f c)) (Var v) | 1.
 Proof.
-  intro. rewrite <- (quotesToVar (QuotesToVar:=q)). destruct (f c).
+  intro. rewrite <- q. destruct (f c).
   reflexivity.
 Qed.
 
 (* Special case for an eta-reduced celem_head application *)
-Instance QuotesTo_Var0 {ctx A RA} {tpA:@OTypeExprInd A RA} :
-  QuotesToAtomic (@celem_head ctx A RA tpA) (Var OVar_0) | 1.
+Instance QuotesTo_Var0 {ctx A} {RA:OType A} :
+  QuotesToAtomic (@celem_head ctx A RA) (Var OVar_0) | 1.
 Proof.
   intro; reflexivity.
 Qed.
 
 (* Quote applications as OExpr applications, where the function must still be
 atomic but the argument need not be *)
-Instance QuotesTo_App {ctx A RA} {tpA:@OTypeExprInd A RA} {B RB}
-         {tpB:@OTypeExprInd B RB}
+Instance QuotesTo_App {ctx A} {RA:OType A} {B} {RB:OType B}
          (f1: CtxElem ctx -> A -o> B) (f2: CtxElem ctx -> A)
-         (e1: OExpr ctx (OTpArrow tpA tpB)) (e2: OExpr ctx tpA)
+         (e1: OExpr ctx (A -o> B)) (e2: OExpr ctx A)
          (q1: QuotesToAtomic f1 e1) (q2: QuotesTo f2 e2) :
   QuotesToAtomic (fun c => (f1 c) @o@ (f2 c)) (App e1 e2) | 1.
 Proof.
   intro. simpl. f_equiv.
-  - apply (quotesTo (QuotesTo:=q1)).
-  - apply (quotesTo (QuotesTo:=q2)).
+  - apply q1.
+  - apply q2.
 Qed.
 
 (* Quote ofuns in atomic position as lambdas *)
-Instance QuotesToAtomic_ofun {ctx A RA} {tpA:@OTypeExprInd A RA} {B RB}
-         {tpB:@OTypeExprInd B RB} (f: CtxElem ctx -> A -> B) prp
-         (e: OExpr (CtxCons tpA ctx) tpB)
+Instance QuotesToAtomic_ofun {ctx A} {RA:OType A} {B} {RB:OType B}
+         (f: CtxElem ctx -> A -> B) prp
+         (e: OExpr (CtxCons A ctx) B)
          (q: QuotesTo (fun c => f (celem_rest c) (celem_head c)) e) :
   QuotesToAtomic (fun c => ofun (f c) (prp:=prp c)) (Lam e) | 1.
 Proof.
@@ -503,45 +494,41 @@ Qed.
 
 (* Quote objects that are independent of the context as embedded objects, but at
 low priority *)
-Instance QuotesTo_Embed {ctx A RA} {tpA:@OTypeExprInd A RA} (a:A) :
-  QuotesToAtomic (fun _ => a) (@Embed ctx A RA tpA a) | 2.
+Instance QuotesTo_Embed {ctx A} {RA:OType A} (a:A) :
+  QuotesToAtomic (fun _ => a) (@Embed ctx A RA a) | 2.
 Proof.
   intro. reflexivity.
 Qed.
 
 (* Quote pairs as applications of opair *)
-Instance QuotesTo_pair {ctx A RA} {tpA:@OTypeExprInd A RA} {B RB}
-         {tpB:@OTypeExprInd B RB} (a: CtxElem ctx -> A) (b: CtxElem ctx -> B)
-         (e1: OExpr ctx tpA) (e2: OExpr ctx tpB)
+Instance QuotesTo_pair {ctx A} {RA:OType A} {B} {RB:OType B}
+         (a: CtxElem ctx -> A) (b: CtxElem ctx -> B)
+         (e1: OExpr ctx A) (e2: OExpr ctx B)
          (q1: QuotesTo a e1) (q2: QuotesTo b e2) :
-  QuotesToAtomic (tpA:=OTpPair tpA tpB) (fun c => (a c, b c))
-                 (App (App (Embed opair) e1) e2) | 1.
+  QuotesToAtomic (fun c => (a c, b c)) (App (App (Embed opair) e1) e2) | 1.
 Proof.
   intro. simpl. rewrite (q1 c). rewrite (q2 c). reflexivity.
 Qed.
 
 (* Quote applications of fst as applications of ofst *)
-Instance QuotesTo_fst {ctx A RA} {tpA:@OTypeExprInd A RA} {B RB}
-         {tpB:@OTypeExprInd B RB} (f: CtxElem ctx -> A * B)
-         (e: OExpr ctx (OTpPair tpA tpB)) (q: QuotesTo f e) :
-  QuotesToAtomic (tpA:=tpA) (fun c => fst (f c)) (App (Embed ofst) e) | 1.
+Instance QuotesTo_fst {ctx A} {RA:OType A} {B} {RB:OType B}
+         (f: CtxElem ctx -> A * B) (e: OExpr ctx (A*B)) (q: QuotesTo f e) :
+  QuotesToAtomic (fun c => fst (f c)) (App (Embed ofst) e) | 1.
 Proof.
   intro. simpl. rewrite (q c). reflexivity.
 Qed.
 
 (* Quote applications of snd as applications of osnd *)
-Instance QuotesTo_snd {ctx A RA} {tpA:@OTypeExprInd A RA} {B RB}
-         {tpB:@OTypeExprInd B RB} (f: CtxElem ctx -> A * B)
-         (e: OExpr ctx (OTpPair tpA tpB)) (q: QuotesTo f e) :
-  QuotesToAtomic (tpA:=tpB) (fun c => snd (f c)) (App (Embed osnd) e) | 1.
+Instance QuotesTo_snd {ctx A} {RA:OType A} {B} {RB:OType B}
+         (f: CtxElem ctx -> A * B) (e: OExpr ctx (A*B)) (q: QuotesTo f e) :
+  QuotesToAtomic (fun c => snd (f c)) (App (Embed osnd) e) | 1.
 Proof.
   intro. simpl. rewrite (q c). reflexivity.
 Qed.
 
 
 (* Use QuotesTo to prove a relation *)
-Lemma oquote_R {A RA} {tpA:@OTypeExprInd A RA} {f1 f2 : A}
-      {e1 e2: OExpr CtxNil tpA}
+Lemma oquote_R {A} {RA:OType A} {f1 f2 : A} {e1 e2: OExpr CtxNil A}
       {q1: QuotesTo (fun _ => f1) e1} {q2: QuotesTo (fun _ => f2) e2} :
   e1 <e= e2 -> f1 <o= f2.
 Proof.
@@ -552,9 +539,8 @@ Proof.
 Qed.
 
 (* Use QuotesTo to prove an equivalence *)
-Lemma oquote_eq {A RA} {tpA:@OTypeExpr A RA} {f1 f2 : A}
-      {e1 e2: OExpr CtxNil tpA}
-      {q1: QuotesTo (tpA:=tpA) (fun _ => f1) e1} {q2: QuotesTo (fun _ => f2) e2} :
+Lemma oquote_eq {A} {RA:OType A} {f1 f2 : A} {e1 e2: OExpr CtxNil A}
+      {q1: QuotesTo (fun _ => f1) e1} {q2: QuotesTo (fun _ => f2) e2} :
   e1 =e= e2 -> f1 =o= f2.
 Proof.
   intro R12.
@@ -585,28 +571,143 @@ Ltac osimpl :=
 
 
 (***
+ *** Unquoting
+ ***)
+
+(* Class for unquoting OVars to functions *)
+Class UnQuotesToVar {ctx A} {RA:OType A}
+      (v: OVar A ctx) (f: CtxElem ctx -> A) : Prop :=
+  { unQuotesToVarProper : Proper (ot_R ==> ot_R) f;
+    unQuotesToVar : forall c, f c = varSemantics v @o@ c }.
+
+Instance UnQuotesToVar_Base A RA ctx :
+  UnQuotesToVar (@OVar_0 A RA ctx) snd.
+Proof.
+  split.
+  - typeclasses eauto.
+  - intros; reflexivity.
+Qed.
+
+Instance UnQuotesToVar_Step A RA ctx B (RB:OType B) (v:OVar A ctx) f
+         (q: UnQuotesToVar v f) :
+  UnQuotesToVar (@OVar_S A RA B RB ctx v) (fun c => f (fst c)).
+Proof.
+  split.
+  - intros c1 c2 Rc. apply (unQuotesToVarProper (UnQuotesToVar:=q)).
+    f_equiv. assumption.
+  - intros; apply q.
+Qed.
+
+
+(* Class for unquoting OExprs to functions *)
+Class UnQuotesTo {ctx A RA} (e: @OExpr ctx A RA) (f: CtxElem ctx -> A) : Prop :=
+  unQuotesTo : forall c, f c =o= exprSemantics e @o@ c.
+
+Instance UnQuotesTo_Var ctx A {RA:OType A} (v:OVar A ctx) f
+         (q: UnQuotesToVar v f) :
+  UnQuotesTo (Var v) f | 1.
+Proof.
+  intro. rewrite (unQuotesToVar (UnQuotesToVar:=q)). reflexivity.
+Qed.
+
+Instance UnQuotesTo_Embed ctx A {RA:OType A} (a:A) :
+  UnQuotesTo (@Embed ctx A RA a) (fun _ => a) | 1.
+Proof.
+  intro; reflexivity.
+Qed.
+
+Instance UnQuotesTo_App {ctx A} {RA:OType A} {B} {RB:OType B}
+         e1 e2 (f1: CtxElem ctx -> A -o> B) (f2: CtxElem ctx -> A)
+         (q1: UnQuotesTo e1 f1) (q2: UnQuotesTo e2 f2) :
+  UnQuotesTo (App e1 e2) (fun c => (f1 c) @o@ (f2 c)) | 1.
+Proof.
+  intro. simpl. f_equiv.
+  - apply (unQuotesTo (UnQuotesTo:=q1)).
+  - apply (unQuotesTo (UnQuotesTo:=q2)).
+Qed.
+
+Lemma Proper_unQuotesTo {ctx A} {RA:OType A} {B} {RB:OType B}
+      {e: OExpr (CtxCons A ctx) B} {f} (q: UnQuotesTo e f) c :
+  Proper (ot_R ==> ot_R) (fun a => f (c, a)).
+Proof.
+  intros a1 a2 Ra.
+  etransitivity; [ apply (unQuotesTo (UnQuotesTo:=q)) | ].
+  etransitivity; [ | apply (unQuotesTo (UnQuotesTo:=q)) ].
+  f_equiv. split; [ reflexivity | assumption ].
+Qed.
+
+Instance UnQuotesTo_Lam {ctx A} {RA:OType A} {B} {RB:OType B}
+      (e: OExpr (CtxCons A ctx) B) f (q: UnQuotesTo e f) :
+  UnQuotesTo (Lam e) (fun c =>
+                        ofun (fun a => f (c, a))
+                             (prp:=Proper_unQuotesTo q c)) | 1.
+Proof.
+  intro; split; intros a1 a2 Ra; simpl.
+  - etransitivity.
+    + apply (Proper_unQuotesTo q); apply Ra.
+    + apply (unQuotesTo (UnQuotesTo:=q)).
+  - etransitivity.
+    + apply (unQuotesTo (UnQuotesTo:=q)).
+    + apply (Proper_unQuotesTo q); apply Ra.
+Qed.
+
+
+(* The above instance generally will not fire, because the implicit ctx argument
+to UnQuotesTo is of the form (ctxInsert w W ctx), but this will generally be
+already simplified away in the goal, making it hard for Coq to match. The
+following instructs Coq how to do the match by supplying the w argument. *)
+Instance UnQuotesTo_weakenOExpr {ctx A} {RA:OType A} w W {OW:OType W}
+         (e: OExpr ctx A) f (q: UnQuotesTo e f) :
+  UnQuotesTo (weakenOExpr w W e) (fun c => f (weaken_pfun w W _ @o@ c)) | 1.
+Proof.
+  intro. rewrite weakenOExpr_correct. simpl.
+  rewrite (unQuotesTo (UnQuotesTo:=q)). reflexivity.
+Qed.
+
+(* The above instance will generally not fire because the ctxInsert implicit
+argument to UnQuotesTo will already be simplified, and so Coq will not be able
+to match it; this, we make an explicit extern tactic to do the matching *)
+Hint Extern 1 (@UnQuotesTo _ _ _ (weakenOExpr _ _ _) _) =>
+(lazymatch goal with
+ | |- UnQuotesTo (weakenOExpr ?w ?W _) _ =>
+   apply (UnQuotesTo_weakenOExpr w W)
+ end) : typeclass_instances.
+
+
+(* This instance is meant to only apply to Coq-level variables of OExpr type *)
+Instance UnQuotesTo_MetaVar {ctx A} {RA:OType A} (e:OExpr ctx A) :
+  UnQuotesTo e (fun c => exprSemantics e @o@ c) | 2.
+Proof.
+  intro. f_equiv.
+Qed.
+
+Lemma unquote_R {ctx A} {RA:OType A} {e1 e2: OExpr ctx A}
+      {f1 f2 : CtxElem ctx -> A} {q1: UnQuotesTo e1 f1} {q2: UnQuotesTo e2 f2} :
+  (forall c, f1 c <o= f2 c) -> e1 <e= e2.
+Proof.
+  intro R12.
+  intros c1 c2 Rc. rewrite Rc.
+  transitivity (f1 c2); [ apply (unQuotesTo (UnQuotesTo:=q1)) | ].
+  transitivity (f2 c2); [ | apply (unQuotesTo (UnQuotesTo:=q2)) ].
+  apply R12.
+Qed.
+
+Lemma unquote_eq {ctx A} {RA:OType A} {e1 e2: OExpr ctx A}
+      {f1 f2 : CtxElem ctx -> A} {q1: UnQuotesTo e1 f1} {q2: UnQuotesTo e2 f2} :
+  (forall c, f1 c =o= f2 c) -> e1 =e= e2.
+Proof.
+  intro R12.
+  split; [ apply (unquote_R (q1:=q1) (q2:=q2))
+         | apply (unquote_R (q1:=q2) (q2:=q1)) ];
+  intro c; destruct (R12 c); assumption.
+Qed.
+
+
+(***
  *** Testing the Quote Mechanism
  ***)
 
 Module OQuoteTest.
-
-(* Set Printing All. *)
-(* Hint Extern 4 (QuotesTo ) : typeclass_instances. *)
-
-(*
-Goal (forall A (RA:OTRelation A) (a:A),
-         exists (tpA:OTypeExprInd A) (e:OExpr CtxNil tpA),
-           QuotesTo (fun _ => a) e).
-  intros. eexists. eexists.
-  typeclasses eauto.
-  simple apply @QuotesTo_Atomic.
- *)
-(* Hint Extern 1 (OTypeExprInd _) => prove_OTypeExpr : typeclass_instances. *)
-(* Typeclasses Opaque OTypeExprInd.
-Print HintDb typeclass_instances. *)
-
-Instance Equivalence_oexpr_eq' ctx A RA (tp:@OTypeExprInd A RA)
-  : Equivalence (@oexpr_eq ctx A RA tp) := Equivalence_oexpr_eq _ _ _ _.
 
 (* A simple test case for constant terms *)
 Lemma simple_quote_test A `{OType A} a : a =o= a.
@@ -628,13 +729,7 @@ Qed.
 Lemma beta_product_test A `{OType A} B `{OType B} (p:A*B) :
   ofun (fun p => (osnd @o@ p ,o, ofst @o@ p)) @o@ (osnd @o@ p ,o, ofst @o@ p)
   =o= p.
-  (* osimpl *)
-  (* NOTE: we write this out to see how long each step takes... *)
-  oquote.
-
-  FIXME HERE NOW: quoting for ofuns is not working!
-
-  oexpr_simpl. reflexivity. typeclasses eauto.
+  osimpl.
 Qed.
 
 Lemma double_lambda_test A `{OType A} :
@@ -651,8 +746,7 @@ Lemma beta_product_test2 A `{OType A} B `{OType B} :
   =o= opair.
   (* osimpl *)
   (* NOTE: we write this out to see how long each step takes... *)
-  oquote. oexpr_simpl.
-  reflexivity. typeclasses eauto. typeclasses eauto.
+  oquote. oexpr_simpl. reflexivity.
 Qed.
 
 End OQuoteTest.

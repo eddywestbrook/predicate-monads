@@ -1,4 +1,4 @@
-Require Export PredMonad.TypeReflection2.OrderedType.
+Require Export PredMonad.Reflection2.OrderedType.
 
 
 (***
@@ -37,28 +37,38 @@ Definition ctx_tail_pfun {ctx A RA} :
   fst_pfun.
 
 (* Look up the nth type in a Ctx, returning the unit type as a default *)
-Fixpoint ctxNth n ctx {struct ctx} : Type :=
+Fixpoint ctxNth ctx n {struct ctx} : Type :=
   match ctx with
   | CtxNil => unit
   | @CtxCons A _ ctx' =>
     match n with
     | 0 => A
-    | S n' => ctxNth n' ctx'
+    | S n' => ctxNth ctx' n'
     end
   end.
-Arguments ctxNth !n !ctx.
+Arguments ctxNth !ctx !n.
 
-Instance OType_ctxNth n ctx : OType (ctxNth n ctx).
-Proof.
-  revert n; induction ctx; [ | destruct n ]; intros; typeclasses eauto.
-Defined.
+(* Look up the nth OType in a Ctx *)
+Fixpoint ctxNthOType ctx {struct ctx} : forall n, OType (ctxNth ctx n) :=
+  match ctx return forall n, OType (ctxNth ctx n) with
+  | CtxNil => fun _ => OTunit
+  | @CtxCons A RA ctx' =>
+    fun n =>
+      match n return OType (ctxNth (@CtxCons A RA ctx') n) with
+      | 0 => RA
+      | S n' => ctxNthOType ctx' n'
+      end
+  end.
+Arguments ctxNthOType !ctx !n.
+
+Hint Resolve ctxNthOType : typeclass_instances.
 
 (* Pfun to extract the nth element of a context *)
-Fixpoint nth_pfun ctx n : CtxElem ctx -o> ctxNth n ctx :=
-  match ctx return CtxElem ctx -o> ctxNth n ctx with
+Fixpoint nth_pfun ctx n : CtxElem ctx -o> ctxNth ctx n :=
+  match ctx return CtxElem ctx -o> ctxNth ctx n with
   | CtxNil => const_pfun tt
   | CtxCons tp ctx' =>
-    match n return CtxElem (CtxCons tp ctx') -o> ctxNth n (CtxCons tp ctx') with
+    match n return CtxElem (CtxCons tp ctx') -o> ctxNth (CtxCons tp ctx') n with
     | 0 => ctx_head_pfun
     | S n' =>
       compose_pfun ctx_tail_pfun (nth_pfun ctx' n')
@@ -119,15 +129,15 @@ Arguments ctxSuffix n ctx : simpl nomatch.
 
 (* Substitute into a context by providing a pfun for the nth value *)
 Fixpoint subst_pfun ctx n :
-  (CtxElem (ctxSuffix n ctx) -o> ctxNth n ctx) ->
+  (CtxElem (ctxSuffix n ctx) -o> ctxNth ctx n) ->
   CtxElem (ctxDelete n ctx) -o> CtxElem ctx :=
   match ctx return
-        (CtxElem (ctxSuffix n ctx) -o> ctxNth n ctx) ->
+        (CtxElem (ctxSuffix n ctx) -o> ctxNth ctx n) ->
         CtxElem (ctxDelete n ctx) -o> CtxElem ctx with
   | CtxNil => fun s => const_pfun tt
   | CtxCons A ctx' =>
     match n return
-        (CtxElem (ctxSuffix n (CtxCons A ctx')) -o> ctxNth n (CtxCons A ctx')) ->
+        (CtxElem (ctxSuffix n (CtxCons A ctx')) -o> ctxNth (CtxCons A ctx') n) ->
         CtxElem (ctxDelete n (CtxCons A ctx')) -o> CtxElem (CtxCons A ctx')
     with
     | 0 => fun s => pair_pfun id_pfun s

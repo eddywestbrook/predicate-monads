@@ -1,8 +1,8 @@
 -Q theories PredMonad
 
-./theories/TypeReflection2/OrderedType.v
-./theories/TypeReflection2/OrderedContext.v
-./theories/TypeReflection2/OExpr.v
+./theories/Reflection2/OrderedType.v
+./theories/Reflection2/OrderedContext.v
+./theories/Reflection2/OExpr.v
 
 # ./theories/Reflection/OrderedType.v
 # ./theories/Reflection/OrderedContext.v
