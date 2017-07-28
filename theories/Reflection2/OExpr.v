@@ -750,7 +750,3 @@ Lemma beta_product_test2 A `{OType A} B `{OType B} :
 Qed.
 
 End OQuoteTest.
-
-
-
-FIXME HERE NOW: continue porting OExpr_typed.v!
