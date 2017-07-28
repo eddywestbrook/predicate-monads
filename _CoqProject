@@ -4,6 +4,7 @@
 ./theories/Reflection2/OrderedContext.v
 ./theories/Reflection2/OExpr.v
 ./theories/Reflection2/Monad.v
+./theories/Reflection2/MonadState.v
 
 # ./theories/Reflection/OrderedType.v
 # ./theories/Reflection/OrderedContext.v
