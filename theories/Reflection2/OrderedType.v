@@ -768,6 +768,10 @@ Proof.
   - apply IHarity. apply RF.
 Defined.
 
+(* Get out the OType from applying a unary functor *)
+Instance OType_OTFunctorApply1 F (RF:OTypeF1 1 F) A {RA:OType A} :
+  OType (F A RA) := OType_OTFunctorApply 1 F RF (ArgsCons A ArgsNil).
+
 
 (***
  *** Ordered Type Functors of Higher Kinds
