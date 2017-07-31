@@ -73,21 +73,18 @@ Lemma monad_state_get_put_OExpr
  *** The State Monad Transformer
  ***)
 
-Definition StateT St `{OType St} M `{OTypeF1 1 M} A `{OType A} :=
+Definition StateT St `{OType St} M `{OTypeF1 M} A `{OType A} :=
   St -o> M (St * A)%type _.
 
-
-FIXME HERE NOW: get rid of general functors...?
-
-Instance OTypeF_StateT St `{OType St} M `{OTypeF1 1 M} :
-  OTypeF1 1 (StateT St M) :=
+Instance OTypeF1_StateT St `{OType St} M `{OTypeF1 M} :
+  OTypeF1 (StateT St M) :=
   fun _ _ => _.
 
 Instance StateT_MonadOps St `{OType St} M `{MonadOps M} : MonadOps (StateT St M) :=
   {returnM :=
-     fun A _ _ => ofun (fun x => ofun (fun s => returnM @o@ (s ,o, x)));
+     fun A _ => ofun (fun x => ofun (fun s => returnM @o@ (s ,o, x)));
    bindM :=
-     fun A B _ _ _ _ =>
+     fun A B _ _ =>
        ofun
          (fun m =>
             ofun (fun f =>
@@ -96,13 +93,11 @@ Instance StateT_MonadOps St `{OType St} M `{MonadOps M} : MonadOps (StateT St M)
                               f @o@ (osnd @o@ s_x) @o@ (ofst @o@ s_x))))
   }.
 
-(* Typeclasses Opaque celem_head celem_rest. *)
 
 (* The Monad instance for StateT *)
 Instance StateT_Monad St `{OType St} M `{Monad M} : Monad (StateT St M).
 Proof.
   constructor; intros.
-  Typeclasses eauto := debug.
   - osimpl.
   - osimpl.
   - osimpl.

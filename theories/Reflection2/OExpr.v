@@ -561,13 +561,20 @@ Ltac oquote :=
   end.
 
 Ltac oexpr_simpl :=
+  repeat (repeat rewrite OExpr_Beta ; simpl;
+          try ((rewrite_strat (bottomup (hints osimpl ; eval simpl))))).
+
+(* This one is not as fast for some reason... *)
+(*
+Ltac oexpr_simpl :=
   rewrite_strat (bottomup (choice (OExpr_Beta ; eval simpl) (hints osimpl))).
+ *)
 
 (* Translate a problem about proper functions into one about OExprs by calling
 oquote, simplify both sides using the osimpl rewrite database, and then try to
 use reflexivity, going back to proper functions if that does not work *)
 Ltac osimpl :=
-  simpl; oquote; try oexpr_simpl; try reflexivity; try typeclasses eauto; simpl.
+  oquote; try oexpr_simpl; try reflexivity; try typeclasses eauto; simpl.
 
 
 (***
