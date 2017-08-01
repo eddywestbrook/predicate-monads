@@ -90,7 +90,14 @@ Qed.
 (* The ordered type of propositions *)
 Instance OTProp : OType Prop :=
   {| ot_R := Basics.impl |}.     
-Proof. repeat constructor; typeclasses eauto. Qed.
+Proof. repeat constructor; typeclasses eauto. Defined.
+
+(* Proofs are always related (i.e., this is the proof irrelevance type) *)
+Instance OTproof (P:Prop) : OType P :=
+  {| ot_R := fun _ _ => True |}.
+Proof.
+  repeat constructor.
+Defined.
 
 (* The discrete ordered type, where things are only related to themselves; we
 make this a definition, not an instance, so that it can be instantiated for
@@ -103,6 +110,8 @@ Instance OTunit : OType unit := OTdiscrete unit.
 (* The ordered type that flips the ordering of an underlying OType; this becomes
 a type itself in Coq *)
 Inductive Flip A : Type := flip (a:A).
+Arguments flip {A} a.
+
 Definition unflip {A} (f:Flip A) : A := let (x) := f in x.
 
 Instance OTFlip A (R:OType A) : OType (Flip A) :=
@@ -112,6 +121,9 @@ Proof.
   - destruct x; compute; reflexivity.
   - destruct x; destruct y; destruct z; compute; transitivity a0; assumption.
 Defined.
+
+(* The discrete relation on Booleans *)
+Instance OTbool : OType bool := OTdiscrete bool.
 
 (* The pointwise relation on pairs *)
 Instance OTpair A B `(OType A) `(OType B) : OType (A*B) :=
@@ -682,6 +694,88 @@ Qed.
 
 
 (***
+ *** Ordered Terms for Boolean Operations
+ ***)
+
+Program Definition oif {A} `{OType A} : bool -o> A -o> A -o> A :=
+  ofun (fun (b:bool) =>
+          ofun (fun x =>
+                  ofun (fun y => if b then x else y) (prp:=_)) (prp:=_)) (prp:=_).
+Next Obligation.
+  unfold ProperPair.
+  destruct b; [ reflexivity | apply H0 ].
+Defined.
+Next Obligation.
+  destruct b; [ apply H0 | assumption ].
+Defined.
+Next Obligation.
+  destruct y; assumption.
+Defined.
+
+
+(***
+ *** Ordered Terms for Propositional Connectives
+ ***)
+
+(* The universal combinator as an ordered function *)
+Program Definition oforall `{OType} : (A -o> Prop) -o> Prop :=
+  ofun (fun (P:A -o> Prop) => forall x, P @o@ x) (prp:=_).
+Next Obligation.
+  intros pf z. apply (H0 _ _ (reflexivity _) (pf z)).
+Defined.
+
+(* The existential combinator as an ordered function *)
+Program Definition oexists `{OType} : (A -o> Prop) -o> Prop :=
+  ofun (fun P => exists x, P @o@ x) (prp:=_).
+Next Obligation.
+  intro pf; destruct pf as [z pf].
+  exists z. apply (H0 _ _ (reflexivity _) pf).
+Defined.
+
+(* Conjunction as an ordered function *)
+Program Definition oand : Prop -o> Prop -o> Prop :=
+  ofun (fun P1 => ofun (fun P2 => P1 /\ P2) (prp:=_)) (prp:=_).
+Next Obligation.
+  intro. destruct H0; split; try assumption. apply H; assumption.
+Defined.
+Next Obligation.
+  intro. destruct H1. split; [ apply H | apply H0 ]; assumption.
+Defined.
+
+(* Disjunction as an ordered function *)
+Program Definition oor : Prop -o> Prop -o> Prop :=
+  ofun (fun P1 => ofun (fun P2 => P1 \/ P2) (prp:=_)) (prp:=_).
+Next Obligation.
+  intro. destruct H0; [ left | right; apply H ]; assumption.
+Defined.
+Next Obligation.
+  intro. destruct H1; [ left; apply H | right; apply H0 ]; assumption.
+Defined.
+
+(* Implication as an ordered function *)
+Program Definition oimpl : Flip Prop -o> Prop -o> Prop :=
+  ofun (fun (P1:Flip Prop) => ofun (fun (P2:Prop) =>
+                                      unflip P1 -> P2) (prp:=_)) (prp:=_).
+Next Obligation.
+  intros pf1x pf1; apply H; apply pf1x; assumption.
+Defined.
+Next Obligation.
+  intros pfx1 pfy; apply H0; apply pfx1; apply H; apply pfy.
+Defined.
+
+(* Ordered type relations are themselves ordered propositional functions *)
+Program Definition oR `{OType} : Flip A -o> A -o> Prop :=
+  ofun (fun (x:Flip A) => ofun (fun y => ot_R (unflip x) y) (prp:=_)) (prp:=_).
+Next Obligation.
+  intro pf. etransitivity; eassumption.
+Defined.
+Next Obligation.
+  intro pf. etransitivity; try eassumption.
+  etransitivity; eassumption.
+Defined.
+
+
+(***
  *** Notations for Ordered Terms
  ***)
 
@@ -706,7 +800,7 @@ Class OTypeF1 (F:forall A {RA:OType A}, Type) : Type :=
 
 (* Get out the OType from applying a unary functor *)
 Instance OType_OTypeF1 F (RF:OTypeF1 F) A (RA:OType A) :
-  OType (F A _) := otypeF1 A.
+  OType (F A _) | 5 := otypeF1 A.
 
 
 (***
