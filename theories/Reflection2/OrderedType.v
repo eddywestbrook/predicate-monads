@@ -621,14 +621,14 @@ Instance ProperPair_pfun_app A B `{OType A} `{OType B}
          (fl fr:A -o> B) argl argr
          (prpf:ProperPair (A -o> B) fl fr)
          (prpa:ProperPair A argl argr)
- : ProperPair B (pfun_app fl argl) (pfun_app fr argr).
+ : ProperPair B (pfun_app fl argl) (pfun_app fr argr) | 2.
 Proof.
   apply prpf; assumption.
 Qed.
 
 Instance ProperPair_ofun A B `{OType A} `{OType B} (f g:A -> B) prpl prpr
          (pf: forall x y, ProperPair A x y -> ProperPair B (f x) (g y)) :
-  ProperPair (A -o> B) (@ofun A B _ _ f prpl) (@ofun A B _ _ g prpr).
+  ProperPair (A -o> B) (@ofun A B _ _ f prpl) (@ofun A B _ _ g prpr) | 3.
 Proof.
   intros xl xr Rx; apply pf; assumption.
 Qed.
