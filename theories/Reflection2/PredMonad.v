@@ -43,9 +43,10 @@ Class PredMonad M PM {OM: OTypeF1 M} {OPM: OTypeF1 PM}
       forall {A} `{OType A} (a:A),
         liftP @o@ (returnM @o@ a) =o= returnM @o@ a;
     predmonad_liftP_bind :
-      forall {A B} `{OType A} `{OType B} m f,
+      forall {A B} `{OType A} `{OType B} m f prp,
         liftP @o@ (bindM @o@ m @o@ f)
-        =o= bindM @o@ (liftP @o@ m) @o@ (ofun (fun x => liftP @o@ (f @o@ x)));
+        =o= bindM @o@ (liftP @o@ m) @o@
+                  (mk_ofun (fun x => liftP @o@ (f @o@ x)) (prp:=prp));
 
     (* FIXME: need laws about how the combinators interact *)
   }.
@@ -64,19 +65,18 @@ Infix "|=" := satisfiesP (at level 80).
 
 (* Disjunction is definable in terms of the existential *)
 Definition orP `{PredMonadOps} `{OType} : PM A _ -o> PM A _ -o> PM A _ :=
-  ofun (fun P1 =>
-          ofun (fun P2 =>
-                  existsP @o@ (ofun (fun b:bool => oif @o@ b @o@ P1 @o@ P2)))).
+  ofun P1 => ofun P2 =>
+  existsP @o@ (ofun (b:bool) => oif @o@ b @o@ P1 @o@ P2).
 
 (* True and false, which correspond to top and bottom, respectively *)
 Definition trueP `{PredMonadOps} `{OType} : PM A _ :=
-  existsP @o@ (ofun (fun pm => pm)).
+  existsP @o@ (ofun pm => pm).
 Definition falseP `{PredMonadOps} `{OType} : PM A _ :=
-  forallP @o@ (ofun (fun pm => pm)).
+  forallP @o@ (ofun pm => pm).
 
 (* An assertion inside a predicate monad *)
 Program Definition assertP `{PredMonad} : Prop -o> PM unit _ :=
-  ofun (fun (P:Prop) => existsP @o@ (ofun (fun pf:P => trueP))) (prp:=_).
+  mk_ofun (fun (P:Prop) => existsP @o@ (ofun (pf:P) => trueP)) (prp:=_).
 Next Obligation.
   intros P1 P2 RP. apply predmonad_existsP_elim; intro pf1.
   assert P2 as pf2; [ apply RP; assumption | ].
@@ -87,9 +87,10 @@ Defined.
 (* An assumption made for the duration of a predicate monad *)
 Program Definition assumingP `{PredMonad} `{OType} :
   Flip Prop -o> PM A _ -o> PM A _ :=
-  ofun (fun (P:Flip Prop) =>
-          ofun (fun (Q:PM A _) =>
-                  forallP @o@ ofun (fun pf:unflip P => Q)) (prp:=_))
+  mk_ofun
+    (fun (P:Flip Prop) =>
+       mk_ofun (fun (Q:PM A _) =>
+                  forallP @o@ (ofun (pf:unflip P) => Q)) (prp:=_))
        (prp:=_).
 Next Obligation.
   intros Q1 Q2 RQ.
@@ -116,9 +117,11 @@ Instance OTypeF1_DownSetM : OTypeF1 DownSetM := fun _ _ => _.
 (* An existential with both a positive and a negative component *)
 Program Definition oexists2' `{OType} : (A -o> Prop) -o>
                                         (Flip A -o> Prop) -o> Prop :=
-  ofun (fun P1 =>
-          ofun (fun P2 =>
-                  exists2 x, P1 @o@ x & P2 @o@ flip x) (prp:=_)) (prp:=_).
+  mk_ofun
+    (fun P1 =>
+       mk_ofun
+         (fun P2 =>
+            exists2 x, P1 @o@ x & P2 @o@ flip x) (prp:=_)) (prp:=_).
 Next Obligation.
   unfold OFunProper, ProperPair; simpl; intros. intro pf.
   destruct pf as [z pf1 pf2].
@@ -135,14 +138,11 @@ Defined.
 Instance MonadOps_DownSetM : MonadOps DownSetM :=
   {| returnM :=
        fun A _ =>
-         ofun (fun (x:A) => ofun (fun (y:Flip A) => oR @o@ y @o@ x));
+         ofun (x:A) => ofun (y:Flip A) => oR @o@ y @o@ x;
      bindM :=
        fun A B _ _ =>
-         ofun (fun m =>
-                 ofun (fun f =>
-                         ofun (fun (y:Flip B) =>
-                                 oexists2' @o@ (ofun (fun x => f @o@ x @o@ y))
-                                               @o@ m)))
+         (ofun m => ofun f => ofun (y:Flip B) =>
+          oexists2' @o@ (ofun x => f @o@ x @o@ y) @o@ m)
   |}.
 
 Instance Monad_DownSetM : Monad DownSetM.
@@ -173,16 +173,10 @@ Instance PredMonadOps_DownSetM : PredMonadOps Identity DownSetM :=
   {|
     forallP :=
       fun A B _ _ =>
-        ofun (fun P =>
-                ofun (fun b =>
-                        oforall @o@ ofun (fun a =>
-                                            P @o@ a @o@ b)));
+        ofun P => ofun b => oforall @o@ (ofun a => P @o@ a @o@ b);
     existsP :=
       fun A B _ _ =>
-        ofun (fun P =>
-                ofun (fun b =>
-                        oexists @o@ ofun (fun a =>
-                                            P @o@ a @o@ b)));
+        ofun P => ofun b => oexists @o@ (ofun a => P @o@ a @o@ b);
     liftP :=
       fun A _ => returnM
   |}.

@@ -612,9 +612,16 @@ Class OFunProper {A B} `{OType A} `{OType B} (f: A -> B) : Prop :=
 
 Hint Extern 1 (OFunProper _) => intro; intro; intro : typeclass_instances.
 
-Definition ofun {A B} `{OType A} `{OType B} (f: A -> B) {prp:OFunProper f}
+Definition mk_ofun {A B} `{OType A} `{OType B} (f: A -> B) {prp:OFunProper f}
   : A -o> B :=
   {| pfun_app := f; pfun_Proper := prp |}.
+
+Notation "'ofun' x => e" := (mk_ofun (fun x => e))
+                              (right associativity, at level 99).
+
+Notation "'ofun' ( x : A ) => e" :=
+  (mk_ofun (fun x:A => e))
+    (right associativity, at level 99, x at level 0).
 
 Instance ProperPair_refl A `{OType A} (x:A) : ProperPair A x x.
 Proof.
@@ -632,7 +639,7 @@ Qed.
 
 Lemma ProperPair_ofun A B `{OType A} `{OType B} (f g:A -> B) prpl prpr
          (pf: forall x y, ProperPair A x y -> ProperPair B (f x) (g y)) :
-  ProperPair (A -o> B) (@ofun A B _ _ f prpl) (@ofun A B _ _ g prpr).
+  ProperPair (A -o> B) (@mk_ofun A B _ _ f prpl) (@mk_ofun A B _ _ g prpr).
 Proof.
   intros xl xr Rx; apply pf; assumption.
 Qed.
@@ -725,9 +732,12 @@ Qed.
  ***)
 
 Program Definition oif {A} `{OType A} : bool -o> A -o> A -o> A :=
-  ofun (fun (b:bool) =>
-          ofun (fun x =>
-                  ofun (fun y => if b then x else y) (prp:=_)) (prp:=_)) (prp:=_).
+  mk_ofun
+    (fun (b:bool) =>
+       mk_ofun
+         (fun x =>
+            mk_ofun
+              (fun y => if b then x else y) (prp:=_)) (prp:=_)) (prp:=_).
 Next Obligation.
   unfold OFunProper, ProperPair; intros a1 a2 Ra.
   destruct b; [ reflexivity | apply Ra ].
@@ -748,14 +758,14 @@ Defined.
 
 (* The universal combinator as an ordered function *)
 Program Definition oforall `{OType} : (A -o> Prop) -o> Prop :=
-  ofun (fun (P:A -o> Prop) => forall x, P @o@ x) (prp:=_).
+  mk_ofun (fun (P:A -o> Prop) => forall x, P @o@ x) (prp:=_).
 Next Obligation.
   intros P1 P2 R12 pf z. apply (R12 _ _ (reflexivity _) (pf z)).
 Defined.
 
 (* The existential combinator as an ordered function *)
 Program Definition oexists `{OType} : (A -o> Prop) -o> Prop :=
-  ofun (fun P => exists x, P @o@ x) (prp:=_).
+  mk_ofun (fun P => exists x, P @o@ x) (prp:=_).
 Next Obligation.
   intros P1 P2 R12 pf. destruct pf as [z pf].
   exists z. apply (R12 _ _ (reflexivity _) pf).
@@ -763,8 +773,10 @@ Defined.
 
 (* The double existential combinator as an ordered function *)
 Program Definition oexists2 `{OType} : (A -o> Prop) -o> (A -o> Prop) -o> Prop :=
-  ofun (fun P =>
-          ofun (fun Q => exists2 x, P @o@ x & Q @o@ x) (prp:=_)) (prp:=_).
+  mk_ofun
+    (fun P =>
+       mk_ofun
+         (fun Q => exists2 x, P @o@ x & Q @o@ x) (prp:=_)) (prp:=_).
 Next Obligation.
   intros P1 P2 R12 pf. destruct pf as [z pf1 pf2].
   exists z; try assumption. apply (R12 _ _ (reflexivity _) pf2).
@@ -777,7 +789,7 @@ Defined.
 
 (* Conjunction as an ordered function *)
 Program Definition oand : Prop -o> Prop -o> Prop :=
-  ofun (fun P1 => ofun (fun P2 => P1 /\ P2) (prp:=_)) (prp:=_).
+  mk_ofun (fun P1 => mk_ofun (fun P2 => P1 /\ P2) (prp:=_)) (prp:=_).
 Next Obligation.
   intros P2' P2'' R2 H0. destruct H0; split; try assumption.
   apply R2; assumption.
@@ -789,7 +801,7 @@ Defined.
 
 (* Disjunction as an ordered function *)
 Program Definition oor : Prop -o> Prop -o> Prop :=
-  ofun (fun P1 => ofun (fun P2 => P1 \/ P2) (prp:=_)) (prp:=_).
+  mk_ofun (fun P1 => mk_ofun (fun P2 => P1 \/ P2) (prp:=_)) (prp:=_).
 Next Obligation.
   intros P2' P2'' R2 H0.
   destruct H0; [ left | right; apply R2 ]; assumption.
@@ -801,8 +813,9 @@ Defined.
 
 (* Implication as an ordered function *)
 Program Definition oimpl : Flip Prop -o> Prop -o> Prop :=
-  ofun (fun (P1:Flip Prop) => ofun (fun (P2:Prop) =>
-                                      unflip P1 -> P2) (prp:=_)) (prp:=_).
+  mk_ofun (fun (P1:Flip Prop) =>
+             mk_ofun (fun (P2:Prop) =>
+                        unflip P1 -> P2) (prp:=_)) (prp:=_).
 Next Obligation.
   intros P2 P2' R2 pf12 pf1.
   apply R2; apply pf12; apply pf1; assumption.
@@ -814,7 +827,8 @@ Defined.
 
 (* Ordered type relations are themselves ordered propositional functions *)
 Program Definition oR `{OType} : Flip A -o> A -o> Prop :=
-  ofun (fun (x:Flip A) => ofun (fun y => ot_R (unflip x) y) (prp:=_)) (prp:=_).
+  mk_ofun (fun (x:Flip A) =>
+             mk_ofun (fun y => ot_R (unflip x) y) (prp:=_)) (prp:=_).
 Next Obligation.
   intros a1 a2 Ra pf. etransitivity; eassumption.
 Defined.
@@ -860,36 +874,32 @@ Instance OType_OTypeF1 F (RF:OTypeF1 F) A (RA:OType A) :
 
 Module OTExamples.
 
-Definition ex1 : Prop -o> Prop := ofun (fun p => p).
+Definition ex1 : Prop -o> Prop := ofun p => p.
 (* Eval compute in (pfun_app ex1 : Prop -> Prop). *)
 
-Definition ex2 {A} `{OType A} : A -o> A := ofun (fun p => p).
+Definition ex2 {A} `{OType A} : A -o> A := ofun p => p.
 (* Eval simpl in (fun A `{OType A} => pfun_app (@ex2 A _ _) : A -> A). *)
 
-Program Definition ex3 {A} `{OType A} : A -o> A -o> A :=
-  ofun (fun p1 => ofun (fun p2 => p1) (prp:=_)) (prp:=_).
+Definition ex3 {A} `{OType A} : A -o> A -o> A :=
+  ofun p1 => ofun p2 => p1.
 (* Eval simpl in (fun (A:OType) x => pfun_app (pfun_app (@ex3 A) x)). *)
 
 Definition ex4 {A B} `{OType A} `{OType B} : (A * B -o> A) :=
-  ofun (fun p => ofst @o@ p).
+  ofun p => ofst @o@ p.
 (* Eval simpl in (fun {A B} `{OType A} `{OType B} =>
                  pfun_app ex4 : A * B -> A). *)
 
 Definition ex5 {A B} `{OType A} `{OType B} : A * B -o> B * A :=
-  ofun (fun p => (osnd @o@ p ,o, ofst @o@ p)).
+  ofun p => (osnd @o@ p ,o, ofst @o@ p).
 (* Eval simpl in (fun {A B} `{OType A} `{OType B} =>
                  pfun_app ex5 : A * B -> B * A). *)
 
 Definition ex6 {A B C} `{OType A} `{OType B} `{OType C} : A * B * C -o> C * A :=
-  ofun (fun triple => (osnd @o@ triple ,o, ofst @o@ (ofst @o@ triple))).
+  ofun triple => (osnd @o@ triple ,o, ofst @o@ (ofst @o@ triple)).
 
 Definition ex7 {A B C} `{OType A} `{OType B} `{OType C}
   : (A * B -o> C) -o> C -o> A -o> B -o> C :=
-  ofun (fun f =>
-               ofun
-                 (fun c =>
-                    ofun
-                      (fun a =>
-                         ofun (fun b => f @o@ (a ,o, b))))).
+  ofun f => ofun c =>
+  ofun a => ofun b => f @o@ (a ,o, b).
 
 End OTExamples.

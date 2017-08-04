@@ -5,8 +5,8 @@
 ./theories/Reflection2/OExpr.v
 ./theories/Reflection2/Monad.v
 ./theories/Reflection2/MonadState.v
-./theories/Reflection2/MonadSet.v
 ./theories/Reflection2/PredMonad.v
+./theories/Reflection2/PredMonadState.v
 
 # ./theories/Reflection/OrderedType.v
 # ./theories/Reflection/OrderedContext.v
