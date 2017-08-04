@@ -607,8 +607,12 @@ Qed.
 Class ProperPair A `{OType A} (x y:A) : Prop :=
   proper_pair_pf : ot_R x y.
 
-Definition ofun {A B} `{OType A} `{OType B} (f: A -> B)
-           {prp:forall x y, ProperPair A x y -> ProperPair B (f x) (f y)}
+Class OFunProper {A B} `{OType A} `{OType B} (f: A -> B) : Prop :=
+  ofun_proper : forall x y, ProperPair A x y -> ProperPair B (f x) (f y).
+
+Hint Extern 1 (OFunProper _) => intro; intro; intro : typeclass_instances.
+
+Definition ofun {A B} `{OType A} `{OType B} (f: A -> B) {prp:OFunProper f}
   : A -o> B :=
   {| pfun_app := f; pfun_Proper := prp |}.
 
@@ -626,13 +630,36 @@ Proof.
   apply prpf; assumption.
 Qed.
 
-Instance ProperPair_ofun A B `{OType A} `{OType B} (f g:A -> B) prpl prpr
+Lemma ProperPair_ofun A B `{OType A} `{OType B} (f g:A -> B) prpl prpr
          (pf: forall x y, ProperPair A x y -> ProperPair B (f x) (g y)) :
-  ProperPair (A -o> B) (@ofun A B _ _ f prpl) (@ofun A B _ _ g prpr) | 3.
+  ProperPair (A -o> B) (@ofun A B _ _ f prpl) (@ofun A B _ _ g prpr).
 Proof.
   intros xl xr Rx; apply pf; assumption.
 Qed.
 
+Hint Extern 3 (ProperPair _ _ _) =>
+first [ apply ProperPair_pfun_app
+      | apply ProperPair_ofun; intro; intro; intro ] : typeclass_instances.
+
+(*
+Hint Extern 3 (ProperPair _ _ _) =>
+lazymatch goal with
+| |- ProperPair _ (pfun_app _ _) (pfun_app _ _) =>
+  apply ProperPair_pfun_app
+| |- ProperPair ?A (?f ?x) (?g ?y) =>
+  let fapp := (eval beta in (f x)) in
+  let gapp := (eval beta in (g y)) in
+  change (ProperPair A fapp gapp)
+| |- ProperPair (?A -o> ?B) (@ofun _ _ _ _ ?f ?prpf) (@ofun _ _ _ _ ?g ?prpg) =>
+  let x := fresh "x" in
+  let y := fresh "y" in
+  let ppair := fresh "ppair" in
+  apply ProperPair_ofun; intros x y ppair;
+    let fapp := eval beta in (f x) in
+    let gapp := eval beta in (g y) in
+    change (ProperPair B fapp gapp)
+end.
+*)
 
 (***
  *** Ordered Terms and ProperPair Instances for Pair Operations
@@ -702,14 +729,16 @@ Program Definition oif {A} `{OType A} : bool -o> A -o> A -o> A :=
           ofun (fun x =>
                   ofun (fun y => if b then x else y) (prp:=_)) (prp:=_)) (prp:=_).
 Next Obligation.
-  unfold ProperPair.
-  destruct b; [ reflexivity | apply H0 ].
+  unfold OFunProper, ProperPair; intros a1 a2 Ra.
+  destruct b; [ reflexivity | apply Ra ].
 Defined.
 Next Obligation.
-  destruct b; [ apply H0 | assumption ].
+  unfold OFunProper, ProperPair; intros a1 a2 R12 a3 a4 R34.
+  destruct b; [ apply R12 | assumption ].
 Defined.
 Next Obligation.
-  destruct y; assumption.
+  unfold OFunProper, ProperPair; simpl; intros.
+  destruct x; destruct y; try discriminate; assumption.
 Defined.
 
 
@@ -721,35 +750,53 @@ Defined.
 Program Definition oforall `{OType} : (A -o> Prop) -o> Prop :=
   ofun (fun (P:A -o> Prop) => forall x, P @o@ x) (prp:=_).
 Next Obligation.
-  intros pf z. apply (H0 _ _ (reflexivity _) (pf z)).
+  intros P1 P2 R12 pf z. apply (R12 _ _ (reflexivity _) (pf z)).
 Defined.
 
 (* The existential combinator as an ordered function *)
 Program Definition oexists `{OType} : (A -o> Prop) -o> Prop :=
   ofun (fun P => exists x, P @o@ x) (prp:=_).
 Next Obligation.
-  intro pf; destruct pf as [z pf].
-  exists z. apply (H0 _ _ (reflexivity _) pf).
+  intros P1 P2 R12 pf. destruct pf as [z pf].
+  exists z. apply (R12 _ _ (reflexivity _) pf).
+Defined.
+
+(* The double existential combinator as an ordered function *)
+Program Definition oexists2 `{OType} : (A -o> Prop) -o> (A -o> Prop) -o> Prop :=
+  ofun (fun P =>
+          ofun (fun Q => exists2 x, P @o@ x & Q @o@ x) (prp:=_)) (prp:=_).
+Next Obligation.
+  intros P1 P2 R12 pf. destruct pf as [z pf1 pf2].
+  exists z; try assumption. apply (R12 _ _ (reflexivity _) pf2).
+Defined.
+Next Obligation.
+  intros P1 P2 RP Q1 Q2 RQ pf. destruct pf as [z pf1 pf2].
+  exists z; [ apply (RP _ _ (reflexivity _) pf1)
+            | apply (RQ _ _ (reflexivity _) pf2) ].
 Defined.
 
 (* Conjunction as an ordered function *)
 Program Definition oand : Prop -o> Prop -o> Prop :=
   ofun (fun P1 => ofun (fun P2 => P1 /\ P2) (prp:=_)) (prp:=_).
 Next Obligation.
-  intro. destruct H0; split; try assumption. apply H; assumption.
+  intros P2' P2'' R2 H0. destruct H0; split; try assumption.
+  apply R2; assumption.
 Defined.
 Next Obligation.
-  intro. destruct H1. split; [ apply H | apply H0 ]; assumption.
+  intros P1 P1' R1 P2 P2' R2 H0. destruct H0.
+  split; [ apply R1 | apply R2 ]; assumption.
 Defined.
 
 (* Disjunction as an ordered function *)
 Program Definition oor : Prop -o> Prop -o> Prop :=
   ofun (fun P1 => ofun (fun P2 => P1 \/ P2) (prp:=_)) (prp:=_).
 Next Obligation.
-  intro. destruct H0; [ left | right; apply H ]; assumption.
+  intros P2' P2'' R2 H0.
+  destruct H0; [ left | right; apply R2 ]; assumption.
 Defined.
 Next Obligation.
-  intro. destruct H1; [ left; apply H | right; apply H0 ]; assumption.
+  intros P1 P1' R1 P2 P2' R2 H0.
+  destruct H0; [ left; apply R1 | right; apply R2 ]; assumption.
 Defined.
 
 (* Implication as an ordered function *)
@@ -757,21 +804,25 @@ Program Definition oimpl : Flip Prop -o> Prop -o> Prop :=
   ofun (fun (P1:Flip Prop) => ofun (fun (P2:Prop) =>
                                       unflip P1 -> P2) (prp:=_)) (prp:=_).
 Next Obligation.
-  intros pf1x pf1; apply H; apply pf1x; assumption.
+  intros P2 P2' R2 pf12 pf1.
+  apply R2; apply pf12; apply pf1; assumption.
 Defined.
 Next Obligation.
-  intros pfx1 pfy; apply H0; apply pfx1; apply H; apply pfy.
+  intros P1 P1' R1 P2 P2' R2 pfx1 pfy.
+  apply R2; apply pfx1; apply R1; apply pfy.
 Defined.
 
 (* Ordered type relations are themselves ordered propositional functions *)
 Program Definition oR `{OType} : Flip A -o> A -o> Prop :=
   ofun (fun (x:Flip A) => ofun (fun y => ot_R (unflip x) y) (prp:=_)) (prp:=_).
 Next Obligation.
-  intro pf. etransitivity; eassumption.
+  intros a1 a2 Ra pf. etransitivity; eassumption.
 Defined.
 Next Obligation.
-  intro pf. etransitivity; try eassumption.
-  etransitivity; eassumption.
+  intros a1 a2 R12 a3 a4 R34; simpl; intro pf.
+  etransitivity; try eassumption.
+  etransitivity; try eassumption.
+  apply R12.
 Defined.
 
 
@@ -815,8 +866,8 @@ Definition ex1 : Prop -o> Prop := ofun (fun p => p).
 Definition ex2 {A} `{OType A} : A -o> A := ofun (fun p => p).
 (* Eval simpl in (fun A `{OType A} => pfun_app (@ex2 A _ _) : A -> A). *)
 
-Definition ex3 {A} `{OType A} : A -o> A -o> A :=
-  ofun (fun p1 => ofun (fun p2 => p1)).
+Program Definition ex3 {A} `{OType A} : A -o> A -o> A :=
+  ofun (fun p1 => ofun (fun p2 => p1) (prp:=_)) (prp:=_).
 (* Eval simpl in (fun (A:OType) x => pfun_app (pfun_app (@ex3 A) x)). *)
 
 Definition ex4 {A B} `{OType A} `{OType B} : (A * B -o> A) :=

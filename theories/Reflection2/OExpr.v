@@ -394,6 +394,9 @@ Definition celem_rest {ctx A RA}
            (celem: CtxElem (@CtxCons A RA ctx)) : CtxElem ctx :=
   let (rest,_) := celem in rest.
 
+Arguments celem_head {_ _ _} _ : simpl never.
+Arguments celem_rest {_ _ _} _ : simpl never.
+
 (* Typeclass for incrementally quoting functions into OExpr variables, by
 peeling off the celem_rest projections one at a time and adding them as OVar_S
 constructors to the input variable to build the output variable *)
@@ -487,7 +490,7 @@ Instance QuotesToAtomic_ofun {ctx A} {RA:OType A} {B} {RB:OType B}
          (f: CtxElem ctx -> A -> B) prp
          (e: OExpr (CtxCons A ctx) B)
          (q: QuotesTo (fun c => f (celem_rest c) (celem_head c)) e) :
-  QuotesToAtomic (fun c => ofun (f c) (prp:=prp c)) (Lam e) | 1.
+  QuotesToAtomic (fun c => ofun (f c) (prp:=(fun z => prp z c))) (Lam e) | 1.
 Proof.
   apply QuotesTo_Lam. assumption.
 Qed.
@@ -511,6 +514,7 @@ Proof.
 Qed.
 
 (* Quote applications of fst as applications of ofst *)
+(*
 Instance QuotesTo_fst {ctx A} {RA:OType A} {B} {RB:OType B}
          (f: CtxElem ctx -> A * B) (e: OExpr ctx (A*B)) (q: QuotesTo f e) :
   QuotesToAtomic (fun c => fst (f c)) (App (Embed ofst) e) | 1.
@@ -525,7 +529,7 @@ Instance QuotesTo_snd {ctx A} {RA:OType A} {B} {RB:OType B}
 Proof.
   intro. simpl. rewrite (q c). reflexivity.
 Qed.
-
+*)
 
 (* Use QuotesTo to prove a relation *)
 Lemma oquote_R {A} {RA:OType A} {f1 f2 : A} {e1 e2: OExpr CtxNil A}
