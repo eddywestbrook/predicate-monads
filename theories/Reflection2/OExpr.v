@@ -42,6 +42,36 @@ Arguments Lam {ctx A RA B RB} e.
 
 
 (***
+ *** Helpers for Building OExprs
+ ***)
+
+Notation "e1 @e@ e2" :=
+  (App e1 e2) (left associativity, at level 20).
+
+(* Apply a context extension to an OVar *)
+Fixpoint extendVar {ctx1 ctx2} {ext:ContextExtends ctx1 ctx2} :
+  forall {A} {RA:OType A}, OVar A ctx1 -> OVar A ctx2 :=
+  match ext in ContextExtendsInd _ ctx2 return
+        forall A (RA:OType A), OVar A ctx1 -> OVar A ctx2
+  with
+  | CtxExtNil _ => fun _ _ v => v
+  | CtxExtCons _ _ _ ext' =>
+    fun _ _ v => OVar_S (extendVar (ext:=ext') v)
+  end.
+
+Definition mkLam {ctx A RA B RB}
+           (body: (forall ctx2,
+                      ContextExtends (CtxCons A ctx) ctx2 -> @OExpr ctx2 A RA) ->
+                  OExpr (CtxCons A ctx) B) :
+  OExpr ctx (A -o> B) :=
+  @Lam ctx A RA B RB (body (fun _ ext => Var (extendVar (ext:=ext) OVar_0))).
+
+Notation "'efun' x => e" :=
+  (mkLam (fun (x : forall {ctx2 ext}, OExpr _ _) => e))
+    (right associativity, at level 99).
+
+
+(***
  *** Semantics of Ordered Expressions
  ***)
 

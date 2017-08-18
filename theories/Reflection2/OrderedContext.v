@@ -164,3 +164,26 @@ Instance Proper_subst_pfun_equiv ctx n :
 Proof.
   intros s1 s2 Rs; destruct Rs; split; apply Proper_subst_pfun; assumption.
 Qed.
+
+
+(***
+ *** Appending Ordered Type Contexts
+ ***)
+
+(* Inductive proof that ctx2 is an extension of ctx1 *)
+Inductive ContextExtendsInd ctx1 : Ctx -> Type :=
+| CtxExtNil : ContextExtendsInd ctx1 ctx1
+| CtxExtCons A {RA:OType A} ctx2 (ext: ContextExtendsInd ctx1 ctx2) :
+    ContextExtendsInd ctx1 (CtxCons A ctx2)
+.
+
+(* Typeclass version of the above *)
+Class ContextExtends ctx1 ctx2 : Type :=
+  contextExtends : ContextExtendsInd ctx1 ctx2.
+
+Instance ContextExtends_base ctx : ContextExtends ctx ctx := CtxExtNil ctx.
+
+Instance ContextExtends_cons ctx1 ctx2 A (RA:OType A)
+         (ext: ContextExtends ctx1 ctx2) :
+  ContextExtends ctx1 (CtxCons A ctx2) :=
+  CtxExtCons ctx1 A ctx2 ext.
