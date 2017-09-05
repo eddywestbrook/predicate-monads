@@ -69,6 +69,9 @@ Definition mkLam {ctx A RA B RB}
 Notation "'efun' x => e" :=
   (mkLam (fun (x : forall {ctx2 ext}, OExpr _ _) => e))
     (right associativity, at level 99).
+Notation "'efun' ( x : A ) => e" :=
+  (mkLam (fun (x : forall {ctx2 ext}, OExpr _ A) => e))
+    (right associativity, at level 99, x at level 99).
 
 
 (***
@@ -93,6 +96,10 @@ Fixpoint exprSemantics {ctx A RA} (e:@OExpr ctx A RA) : CtxElem ctx -o> A :=
   | Lam e => pfun_curry (exprSemantics e)
   end.
 Arguments exprSemantics {ctx A RA} !e.
+
+Definition evalExpr {A RA} (e:@OExpr CtxNil A RA) : A :=
+  exprSemantics e @o@ tt.
+Arguments evalExpr {A RA} !e.
 
 
 (***

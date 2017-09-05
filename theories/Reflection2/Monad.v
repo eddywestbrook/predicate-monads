@@ -34,6 +34,10 @@ Class Monad M `{MonadOps M} : Prop :=
 Notation "'do' x <- m1 ; m2" :=
   (bindM @o@ m1 @o@ (mk_ofun (fun x => m2))) (at level 60, right associativity).
 
+Notation "'edo' x <- m1 ; m2" :=
+  (Embed bindM @e@ m1 @e@ (mkLam (fun x => m2)))
+    (at level 60, right associativity).
+
 
 (***
  *** The Monad Laws for OExprs
