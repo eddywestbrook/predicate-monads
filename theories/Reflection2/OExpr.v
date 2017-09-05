@@ -421,6 +421,35 @@ Qed.
 Hint Rewrite OExpr_fst_pair OExpr_snd_pair OExpr_pair_eta : osimpl.
 
 
+Lemma OExpr_inl_elim ctx A B C `{OType A} `{OType B} `{OType C}
+      (e: OExpr ctx A) f1 (f2 : OExpr ctx (B -o> C)) :
+  App (App (App (Embed osum_elim) f1) f2) (App (Embed oinl) e) =e=
+  App f1 e.
+Proof.
+  split; intros c1 c2 Rc; simpl; f_equiv; f_equiv; assumption.
+Qed.
+
+Lemma OExpr_inr_elim ctx A B C `{OType A} `{OType B} `{OType C}
+      (e: OExpr ctx B) (f1 : OExpr ctx (A -o> C)) f2 :
+  App (App (App (Embed osum_elim) f1) f2) (App (Embed oinr) e) =e=
+  App f2 e.
+Proof.
+  split; intros c1 c2 Rc; simpl; f_equiv; f_equiv; assumption.
+Qed.
+
+(* FIXME HERE:
+Lemma OExpr_sum_eta ctx A B `{OType A} `{OType B} (e: OExpr ctx (A+B)) :
+  App (App (App (Embed osum_elim) (Lam (App (Embed oinl) (Var OVar_0))))
+           (Lam (App (Embed oinr) (Var OVar_0)))) e =e=
+  e.
+Proof.
+  split; intros c1 c2 Rc; simpl.
+  - case_eq (exprSemantics e @o@ c1); intros; [ left | right ].
+ *)
+
+Hint Rewrite OExpr_inl_elim OExpr_inr_elim : osimpl.
+
+
 (***
  *** Quoting Tactic for Ordered Expressions
  ***)

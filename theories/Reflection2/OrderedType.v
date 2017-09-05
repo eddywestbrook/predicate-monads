@@ -752,8 +752,8 @@ Program Definition osum_elim {A B C} `{OType A} `{OType B} `{OType C} :
        fun f1 =>
          {| pfun_app :=
               fun f2 =>
-                {| pfun_app := fun s =>
-                                 match s with
+                {| pfun_app := fun (s : A+B) =>
+                                 match s return C with
                                  | inl a => f1 @o@ a
                                  | inr b => f2 @o@ b
                                  end |} |} |}.
