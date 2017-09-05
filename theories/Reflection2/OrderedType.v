@@ -728,6 +728,51 @@ Qed.
 
 
 (***
+ *** Ordered Terms for Sum Operations
+ ***)
+
+(* Proper function for inl *)
+Program Definition oinl {A B} `{OType A} `{OType B} : A -o> A + B :=
+  {| pfun_app := inl; pfun_Proper := _ |}.
+Next Obligation.
+  intros x y Rxy. left. assumption.
+Defined.
+
+(* Proper function for inr *)
+Program Definition oinr {A B} `{OType A} `{OType B} : B -o> A + B :=
+  {| pfun_app := inr; pfun_Proper := _ |}.
+Next Obligation.
+  intros x y Rxy. right. assumption.
+Defined.
+
+(* Proper function for eliminating sums *)
+Program Definition osum_elim {A B C} `{OType A} `{OType B} `{OType C} :
+  (A -o> C) -o> (B -o> C) -o> A + B -o> C :=
+  {| pfun_app :=
+       fun f1 =>
+         {| pfun_app :=
+              fun f2 =>
+                {| pfun_app := fun s =>
+                                 match s with
+                                 | inl a => f1 @o@ a
+                                 | inr b => f2 @o@ b
+                                 end |} |} |}.
+Next Obligation.
+  intros s1 s2 Rs. destruct Rs; apply pfun_Proper; assumption.
+Defined.
+Next Obligation.
+  intros f2 f2' Rf2 a1 a2 Ra. destruct Ra; simpl.
+  - apply pfun_Proper; assumption.
+  - apply Rf2; assumption.
+Defined.
+Next Obligation.
+  intros f1 f1' Rf1 f2 f2' Rf2 a1 a2 Ra. destruct Ra; simpl.
+  - apply Rf1; assumption.
+  - apply Rf2; assumption.
+Defined.
+
+
+(***
  *** Ordered Terms for Boolean Operations
  ***)
 
