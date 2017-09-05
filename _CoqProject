@@ -7,9 +7,4 @@
 ./theories/Reflection2/MonadState.v
 ./theories/Reflection2/PredMonad.v
 ./theories/Reflection2/PredMonadState.v
-
-# ./theories/Reflection/OrderedType.v
-# ./theories/Reflection/OrderedContext.v
-# ./theories/Reflection/OExpr_typed.v
-# ./theories/Reflection/Monad.v
-# ./theories/Reflection/MonadState.v
+./theories/Reflection2/Hoare.v
