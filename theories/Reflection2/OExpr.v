@@ -437,17 +437,55 @@ Proof.
   split; intros c1 c2 Rc; simpl; f_equiv; f_equiv; assumption.
 Qed.
 
-(* FIXME HERE:
 Lemma OExpr_sum_eta ctx A B `{OType A} `{OType B} (e: OExpr ctx (A+B)) :
   App (App (App (Embed osum_elim) (Lam (App (Embed oinl) (Var OVar_0))))
            (Lam (App (Embed oinr) (Var OVar_0)))) e =e=
   e.
 Proof.
-  split; intros c1 c2 Rc; simpl.
-  - case_eq (exprSemantics e @o@ c1); intros; [ left | right ].
- *)
+  split; intros c1 c2 Rc.
+  - change (osum_elim @o@ oinl @o@ oinr @o@ (exprSemantics e @o@ c1)
+            <o= exprSemantics e @o@ c2).
+    rewrite osum_elim_eta. rewrite Rc. reflexivity.
+  - change (exprSemantics e @o@ c1
+            <o= osum_elim @o@ oinl @o@ oinr @o@ (exprSemantics e @o@ c2)).
+    rewrite osum_elim_eta. rewrite Rc. reflexivity.
+Qed.
 
-Hint Rewrite OExpr_inl_elim OExpr_inr_elim : osimpl.
+(* FIXME: need a more general approach to this, which would require matching g
+as not having the last-bound variable free in both cases... *)
+Lemma OExpr_sum_commute_Embed ctx A B C D
+      `{OType A} `{OType B} `{OType C} `{OType D}
+      f1 f2 (g : C -o> D) (e : OExpr ctx (A + B)) :
+  (Embed osum_elim)
+    @e@ (Lam (Embed g @e@ (f1 @e@ (Var OVar_0))))
+    @e@ (Lam (Embed g @e@ (f2 @e@ (Var OVar_0))))
+    @e@ e
+  =e=
+  (Embed g) @e@ ((Embed osum_elim)
+                   @e@ (Lam (f1 @e@ (Var OVar_0)))
+                   @e@ (Lam (f2 @e@ (Var OVar_0))) @e@ e).
+Proof.
+  split; intros c1 c2 Rc; simpl;
+    assert (exprSemantics e @o@ c1 <o= exprSemantics e @o@ c2) as Re;
+      try (apply pfun_Proper; assumption); destruct Re;
+        repeat rewrite H3; repeat rewrite Rc; reflexivity.
+Qed.
+
+(*
+Lemma OExpr_sum_commute ctx A B C D `{OType A} `{OType B} `{OType C} `{OType D}
+      (f1 : OExpr _ (A -o> C)) (f2 : OExpr _ (B -o> C))
+      (g : OExpr _ (C -o> D)) e :
+  (Embed osum_elim)
+    @e@ (Lam (g @e@ (f1 @e@ (Var OVar_0))))
+    @e@ (Lam (g @e@ (f2 @e@ (Var OVar_0))))
+    @e@ e
+  =e=
+  (Lam g) @e@ ((Embed osum_elim)
+                 @e@ (f1 @e@ (Var OVar_0)) @e@ (f1 @e@ (Var OVar_0)) @e@ e).
+*)
+
+Hint Rewrite OExpr_inl_elim OExpr_inr_elim
+     OExpr_sum_eta OExpr_sum_commute_Embed : osimpl.
 
 
 (***

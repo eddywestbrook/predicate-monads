@@ -771,6 +771,12 @@ Next Obligation.
   - apply Rf2; assumption.
 Defined.
 
+Lemma osum_elim_eta  {A B} `{OType A} `{OType B} :
+  osum_elim (A:=A) (B:=B) @o@ oinl @o@ oinr =o= id_pfun.
+Proof.
+  split; intros s1 s2 Rs; destruct Rs; simpl; constructor; assumption.
+Qed.
+
 
 (***
  *** Ordered Terms for Boolean Operations
