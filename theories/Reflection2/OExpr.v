@@ -379,6 +379,8 @@ Proof.
   f_equiv.
 Qed.
 
+Hint Rewrite OExpr_Beta : osimpl.
+
 (*
 (* The OExpr for the fst function *)
 Definition OFst {ctx A RA B} {RB:OTRelation B} {tp} : @OExpr ctx (A*B -o> A) _ tp :=
@@ -602,8 +604,7 @@ Ltac oquote :=
   end.
 
 Ltac oexpr_simpl :=
-  repeat (repeat rewrite OExpr_Beta ; simpl;
-          try ((rewrite_strat (bottomup (hints osimpl ; eval simpl))))).
+  repeat (rewrite_strat (bottomup (hints osimpl ; eval simpl))).
 
 (* This one is not as fast for some reason... *)
 (*
