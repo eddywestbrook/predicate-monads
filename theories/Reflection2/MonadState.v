@@ -6,14 +6,14 @@ Require Export PredMonad.Reflection2.Monad.
  ***)
 
 (* State effects = get and put *)
-Class MonadStateOps M `{OTypeF1 M} St `{OType St} : Type :=
+Class MonadStateOps M `{FindOTypeF1 M} St `{OType St} : Type :=
   {
     getM : M St _ ;
     putM : St -o> M unit _
   }.
 
-Class MonadState M {OM: OTypeF1 M} St {OSt: OType St}
-      `{@MonadOps M OM} `{@MonadStateOps M OM St OSt} : Prop :=
+Class MonadState M {OM} {FOM:FindOTypeF1 M OM} St {OSt: OType St}
+      `{@MonadOps M OM FOM} `{@MonadStateOps M OM FOM St OSt} : Prop :=
   {
     monad_state_monad :> Monad M;
 
@@ -76,12 +76,17 @@ Lemma monad_state_get_put_OExpr
  *** The State Monad Transformer
  ***)
 
-Definition StateT St `{OType St} M `{OTypeF1 M} A `{OType A} :=
+Definition StateT St `{OType St} M `{FindOTypeF1 M} A `{OType A} :=
   St -o> M (St * A)%type _.
 
+(*
 Instance OTypeF1_StateT St `{OType St} M `{OTypeF1 M} :
   OTypeF1 (StateT St M) :=
   fun _ _ => _.
+*)
+
+Instance FindOTypeF1_StateT St `{OType St} M `{FindOTypeF1 M} :
+  FindOTypeF1 (StateT St M) (fun _ _ => _) := I.
 
 Instance MonadOps_StateT St `{OType St} M `{MonadOps M} : MonadOps (StateT St M) :=
   {returnM :=

@@ -6,14 +6,14 @@ Require Export PredMonad.Reflection2.Monad.
  ***)
 
 (* Error effects = throw and catch *)
-Class MonadErrorOps M `{OTypeF1 M} Err `{OType Err} : Type :=
+Class MonadErrorOps M `{FindOTypeF1 M} Err `{OType Err} : Type :=
   {
     throwM : forall `{OType}, Err -o> M A _ ;
     catchM : forall `{OType}, M A _ -o> (Err -o> M A _) -o> M A _
   }.
 
-Class MonadError M {OM: OTypeF1 M} St {OSt: OType St}
-      `{@MonadOps M OM} `{@MonadErrorOps M OM St OSt} : Prop :=
+Class MonadError M {OM} {FOM: FindOTypeF1 M OM} St {OSt: OType St}
+      `{@MonadOps M OM FOM} `{@MonadErrorOps M OM FOM St OSt} : Prop :=
   {
     monad_error_monad :> Monad M;
 
@@ -41,12 +41,17 @@ Class MonadError M {OM: OTypeF1 M} St {OSt: OType St}
  *** The Error Monad Transformer
  ***)
 
-Definition ErrorT Err `{OType Err} M `{OTypeF1 M} A `{OType A} :=
+Definition ErrorT Err `{OType Err} M `{FindOTypeF1 M} A `{OType A} :=
   M (Err + A)%type _.
 
+(*
 Instance OTypeF1_ErrorT Err `{OType Err} M `{OTypeF1 M} :
   OTypeF1 (ErrorT Err M) :=
   fun _ _ => OType_OTypeF1 M _ _ _.
+*)
+
+Instance FindOTypeF1_ErrorT Err `{OType Err} M `{FindOTypeF1 M} :
+  FindOTypeF1 (ErrorT Err M) (fun _ _ => _) := I.
 
 Instance MonadOps_ErrorT Err `{OType Err} M `{MonadOps M}
   : MonadOps (ErrorT Err M) :=
@@ -62,6 +67,28 @@ Instance MonadOps_ErrorT Err `{OType Err} M `{MonadOps M}
                   @o@ f)))
   }.
 
+(*
+Definition ErrorT_OTypeF1_simpl Err `{OType Err} M `{OTypeF1 M} A `{OType A} :
+  OType_OTypeF1 (ErrorT Err M) (OTypeF1_ErrorT Err M) A _ =
+  OType_OTypeF1 M _ _ _ := eq_refl.
+
+Hint Rewrite ErrorT_OTypeF1_simpl : osimpl.
+*)
+
+Lemma OExpr_lambda_sum ctx A B C `{OType A} `{OType B} `{OType C}
+      (e:OExpr (CtxCons (A+B) ctx) C) :
+  Lam e =e=
+  App (App (Embed osum_elim)
+           (Lam (substOExpr 0 (weakenOExpr 1 A e)
+                            (Embed oinl @e@ (Var OVar_0)))))
+      (Lam (substOExpr 0 (weakenOExpr 1 B e)
+                       (Embed oinr @e@ (Var OVar_0)))).
+Proof.
+  admit.
+Admitted.
+
+(* Hint Rewrite OExpr_lambda_sum : osimpl. *)
+
 (* The Monad instance for ErrorT *)
 Instance Monad_ErrorT Err `{OType Err} M `{Monad M} : Monad (ErrorT Err M).
 Proof.
@@ -70,16 +97,11 @@ Proof.
   for M as a bindM for ErrorT... *)
   constructor; intros.
   - osimpl.
-    rewrite (monad_return_bind_OExpr (M:=M)).
-    oexpr_simpl. rewrite OExpr_Beta. reflexivity.
   - osimpl.
-    etransitivity; [ | apply (monad_bind_return_OExpr (M:=M)) ].
-    f_equiv; f_equiv.
-    rewrite <- (OExpr_sum_eta _ _ _ (Var OVar_0)).
-    split; intros c1 c2 Rc; simpl;
-      destruct Rc as [Rc1 Rc2]; destruct Rc2;
-        apply pfun_Proper; constructor; assumption.
-  - oquote.
+  - osimpl.
+
+    FIXME HERE NOW
+
     oexpr_simpl.
     rewrite (monad_assoc_OExpr (M:=M)); simpl.
     f_equiv; f_equiv.

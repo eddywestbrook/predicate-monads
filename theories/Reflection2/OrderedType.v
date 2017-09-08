@@ -911,12 +911,27 @@ Notation "'pfun' x =o> t" :=
  ***)
 
 (* Typeclass version of OTypeF1Fun *)
+(*
 Class OTypeF1 (F:forall A {RA:OType A}, Type) : Type :=
   otypeF1 : forall A {RA:OType A}, OType (F A).
 
 (* Get out the OType from applying a unary functor *)
 Instance OType_OTypeF1 F (RF:OTypeF1 F) A (RA:OType A) :
-  OType (F A _) | 5 := otypeF1 A.
+  OType (F A _) | 5 := RF A _.
+*)
+
+(* Typeclass for finding a unary OType function *)
+Class FindOTypeF1 (F:forall A {RA:OType A}, Type)
+      (RF: forall A {RA:OType A}, OType (F A)) : Prop :=
+  findOTypeF1 : True.
+
+Ltac findOTypeF1 :=
+  lazymatch goal with
+  | |- OType (?F ?A ?RA) =>
+    let RF := fresh "RF" in
+    evar (RF: forall A' (RA':OType A'), OType (F A'));
+    assert (FindOTypeF1 F ?RF); [ | apply (RF A RA) ]
+  end.
 
 
 (***
