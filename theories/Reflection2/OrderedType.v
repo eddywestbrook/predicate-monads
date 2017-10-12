@@ -628,11 +628,11 @@ Proof.
   unfold ProperPair. reflexivity.
 Qed.
 
-Instance ProperPair_pfun_app A B `{OType A} `{OType B}
-         (fl fr:A -o> B) argl argr
-         (prpf:ProperPair (A -o> B) fl fr)
-         (prpa:ProperPair A argl argr)
- : ProperPair B (pfun_app fl argl) (pfun_app fr argr) | 2.
+Lemma ProperPair_pfun_app A B `{OType A} `{OType B}
+      (fl fr:A -o> B) argl argr
+      (prpf:ProperPair (A -o> B) fl fr)
+      (prpa:ProperPair A argl argr)
+ : ProperPair B (pfun_app fl argl) (pfun_app fr argr).
 Proof.
   apply prpf; assumption.
 Qed.
@@ -644,9 +644,9 @@ Proof.
   intros xl xr Rx; apply pf; assumption.
 Qed.
 
-Hint Extern 3 (ProperPair _ _ _) =>
+Hint Extern 2 (ProperPair _ _ _) =>
 first [ apply ProperPair_pfun_app
-      | apply ProperPair_ofun; intro; intro; intro ] : typeclass_instances.
+      | apply ProperPair_ofun; do 3 intro ] : typeclass_instances.
 
 (*
 Hint Extern 3 (ProperPair _ _ _) =>
