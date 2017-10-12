@@ -546,11 +546,11 @@ Proof.
     rewrite <- (q (c,a2)); reflexivity.
 Qed.
 
-(* Special case: quote ofuns as lambdas, destructuring the ofun *)
-Instance QuotesTo_Lam_ofun {ctx A RA B RB} (f: CtxElem ctx -> A -> B) prp
+(* Special case: quote pfuns as lambdas, destructuring the pfun *)
+Instance QuotesTo_Lam_pfun {ctx A RA B RB} (f: CtxElem ctx -> A -> B) prp
          (e: @OExpr (@CtxCons A RA ctx) B RB)
          (q: QuotesTo (fun c => f (celem_rest c) (celem_head c)) e) :
-  QuotesTo (fun c => mk_ofun (f c) (prp:=prp c)) (Lam e) | 1.
+  QuotesTo (fun c => mk_pfun (f c) (prp:=prp c)) (Lam e) | 1.
 Proof.
   apply QuotesTo_Lam. assumption.
 Qed.
@@ -591,12 +591,12 @@ Proof.
   - apply q2.
 Qed.
 
-(* Quote ofuns in atomic position as lambdas *)
-Instance QuotesToAtomic_ofun {ctx A} {RA:OType A} {B} {RB:OType B}
+(* Quote pfuns in atomic position as lambdas *)
+Instance QuotesToAtomic_pfun {ctx A} {RA:OType A} {B} {RB:OType B}
          (f: CtxElem ctx -> A -> B) prp
          (e: OExpr (CtxCons A ctx) B)
          (q: QuotesTo (fun c => f (celem_rest c) (celem_head c)) e) :
-  QuotesToAtomic (fun c => mk_ofun (f c) (prp:=(fun z => prp z c))) (Lam e) | 1.
+  QuotesToAtomic (fun c => mk_pfun (f c) (prp:=(fun z => prp z c))) (Lam e) | 1.
 Proof.
   apply QuotesTo_Lam. assumption.
 Qed.
@@ -755,7 +755,7 @@ Qed.
 Instance UnQuotesTo_Lam {ctx A} {RA:OType A} {B} {RB:OType B}
       (e: OExpr (CtxCons A ctx) B) f (q: UnQuotesTo e f) :
   UnQuotesTo (Lam e) (fun c =>
-                        mk_ofun (fun a => f (c, a))
+                        mk_pfun (fun a => f (c, a))
                                 (prp:=Proper_unQuotesTo q c)) | 1.
 Proof.
   intro; split; intros a1 a2 Ra; simpl.
@@ -831,7 +831,7 @@ Lemma simple_quote_test A `{OType A} a : a =o= a.
 Qed.
 
 (* A simple test case with all 4 OExpr constructs, that does beta-reduction *)
-Lemma beta_test A `{OType A} a : (ofun (x:A) => x) @o@ a =o= a.
+Lemma beta_test A `{OType A} a : (pfun (x:A) => x) @o@ a =o= a.
   osimpl.
 Qed.
 
@@ -843,20 +843,20 @@ Qed.
 
 (* A test case with with beta-reduction and projections + eta for products *)
 Lemma beta_product_test A `{OType A} B `{OType B} (p:A*B) :
-  (ofun p => (osnd @o@ p ,o, ofst @o@ p)) @o@ (osnd @o@ p ,o, ofst @o@ p)
+  (pfun p => (osnd @o@ p ,o, ofst @o@ p)) @o@ (osnd @o@ p ,o, ofst @o@ p)
   =o= p.
   osimpl.
 Qed.
 
 Lemma double_lambda_test A `{OType A} :
-  (ofun (f : A -o> A) => ofun x => f @o@ x) @o@ (ofun y => y)
-  =o= ofun x => x.
+  (pfun (f : A -o> A) => pfun x => f @o@ x) @o@ (pfun y => y)
+  =o= pfun x => x.
   osimpl.
 Qed.
 
 (* A test case with with beta-reduction and projections for products *)
 Lemma beta_product_test2 A `{OType A} B `{OType B} :
-  (ofun a => ofun b => (ofun p => (osnd @o@ p ,o, ofst @o@ p)) @o@ (b ,o, a))
+  (pfun a => pfun b => (pfun p => (osnd @o@ p ,o, ofst @o@ p)) @o@ (b ,o, a))
   =o= opair.
   (* osimpl *)
   (* NOTE: we write this out to see how long each step takes... *)

@@ -46,7 +46,7 @@ Class PredMonad M PM {OM} {FOM: FindOTypeF1 M OM} {OPM} {FOPM: FindOTypeF1 PM OP
       forall {A B} `{OType A} `{OType B} m f prp,
         liftP @o@ (bindM @o@ m @o@ f)
         =o= bindM @o@ (liftP @o@ m) @o@
-                  (mk_ofun (fun x => liftP @o@ (f @o@ x)) (prp:=prp));
+                  (mk_pfun (fun x => liftP @o@ (f @o@ x)) (prp:=prp));
 
     (* FIXME: need laws about how the combinators interact *)
   }.
@@ -65,18 +65,18 @@ Infix "|=" := satisfiesP (at level 80).
 
 (* Disjunction is definable in terms of the existential *)
 Definition orP `{PredMonadOps} `{OType} : PM A _ -o> PM A _ -o> PM A _ :=
-  ofun P1 => ofun P2 =>
-  existsP @o@ (ofun (b:bool) => oif @o@ b @o@ P1 @o@ P2).
+  pfun P1 => pfun P2 =>
+  existsP @o@ (pfun (b:bool) => oif @o@ b @o@ P1 @o@ P2).
 
 (* True and false, which correspond to top and bottom, respectively *)
 Definition trueP `{PredMonadOps} `{OType} : PM A _ :=
-  existsP @o@ (ofun pm => pm).
+  existsP @o@ (pfun pm => pm).
 Definition falseP `{PredMonadOps} `{OType} : PM A _ :=
-  forallP @o@ (ofun pm => pm).
+  forallP @o@ (pfun pm => pm).
 
 (* An assertion inside a predicate monad *)
 Program Definition assertP `{PredMonad} : Prop -o> PM unit _ :=
-  mk_ofun (fun (P:Prop) => existsP @o@ (ofun (pf:P) => trueP)) (prp:=_).
+  mk_pfun (fun (P:Prop) => existsP @o@ (pfun (pf:P) => trueP)) (prp:=_).
 Next Obligation.
   intros P1 P2 RP. apply predmonad_existsP_elim; intro pf1.
   assert P2 as pf2; [ apply RP; assumption | ].
@@ -87,10 +87,10 @@ Defined.
 (* An assumption made for the duration of a predicate monad *)
 Program Definition assumingP `{PredMonad} `{OType} :
   Flip Prop -o> PM A _ -o> PM A _ :=
-  mk_ofun
+  mk_pfun
     (fun (P:Flip Prop) =>
-       mk_ofun (fun (Q:PM A _) =>
-                  forallP @o@ (ofun (pf:unflip P) => Q)) (prp:=_))
+       mk_pfun (fun (Q:PM A _) =>
+                  forallP @o@ (pfun (pf:unflip P) => Q)) (prp:=_))
        (prp:=_).
 Next Obligation.
   intros Q1 Q2 RQ.
@@ -121,18 +121,18 @@ Instance FindOTypeF1_DownSetM : FindOTypeF1 DownSetM (fun _ _ => _) := I.
 (* An existential with both a positive and a negative component *)
 Program Definition oexists2' `{OType} : (A -o> Prop) -o>
                                         (Flip A -o> Prop) -o> Prop :=
-  mk_ofun
+  mk_pfun
     (fun P1 =>
-       mk_ofun
+       mk_pfun
          (fun P2 =>
             exists2 x, P1 @o@ x & P2 @o@ flip x) (prp:=_)) (prp:=_).
 Next Obligation.
-  unfold OFunProper, ProperPair; simpl; intros. intro pf.
+  unfold PFunProper, ProperPair; simpl; intros. intro pf.
   destruct pf as [z pf1 pf2].
   exists z; try assumption. apply (H0 _ _ (reflexivity _)). assumption.
 Defined.
 Next Obligation.
-  unfold OFunProper, ProperPair; simpl; intros. intro pf.
+  unfold PFunProper, ProperPair; simpl; intros. intro pf.
   destruct pf as [z pf1 pf2].
   exists z; [ apply (H0 _ _ (reflexivity _)) |
               apply (H1 _ _ (reflexivity _)) ]; assumption.
@@ -142,11 +142,11 @@ Defined.
 Instance MonadOps_DownSetM : MonadOps DownSetM :=
   {| returnM :=
        fun A _ =>
-         ofun (x:A) => ofun (y:Flip A) => oR @o@ y @o@ x;
+         pfun (x:A) => pfun (y:Flip A) => oR @o@ y @o@ x;
      bindM :=
        fun A B _ _ =>
-         (ofun m => ofun f => ofun (y:Flip B) =>
-          oexists2' @o@ (ofun x => f @o@ x @o@ y) @o@ m)
+         (pfun m => pfun f => pfun (y:Flip B) =>
+          oexists2' @o@ (pfun x => f @o@ x @o@ y) @o@ m)
   |}.
 
 Instance Monad_DownSetM : Monad DownSetM.
@@ -177,10 +177,10 @@ Instance PredMonadOps_DownSetM : PredMonadOps Identity DownSetM :=
   {|
     forallP :=
       fun A B _ _ =>
-        ofun P => ofun b => oforall @o@ (ofun a => P @o@ a @o@ b);
+        pfun P => pfun b => oforall @o@ (pfun a => P @o@ a @o@ b);
     existsP :=
       fun A B _ _ =>
-        ofun P => ofun b => oexists @o@ (ofun a => P @o@ a @o@ b);
+        pfun P => pfun b => oexists @o@ (pfun a => P @o@ a @o@ b);
     liftP :=
       fun A _ => returnM
   |}.
