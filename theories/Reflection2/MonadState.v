@@ -19,27 +19,27 @@ Class MonadState M {FOM:OTypeF1 M} St {OSt: OType St}
 
     monad_state_get :
       forall A `{OType A} (m : M A _) prp,
-        bindM @o@ getM @o@ (mk_pfun (fun _ => m) (prp:=prp)) =o= m;
+        bindM @o@ getM @o@ (mk_ofun (fun _ => m) (prp:=prp)) =o= m;
 
     monad_state_get_put :
       forall A `{OType A} (f : St -o> unit -o> M A _) prp1 prp2,
         bindM @o@ getM @o@
-              (mk_pfun (fun s => bindM @o@ (putM @o@ s) @o@ (f @o@ s))
+              (mk_ofun (fun s => bindM @o@ (putM @o@ s) @o@ (f @o@ s))
                        (prp:=prp1))
         =o= bindM @o@ getM @o@
-                  (mk_pfun (fun s => f @o@ s @o@ tt) (prp:=prp2));
+                  (mk_ofun (fun s => f @o@ s @o@ tt) (prp:=prp2));
 
     monad_state_put_get :
       forall A `{OType A} s (f : unit -o> St -o> M A _) prp1 prp2,
         bindM @o@ (putM @o@ s) @o@
-              (mk_pfun (fun u => bindM @o@ getM @o@ (f @o@ u)) (prp:=prp1))
+              (mk_ofun (fun u => bindM @o@ getM @o@ (f @o@ u)) (prp:=prp1))
         =o= bindM @o@ (putM @o@ s) @o@
-                  (mk_pfun (fun u => f @o@ u @o@ s) (prp:=prp2)) ;
+                  (mk_ofun (fun u => f @o@ u @o@ s) (prp:=prp2)) ;
 
     monad_state_put_put :
       forall A `{OType A} s1 s2 (f : unit -o> unit -o> M A _) prp,
         bindM @o@ (putM @o@ s1) @o@
-              (mk_pfun (fun u => bindM @o@ (putM @o@ s2) @o@ (f @o@ u))
+              (mk_ofun (fun u => bindM @o@ (putM @o@ s2) @o@ (f @o@ u))
                        (prp:=prp))
         =o= bindM @o@ (putM @o@ s2) @o@ (f @o@ tt)
   }.
@@ -90,10 +90,10 @@ Instance FindOTypeF1_StateT St `{OType St} M `{FindOTypeF1 M} :
 
 Instance MonadOps_StateT St `{OType St} M `{MonadOps M} : MonadOps (StateT St M) :=
   {returnM :=
-     fun A _ => pfun x => pfun s => returnM @o@ (s ,o, x);
+     fun A _ => ofun x => ofun s => returnM @o@ (s ,o, x);
    bindM :=
      fun A B _ _ =>
-       pfun m => pfun f => pfun s =>
+       ofun m => ofun f => ofun s =>
          (do s_x <- (m @o@ s);
             f @o@ (osnd @o@ s_x) @o@ (ofst @o@ s_x))
   }.

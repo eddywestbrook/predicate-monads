@@ -25,16 +25,16 @@ Proof.
 Defined.
 
 (* Map from an element of a context to an element of its head. This is just
-fst_pfun, but writing it this way helps the Coq unifier. *)
-Definition ctx_head_pfun {ctx A RA} :
+fst_ofun, but writing it this way helps the Coq unifier. *)
+Definition ctx_head_ofun {ctx A RA} :
   CtxElem (@CtxCons A RA ctx) -o> A :=
-  snd_pfun.
+  snd_ofun.
 
 (* Map from an element of a context to an element of its tail. This is just
-fst_pfun, but writing it this way helps the Coq unifier. *)
-Definition ctx_tail_pfun {ctx A RA} :
+fst_ofun, but writing it this way helps the Coq unifier. *)
+Definition ctx_tail_ofun {ctx A RA} :
   CtxElem (@CtxCons A RA ctx) -o> CtxElem ctx :=
-  fst_pfun.
+  fst_ofun.
 
 (* Look up the nth type in a Ctx, returning the unit type as a default *)
 Fixpoint ctxNth ctx n {struct ctx} : Type :=
@@ -63,18 +63,18 @@ Arguments ctxNthOType !ctx !n.
 
 Hint Resolve ctxNthOType : typeclass_instances.
 
-(* Pfun to extract the nth element of a context *)
-Fixpoint nth_pfun ctx n : CtxElem ctx -o> ctxNth ctx n :=
+(* Ofun to extract the nth element of a context *)
+Fixpoint nth_ofun ctx n : CtxElem ctx -o> ctxNth ctx n :=
   match ctx return CtxElem ctx -o> ctxNth ctx n with
-  | CtxNil => const_pfun tt
+  | CtxNil => const_ofun tt
   | CtxCons tp ctx' =>
     match n return CtxElem (CtxCons tp ctx') -o> ctxNth (CtxCons tp ctx') n with
-    | 0 => ctx_head_pfun
+    | 0 => ctx_head_ofun
     | S n' =>
-      compose_pfun ctx_tail_pfun (nth_pfun ctx' n')
+      compose_ofun ctx_tail_ofun (nth_ofun ctx' n')
     end
   end.
-Arguments nth_pfun ctx n : simpl nomatch.
+Arguments nth_ofun ctx n : simpl nomatch.
 
 (* Weaken a context by inserting a type at point w *)
 Fixpoint ctxInsert w W {RW:OType W} ctx {struct w} : Ctx :=
@@ -89,19 +89,19 @@ Fixpoint ctxInsert w W {RW:OType W} ctx {struct w} : Ctx :=
 Arguments ctxInsert w W {RW} ctx : simpl nomatch.
 
 (* Map from a weaker to a stronger context, by dropping the new element *)
-Fixpoint weaken_pfun w W {RW} ctx :
+Fixpoint weaken_ofun w W {RW} ctx :
   CtxElem (@ctxInsert w W RW ctx) -o> CtxElem ctx :=
   match w return CtxElem (ctxInsert w W ctx) -o> CtxElem ctx with
-  | 0 => ctx_tail_pfun
+  | 0 => ctx_tail_ofun
   | S w' =>
     match ctx return CtxElem (ctxInsert (S w') W ctx) -o> CtxElem ctx with
-    | CtxNil => const_pfun tt
+    | CtxNil => const_ofun tt
     | CtxCons tpB ctx' =>
-      pair_pfun (compose_pfun ctx_tail_pfun (weaken_pfun w' W ctx'))
-                ctx_head_pfun
+      pair_ofun (compose_ofun ctx_tail_ofun (weaken_ofun w' W ctx'))
+                ctx_head_ofun
     end
   end.
-Arguments weaken_pfun !w W {RW} !ctx.
+Arguments weaken_ofun !w W {RW} !ctx.
 
 (* Delete the nth element of a context *)
 Fixpoint ctxDelete n ctx {struct ctx} : Ctx :=
@@ -127,29 +127,29 @@ Fixpoint ctxSuffix n ctx {struct ctx} : Ctx :=
   end.
 Arguments ctxSuffix n ctx : simpl nomatch.
 
-(* Substitute into a context by providing a pfun for the nth value *)
-Fixpoint subst_pfun ctx n :
+(* Substitute into a context by providing a ofun for the nth value *)
+Fixpoint subst_ofun ctx n :
   (CtxElem (ctxSuffix n ctx) -o> ctxNth ctx n) ->
   CtxElem (ctxDelete n ctx) -o> CtxElem ctx :=
   match ctx return
         (CtxElem (ctxSuffix n ctx) -o> ctxNth ctx n) ->
         CtxElem (ctxDelete n ctx) -o> CtxElem ctx with
-  | CtxNil => fun s => const_pfun tt
+  | CtxNil => fun s => const_ofun tt
   | CtxCons A ctx' =>
     match n return
         (CtxElem (ctxSuffix n (CtxCons A ctx')) -o> ctxNth (CtxCons A ctx') n) ->
         CtxElem (ctxDelete n (CtxCons A ctx')) -o> CtxElem (CtxCons A ctx')
     with
-    | 0 => fun s => pair_pfun id_pfun s
+    | 0 => fun s => pair_ofun id_ofun s
     | S n' =>
       fun s =>
-        pair_pfun (compose_pfun fst_pfun (subst_pfun ctx' n' s)) snd_pfun
+        pair_ofun (compose_ofun fst_ofun (subst_ofun ctx' n' s)) snd_ofun
     end
   end.
-Arguments subst_pfun ctx n : simpl nomatch.
+Arguments subst_ofun ctx n : simpl nomatch.
 
-(* Proper-ness of subst_pfun *)
-Instance Proper_subst_pfun ctx n : Proper (ot_R ==> ot_R) (subst_pfun ctx n).
+(* Proper-ness of subst_ofun *)
+Instance Proper_subst_ofun ctx n : Proper (oleq ==> oleq) (subst_ofun ctx n).
 Proof.
   revert n; induction ctx; intros; [ | destruct n ]; simpl; intros s1 s2 Rs.
   - reflexivity.
@@ -158,11 +158,11 @@ Proof.
     split; destruct Rc; [ apply IHctx | ]; assumption.
 Qed.
 
-(* Proper-ness of subst_pfun w.r.t equivalence *)
-Instance Proper_subst_pfun_equiv ctx n :
-  Proper (ot_equiv ==> ot_equiv) (subst_pfun ctx n).
+(* Proper-ness of subst_ofun w.r.t equivalence *)
+Instance Proper_subst_ofun_equiv ctx n :
+  Proper (oeq ==> oeq) (subst_ofun ctx n).
 Proof.
-  intros s1 s2 Rs; destruct Rs; split; apply Proper_subst_pfun; assumption.
+  intros s1 s2 Rs; destruct Rs; split; apply Proper_subst_ofun; assumption.
 Qed.
 
 

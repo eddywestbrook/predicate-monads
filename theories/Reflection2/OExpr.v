@@ -82,8 +82,8 @@ Notation "'efun' ( x : A ) => e" :=
 Fixpoint varSemantics {A RA ctx} (v:@OVar A RA ctx) :
   CtxElem ctx -o> A :=
   match v in OVar _ ctx return CtxElem ctx -o> A with
-  | OVar_0 => ctx_head_pfun
-  | OVar_S v' => compose_pfun ctx_tail_pfun (varSemantics v')
+  | OVar_0 => ctx_head_ofun
+  | OVar_S v' => compose_ofun ctx_tail_ofun (varSemantics v')
   end.
 Arguments varSemantics {A RA ctx} !v.
 
@@ -91,9 +91,9 @@ Arguments varSemantics {A RA ctx} !v.
 Fixpoint exprSemantics {ctx A RA} (e:@OExpr ctx A RA) : CtxElem ctx -o> A :=
   match e in @OExpr _ A RA return CtxElem ctx -o> A with
   | Var v => varSemantics v
-  | Embed a => const_pfun a
-  | App e1 e2 => pfun_apply (exprSemantics e1) (exprSemantics e2)
-  | Lam e => pfun_curry (exprSemantics e)
+  | Embed a => const_ofun a
+  | App e1 e2 => ofun_apply (exprSemantics e1) (exprSemantics e2)
+  | Lam e => ofun_curry (exprSemantics e)
   end.
 Arguments exprSemantics {ctx A RA} !e.
 
@@ -107,14 +107,14 @@ Arguments evalExpr {A RA} !e.
  ***)
 
 (* Two expressions are related iff their semantics are *)
-Definition oexpr_R {ctx A RA} (e1 e2:@OExpr ctx A RA) : Prop :=
+Definition oexpr_leq {ctx A RA} (e1 e2:@OExpr ctx A RA) : Prop :=
   exprSemantics e1 <o= exprSemantics e2.
-Arguments oexpr_R {ctx A RA} e1 e2 : simpl never.
+Arguments oexpr_leq {ctx A RA} e1 e2 : simpl never.
 
-(* oexpr_R is a PreOrder *)
-Instance PreOrder_oexpr_R ctx A RA : PreOrder (@oexpr_R ctx A RA).
+(* oexpr_leq is a PreOrder *)
+Instance PreOrder_oexpr_leq ctx A RA : PreOrder (@oexpr_leq ctx A RA).
 Proof.
-  unfold oexpr_R; split; intro; intros.
+  unfold oexpr_leq; split; intro; intros.
   - reflexivity.
   - etransitivity; [ apply H | apply H0 ].
 Qed.
@@ -134,32 +134,32 @@ Proof.
 Qed.
 
 Notation "x <e= y" :=
-  (oexpr_R x y) (no associativity, at level 70).
+  (oexpr_leq x y) (no associativity, at level 70).
 Notation "x =e= y" :=
   (oexpr_eq x y) (no associativity, at level 70).
 
 
-(* The Embed constructor is Proper w.r.t. ot_R and oexpr_R *)
+(* The Embed constructor is Proper w.r.t. oleq and oexpr_leq *)
 Instance Proper_Embed ctx A RA :
-  Proper (ot_R ==> oexpr_R) (@Embed ctx A RA).
+  Proper (oleq ==> oexpr_leq) (@Embed ctx A RA).
 Proof.
-  intros a1 a2 Ra; unfold oexpr_R; simpl.
-  apply Proper_const_pfun. assumption.
+  intros a1 a2 Ra; unfold oexpr_leq; simpl.
+  apply Proper_const_ofun. assumption.
 Qed.
 
-(* The Embed constructor is Proper w.r.t. ot_equiv and oexpr_eq *)
+(* The Embed constructor is Proper w.r.t. oeq and oexpr_eq *)
 Instance Proper_Embed_equiv ctx A RA :
-  Proper (ot_equiv ==> oexpr_eq) (@Embed ctx A RA).
+  Proper (oeq ==> oexpr_eq) (@Embed ctx A RA).
 Proof.
   intros a1 a2 Ra. destruct Ra; split; apply Proper_Embed; assumption.
 Qed.
 
 (* The App constructor is Proper *)
 Instance Proper_App ctx A RA B RB :
-  Proper (oexpr_R ==> oexpr_R ==> oexpr_R) (@App ctx A RA B RB).
+  Proper (oexpr_leq ==> oexpr_leq ==> oexpr_leq) (@App ctx A RA B RB).
 Proof.
-  intros f1 f2 Rf a1 a2 Ra. unfold oexpr_R; simpl.
-  apply Proper_pfun_apply; assumption.
+  intros f1 f2 Rf a1 a2 Ra. unfold oexpr_leq; simpl.
+  apply Proper_ofun_apply; assumption.
 Qed.
 
 (* The App constructor is Proper for equivalence *)
@@ -167,15 +167,15 @@ Instance Proper_App_equiv ctx A RA B RB :
   Proper (oexpr_eq ==> oexpr_eq ==> oexpr_eq) (@App ctx A RA B RB).
 Proof.
   intros f1 f2 Rf a1 a2 Ra. unfold oexpr_eq; simpl.
-  apply Proper_pfun_apply_equiv; assumption.
+  apply Proper_ofun_apply_equiv; assumption.
 Qed.
 
 (* The Lam constructor is Proper *)
 Instance Proper_Lam ctx A RA B RB :
-  Proper (oexpr_R ==> oexpr_R) (@Lam ctx A RA B RB).
+  Proper (oexpr_leq ==> oexpr_leq) (@Lam ctx A RA B RB).
 Proof.
-  intros e1 e2 Re. unfold oexpr_R; simpl.
-  apply Proper_pfun_curry. assumption.
+  intros e1 e2 Re. unfold oexpr_leq; simpl.
+  apply Proper_ofun_curry. assumption.
 Qed.
 
 (* The Lam constructor is Proper for equivalence *)
@@ -183,7 +183,7 @@ Instance Proper_Lam_equiv ctx A RA B RB :
   Proper (oexpr_eq ==> oexpr_eq) (@Lam ctx A RA B RB).
 Proof.
   intros e1 e2 Re. unfold oexpr_eq; simpl.
-  apply Proper_pfun_curry_equiv. assumption.
+  apply Proper_ofun_curry_equiv. assumption.
 Qed.
 
 
@@ -206,16 +206,16 @@ Fixpoint weakenOVar w W {RW} :
   end.
 Arguments weakenOVar w W {RW ctx A RA} v : simpl nomatch.
 
-(* Correctness of weakenOVar: it is equivalent to weaken_pfun *)
+(* Correctness of weakenOVar: it is equivalent to weaken_ofun *)
 Lemma weakenOVar_correct w W {RW ctx A RA} (v:@OVar A RA ctx) :
   varSemantics (@weakenOVar w W RW ctx A RA v) =o=
-  compose_pfun (weaken_pfun w W ctx) (varSemantics v).
+  compose_ofun (weaken_ofun w W ctx) (varSemantics v).
 Proof.
   revert ctx v; induction w; intros; [ | destruct v ]; simpl.
   - reflexivity.
   - rewrite compose_pair_snd. reflexivity.
-  - rewrite compose_compose_pfun. rewrite compose_pair_fst.
-    rewrite <- compose_compose_pfun. f_equiv. apply IHw.
+  - rewrite compose_compose_ofun. rewrite compose_pair_fst.
+    rewrite <- compose_compose_ofun. f_equiv. apply IHw.
 Qed.
 
 (* Weakening / lifting of ordered expressions *)
@@ -228,24 +228,24 @@ Fixpoint weakenOExpr w W {RW:OType W} {ctx A RA}
   | Lam e => Lam (weakenOExpr (S w) W e)
   end.
 
-(* Correctness of weakenOExpr: it is equivalent to weaken_pfun *)
+(* Correctness of weakenOExpr: it is equivalent to weaken_ofun *)
 Lemma weakenOExpr_correct w W {RW ctx A RA} (e:@OExpr ctx A RA) :
   exprSemantics (@weakenOExpr w W RW ctx A RA e) =o=
-  compose_pfun (weaken_pfun w W ctx) (exprSemantics e).
+  compose_ofun (weaken_ofun w W ctx) (exprSemantics e).
   revert w; induction e; intros; simpl.
   - apply weakenOVar_correct.
-  - rewrite compose_f_const_pfun; try typeclasses eauto. reflexivity.
-  - rewrite compose_pfun_apply; try typeclasses eauto.
+  - rewrite compose_f_const_ofun; try typeclasses eauto. reflexivity.
+  - rewrite compose_ofun_apply; try typeclasses eauto.
     rewrite IHe1. rewrite IHe2. reflexivity.
-  - rewrite compose_pfun_curry; try typeclasses eauto.
+  - rewrite compose_ofun_curry; try typeclasses eauto.
     f_equiv. apply (IHe (S w)).
 Qed.
 
 (* Proper-ness of weakenOExpr *)
 Instance Proper_weakenOExpr w W RW ctx A RA :
-  Proper (oexpr_R ==> oexpr_R) (@weakenOExpr w W RW ctx A RA).
+  Proper (oexpr_leq ==> oexpr_leq) (@weakenOExpr w W RW ctx A RA).
 Proof.
-  intros e1 e2 Re. unfold oexpr_R.
+  intros e1 e2 Re. unfold oexpr_leq.
   etransitivity; [ apply weakenOExpr_correct | ].
   etransitivity; [ | apply weakenOExpr_correct ].
   f_equiv. assumption.
@@ -297,24 +297,24 @@ Fixpoint substOVar n {ctx A RA} :
   end.
 Arguments substOVar !n {ctx A RA} !v s.
 
-(* Correctness of substOVar: it is equivalent to subst_pfun *)
+(* Correctness of substOVar: it is equivalent to subst_ofun *)
 Lemma substOVar_correct n {ctx A RA} (v:@OVar A RA ctx) s :
   exprSemantics (substOVar n v s) =o=
-  compose_pfun (subst_pfun ctx n (exprSemantics s)) (varSemantics v).
+  compose_ofun (subst_ofun ctx n (exprSemantics s)) (varSemantics v).
 Proof.
   revert n s; induction v; intros; destruct n; simpl.
   - symmetry; apply compose_pair_snd.
   - symmetry; apply compose_pair_snd.
-  - rewrite compose_compose_pfun. rewrite compose_pair_fst.
-    rewrite id_compose_pfun. reflexivity.
+  - rewrite compose_compose_ofun. rewrite compose_pair_fst.
+    rewrite id_compose_ofun. reflexivity.
   - etransitivity; [ apply (weakenOExpr_correct 0) | ].
-    rewrite compose_compose_pfun. rewrite compose_pair_fst.
-    rewrite <- compose_compose_pfun. f_equiv. apply IHv.
+    rewrite compose_compose_ofun. rewrite compose_pair_fst.
+    rewrite <- compose_compose_ofun. f_equiv. apply IHv.
 Qed.
 
 (* substOVar is Proper in its s argument *)
 Instance Proper_substOVar n {ctx A RA} v :
-  Proper (oexpr_R ==> oexpr_R) (@substOVar n ctx A RA v).
+  Proper (oexpr_leq ==> oexpr_leq) (@substOVar n ctx A RA v).
 Proof.
   revert ctx v; induction n; intros; destruct v; intros e1 e2 Re; simpl.
   - assumption.
@@ -346,18 +346,18 @@ Fixpoint substOExpr n {ctx A RA} (e:@OExpr ctx A RA) :
   end.
 Arguments substOExpr n {ctx A RA} !e.
 
-(* Correctness of substOExpr: it is equivalent to subst_pfun *)
+(* Correctness of substOExpr: it is equivalent to subst_ofun *)
 Lemma substOExpr_correct n {ctx A RA} (e:@OExpr ctx A RA) s :
   exprSemantics (substOExpr n e s) =o=
-  compose_pfun (subst_pfun ctx n (exprSemantics s)) (exprSemantics e).
+  compose_ofun (subst_ofun ctx n (exprSemantics s)) (exprSemantics e).
 Proof.
   revert n s; induction e; intros; simpl.
   - apply substOVar_correct.
-  - symmetry. apply compose_f_const_pfun.
-  - etransitivity; [ | symmetry; apply compose_pfun_apply ];
+  - symmetry. apply compose_f_const_ofun.
+  - etransitivity; [ | symmetry; apply compose_ofun_apply ];
       try typeclasses eauto.
-    apply Proper_pfun_apply_equiv; [ apply IHe1 | apply IHe2 ].
-  - etransitivity; [ | symmetry; apply compose_pfun_curry ];
+    apply Proper_ofun_apply_equiv; [ apply IHe1 | apply IHe2 ].
+  - etransitivity; [ | symmetry; apply compose_ofun_curry ];
       try typeclasses eauto.
     f_equiv.
     apply (IHe (S n)).
@@ -375,7 +375,7 @@ Lemma OExpr_Beta ctx A RA B RB
 Proof.
   unfold oexpr_eq; simpl.
   rewrite (substOExpr_correct 0 e1 e2).
-  rewrite pfun_apply_pfun_curry; try typeclasses eauto.
+  rewrite ofun_apply_ofun_curry; try typeclasses eauto.
   f_equiv.
 Qed.
 
@@ -467,7 +467,7 @@ Lemma OExpr_sum_commute_Embed ctx A B C D
 Proof.
   split; intros c1 c2 Rc; simpl;
     assert (exprSemantics e @o@ c1 <o= exprSemantics e @o@ c2) as Re;
-      try (apply pfun_Proper; assumption); destruct Re;
+      try (apply ofun_Proper; assumption); destruct Re;
         repeat rewrite H3; repeat rewrite Rc; reflexivity.
 Qed.
 
@@ -546,11 +546,11 @@ Proof.
     rewrite <- (q (c,a2)); reflexivity.
 Qed.
 
-(* Special case: quote pfuns as lambdas, destructuring the pfun *)
-Instance QuotesTo_Lam_pfun {ctx A RA B RB} (f: CtxElem ctx -> A -> B) prp
+(* Special case: quote ofuns as lambdas, destructuring the ofun *)
+Instance QuotesTo_Lam_ofun {ctx A RA B RB} (f: CtxElem ctx -> A -> B) prp
          (e: @OExpr (@CtxCons A RA ctx) B RB)
          (q: QuotesTo (fun c => f (celem_rest c) (celem_head c)) e) :
-  QuotesTo (fun c => mk_pfun (f c) (prp:=prp c)) (Lam e) | 1.
+  QuotesTo (fun c => mk_ofun (f c) (prp:=prp c)) (Lam e) | 1.
 Proof.
   apply QuotesTo_Lam. assumption.
 Qed.
@@ -591,12 +591,12 @@ Proof.
   - apply q2.
 Qed.
 
-(* Quote pfuns in atomic position as lambdas *)
-Instance QuotesToAtomic_pfun {ctx A} {RA:OType A} {B} {RB:OType B}
+(* Quote ofuns in atomic position as lambdas *)
+Instance QuotesToAtomic_ofun {ctx A} {RA:OType A} {B} {RB:OType B}
          (f: CtxElem ctx -> A -> B) prp
          (e: OExpr (CtxCons A ctx) B)
          (q: QuotesTo (fun c => f (celem_rest c) (celem_head c)) e) :
-  QuotesToAtomic (fun c => mk_pfun (f c) (prp:=(fun z => prp z c))) (Lam e) | 1.
+  QuotesToAtomic (fun c => mk_ofun (f c) (prp:=(fun z => prp z c))) (Lam e) | 1.
 Proof.
   apply QuotesTo_Lam. assumption.
 Qed.
@@ -693,7 +693,7 @@ Ltac osimpl :=
 (* Class for unquoting OVars to functions *)
 Class UnQuotesToVar {ctx A} {RA:OType A}
       (v: OVar A ctx) (f: CtxElem ctx -> A) : Prop :=
-  { unQuotesToVarProper : Proper (ot_R ==> ot_R) f;
+  { unQuotesToVarProper : Proper (oleq ==> oleq) f;
     unQuotesToVar : forall c, f c = varSemantics v @o@ c }.
 
 Instance UnQuotesToVar_Base A RA ctx :
@@ -744,7 +744,7 @@ Qed.
 
 Lemma Proper_unQuotesTo {ctx A} {RA:OType A} {B} {RB:OType B}
       {e: OExpr (CtxCons A ctx) B} {f} (q: UnQuotesTo e f) c :
-  Proper (ot_R ==> ot_R) (fun a => f (c, a)).
+  Proper (oleq ==> oleq) (fun a => f (c, a)).
 Proof.
   intros a1 a2 Ra.
   etransitivity; [ apply (unQuotesTo (UnQuotesTo:=q)) | ].
@@ -755,7 +755,7 @@ Qed.
 Instance UnQuotesTo_Lam {ctx A} {RA:OType A} {B} {RB:OType B}
       (e: OExpr (CtxCons A ctx) B) f (q: UnQuotesTo e f) :
   UnQuotesTo (Lam e) (fun c =>
-                        mk_pfun (fun a => f (c, a))
+                        mk_ofun (fun a => f (c, a))
                                 (prp:=Proper_unQuotesTo q c)) | 1.
 Proof.
   intro; split; intros a1 a2 Ra; simpl.
@@ -774,7 +774,7 @@ already simplified away in the goal, making it hard for Coq to match. The
 following instructs Coq how to do the match by supplying the w argument. *)
 Instance UnQuotesTo_weakenOExpr {ctx A} {RA:OType A} w W {OW:OType W}
          (e: OExpr ctx A) f (q: UnQuotesTo e f) :
-  UnQuotesTo (weakenOExpr w W e) (fun c => f (weaken_pfun w W _ @o@ c)) | 1.
+  UnQuotesTo (weakenOExpr w W e) (fun c => f (weaken_ofun w W _ @o@ c)) | 1.
 Proof.
   intro. rewrite weakenOExpr_correct. simpl.
   rewrite (unQuotesTo (UnQuotesTo:=q)). reflexivity.
@@ -831,7 +831,7 @@ Lemma simple_quote_test A `{OType A} a : a =o= a.
 Qed.
 
 (* A simple test case with all 4 OExpr constructs, that does beta-reduction *)
-Lemma beta_test A `{OType A} a : (pfun (x:A) => x) @o@ a =o= a.
+Lemma beta_test A `{OType A} a : (ofun (x:A) => x) @o@ a =o= a.
   osimpl.
 Qed.
 
@@ -843,20 +843,20 @@ Qed.
 
 (* A test case with with beta-reduction and projections + eta for products *)
 Lemma beta_product_test A `{OType A} B `{OType B} (p:A*B) :
-  (pfun p => (osnd @o@ p ,o, ofst @o@ p)) @o@ (osnd @o@ p ,o, ofst @o@ p)
+  (ofun p => (osnd @o@ p ,o, ofst @o@ p)) @o@ (osnd @o@ p ,o, ofst @o@ p)
   =o= p.
   osimpl.
 Qed.
 
 Lemma double_lambda_test A `{OType A} :
-  (pfun (f : A -o> A) => pfun x => f @o@ x) @o@ (pfun y => y)
-  =o= pfun x => x.
+  (ofun (f : A -o> A) => ofun x => f @o@ x) @o@ (ofun y => y)
+  =o= ofun x => x.
   osimpl.
 Qed.
 
 (* A test case with with beta-reduction and projections for products *)
 Lemma beta_product_test2 A `{OType A} B `{OType B} :
-  (pfun a => pfun b => (pfun p => (osnd @o@ p ,o, ofst @o@ p)) @o@ (b ,o, a))
+  (ofun a => ofun b => (ofun p => (osnd @o@ p ,o, ofst @o@ p)) @o@ (b ,o, a))
   =o= opair.
   (* osimpl *)
   (* NOTE: we write this out to see how long each step takes... *)

@@ -56,14 +56,14 @@ Instance FindOTypeF1_ErrorT Err `{OType Err} M `{FindOTypeF1 M} :
 Instance MonadOps_ErrorT Err `{OType Err} M `{MonadOps M}
   : MonadOps (ErrorT Err M) :=
   {returnM :=
-     fun A _ => pfun x => returnM @o@ (oinr @o@ x);
+     fun A _ => ofun x => returnM @o@ (oinr @o@ x);
    bindM :=
      fun A B _ _ =>
-       (pfun m => pfun f =>
+       (ofun m => ofun f =>
         (bindM
            @o@ m
            @o@ (osum_elim
-                  @o@ (pfun err => returnM @o@ (oinl @o@ err))
+                  @o@ (ofun err => returnM @o@ (oinl @o@ err))
                   @o@ f)))
   }.
 

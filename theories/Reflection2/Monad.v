@@ -20,19 +20,19 @@ Class Monad M `{MonadOps M} : Prop :=
 
     monad_bind_return :
       forall A `{OType A} m prp,
-        bindM @o@ m @o@ (mk_pfun (fun x => returnM @o@ x) (prp:=prp)) =o= m;
+        bindM @o@ m @o@ (mk_ofun (fun x => returnM @o@ x) (prp:=prp)) =o= m;
 
     monad_assoc :
       forall A B C `{OType A} `{OType B} `{OType C}
              m (f: A -o> M B _) (g: B -o> M C _) prp,
         bindM @o@ (bindM @o@ m @o@ f) @o@ g
         =o=
-        bindM @o@ m @o@ (mk_pfun (fun x => bindM @o@ (f @o@ x) @o@ g) (prp:=prp));
+        bindM @o@ m @o@ (mk_ofun (fun x => bindM @o@ (f @o@ x) @o@ g) (prp:=prp));
   }.
 
 (* Helpful bind notation *)
 Notation "'do' x <- m1 ; m2" :=
-  (bindM @o@ m1 @o@ (mk_pfun (fun x => m2))) (at level 60, right associativity).
+  (bindM @o@ m1 @o@ (mk_ofun (fun x => m2))) (at level 60, right associativity).
 
 Notation "'edo' x <- m1 ; m2" :=
   (Embed bindM @e@ m1 @e@ (mkLam (fun x => m2)))
@@ -93,9 +93,9 @@ Instance OTypeF_Identity : OTypeF1 Identity :=
 (* Instance FindOTypeF_Identity : FindOTypeF1 Identity (fun _ ot => ot) := I. *)
 
 Instance IdMonad_MonadOps : MonadOps Identity :=
-  { returnM := fun A _ => pfun x => x;
+  { returnM := fun A _ => ofun x => x;
     bindM := fun A B _ _ =>
-               pfun m => pfun (f : A -o> B ) => f @o@ m }.
+               ofun m => ofun (f : A -o> B ) => f @o@ m }.
 
 Instance IdMonad : Monad Identity.
 Proof.
