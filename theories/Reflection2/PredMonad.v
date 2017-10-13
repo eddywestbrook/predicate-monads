@@ -4,15 +4,15 @@ Require Export PredMonad.Reflection2.Monad.
  *** The Predicate Monad Class
  ***)
 
-Class PredMonadOps M PM `{FindOTypeF1 M} `{FindOTypeF1 PM} : Type :=
+Class PredMonadOps M PM `{OTypeF1 M} `{OTypeF1 PM} : Type :=
   { forallP: forall {A B} `{OType A} `{OType B}, (A -o> PM B _) -o> PM B _;
     existsP: forall {A B} `{OType A} `{OType B}, (A -o> PM B _) -o> PM B _;
     liftP: forall {A} `{OType A}, M A _ -o> PM A _;
   }.
 
-Class PredMonad M PM {OM} {FOM: FindOTypeF1 M OM} {OPM} {FOPM: FindOTypeF1 PM OPM}
-      `{@MonadOps M OM FOM} `{@MonadOps PM OPM FOPM}
-      `{@PredMonadOps M PM OM FOM OPM FOPM} : Prop :=
+Class PredMonad M PM {FOM: OTypeF1 M} {FOPM: OTypeF1 PM}
+      `{@MonadOps M FOM} `{@MonadOps PM FOPM}
+      `{@PredMonadOps M PM FOM FOPM} : Prop :=
   {
     (* M and PM must be monads *)
     predmonad_monad_M :> Monad M;
@@ -112,11 +112,11 @@ Defined.
 (* The type of downward-closed sets *)
 Definition DownSetM A `{OType A} := Flip A -o> Prop.
 
-(*
 Instance OTypeF1_DownSetM : OTypeF1 DownSetM := fun _ _ => _.
-*)
 
+(*
 Instance FindOTypeF1_DownSetM : FindOTypeF1 DownSetM (fun _ _ => _) := I.
+*)
 
 (* An existential with both a positive and a negative component *)
 Program Definition oexists2' `{OType} : (A -o> Prop) -o>

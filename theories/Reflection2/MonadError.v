@@ -6,14 +6,14 @@ Require Export PredMonad.Reflection2.Monad.
  ***)
 
 (* Error effects = throw and catch *)
-Class MonadErrorOps M `{FindOTypeF1 M} Err `{OType Err} : Type :=
+Class MonadErrorOps M `{OTypeF1 M} Err `{OType Err} : Type :=
   {
     throwM : forall `{OType}, Err -o> M A _ ;
     catchM : forall `{OType}, M A _ -o> (Err -o> M A _) -o> M A _
   }.
 
-Class MonadError M {OM} {FOM: FindOTypeF1 M OM} St {OSt: OType St}
-      `{@MonadOps M OM FOM} `{@MonadErrorOps M OM FOM St OSt} : Prop :=
+Class MonadError M {FOM: OTypeF1 M} St {OSt: OType St}
+      `{@MonadOps M FOM} `{@MonadErrorOps M FOM St OSt} : Prop :=
   {
     monad_error_monad :> Monad M;
 
@@ -41,29 +41,29 @@ Class MonadError M {OM} {FOM: FindOTypeF1 M OM} St {OSt: OType St}
  *** The Error Monad Transformer
  ***)
 
-Definition ErrorT Err `{OType Err} M `{FindOTypeF1 M} A `{OType A} :=
+Definition ErrorT Err `{OType Err} M `{OTypeF1 M} A `{OType A} :=
   M (Err + A)%type _.
 
-(*
 Instance OTypeF1_ErrorT Err `{OType Err} M `{OTypeF1 M} :
   OTypeF1 (ErrorT Err M) :=
   fun _ _ => OType_OTypeF1 M _ _ _.
-*)
 
+(*
 Instance FindOTypeF1_ErrorT Err `{OType Err} M `{FindOTypeF1 M} :
   FindOTypeF1 (ErrorT Err M) (fun _ _ => _) := I.
+*)
 
 Instance MonadOps_ErrorT Err `{OType Err} M `{MonadOps M}
   : MonadOps (ErrorT Err M) :=
   {returnM :=
-     fun A _ => ofun x => returnM @o@ (oinr @o@ x);
+     fun A _ => pfun x => returnM @o@ (oinr @o@ x);
    bindM :=
      fun A B _ _ =>
-       (ofun m => ofun f =>
+       (pfun m => pfun f =>
         (bindM
            @o@ m
            @o@ (osum_elim
-                  @o@ (ofun err => returnM @o@ (oinl @o@ err))
+                  @o@ (pfun err => returnM @o@ (oinl @o@ err))
                   @o@ f)))
   }.
 

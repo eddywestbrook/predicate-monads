@@ -7,7 +7,7 @@ Require Export PredMonad.Reflection2.OExpr.
  *** The monad typeclass
  ***)
 
-Class MonadOps M `{FindOTypeF1 M} : Type :=
+Class MonadOps M `{OTypeF1 M} : Type :=
   { returnM : forall {A} `{OType A}, A -o> M A _;
     bindM : forall {A B} `{OType A} `{OType B},
         M A _ -o> (A -o> M B _) -o> M B _ }.
@@ -87,12 +87,10 @@ Hint Rewrite @monad_return_bind_OExpr @monad_bind_return_OExpr
 
 Definition Identity A `{OType A} := A.
 
-(*
 Instance OTypeF_Identity : OTypeF1 Identity :=
   fun _ ot => ot.
- *)
 
-Instance FindOTypeF_Identity : FindOTypeF1 Identity (fun _ ot => ot) := I.
+(* Instance FindOTypeF_Identity : FindOTypeF1 Identity (fun _ ot => ot) := I. *)
 
 Instance IdMonad_MonadOps : MonadOps Identity :=
   { returnM := fun A _ => pfun x => x;
