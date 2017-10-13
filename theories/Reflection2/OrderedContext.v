@@ -63,7 +63,7 @@ Arguments ctxNthOType !ctx !n.
 
 Hint Resolve ctxNthOType : typeclass_instances.
 
-(* Ofun to extract the nth element of a context *)
+(* OFun to extract the nth element of a context *)
 Fixpoint nth_ofun ctx n : CtxElem ctx -o> ctxNth ctx n :=
   match ctx return CtxElem ctx -o> ctxNth ctx n with
   | CtxNil => const_ofun tt

@@ -223,7 +223,7 @@ Qed.
  ***)
 
 (* The type of continuous, i.e. Proper, functions between ordered types *)
-Record Ofun A B {RA:OType A} {RB:OType B} :=
+Record OFun A B {RA:OType A} {RB:OType B} :=
   {
     ofun_app : A -> B;
     ofun_Proper : Proper (oleq ==> oleq) ofun_app
@@ -233,7 +233,7 @@ Arguments ofun_app {_ _ _ _} _ _.
 Arguments ofun_Proper [_ _ _ _] _ _ _ _.
 
 Notation "A '-o>' B" :=
-  (Ofun A B) (right associativity, at level 99).
+  (OFun A B) (right associativity, at level 99).
 Notation "x @o@ y" :=
   (ofun_app x y) (left associativity, at level 20).
 
@@ -284,7 +284,7 @@ Qed.
 
 
 (***
- *** Some Useful Ofuns
+ *** Some Useful OFuns
  ***)
 
 (* The identity ofun *)
@@ -316,7 +316,7 @@ Proof.
   split; intros a1 a2 Ra; simpl; apply Rg; apply Rf; apply Ra.
 Qed.
 
-(* Category theory laws for Ofuns *)
+(* Category theory laws for OFuns *)
 Lemma id_compose_ofun A B `{OType A} `{OType B} (f: A -o> B) :
   oeq (compose_ofun id_ofun f) f.
   split; intros a1 a2 Ra; simpl; apply ofun_Proper; assumption.
@@ -430,7 +430,7 @@ Lemma pair_fst_snd_eta A B `{OType A} `{OType B} :
 Qed.
 
 
-(* Curry a Ofun *)
+(* Curry an OFun *)
 Program Definition ofun_curry {A B C} `{OType A} `{OType B} `{OType C}
         (ofun : (A * B) -o> C)
   : A -o> (B -o> C) :=
@@ -450,7 +450,7 @@ Proof.
   apply ofun_Proper; split; assumption.
 Qed.
 
-(* Uncrry a Ofun *)
+(* Uncrry an OFun *)
 Program Definition ofun_uncurry {A B C}
         `{OType A} `{OType B} `{OType C}
         (ofun : A -o> (B -o> C))
@@ -580,7 +580,7 @@ Lemma ofun_apply_ofun_curry A B C `{OType A} `{OType B} `{OType C} f g :
     try apply ofun_Proper; assumption.
 Qed.
 
-(* The pair constructor as a ofun *)
+(* The pair constructor as an ofun *)
 Program Definition pair_ctor_ofun {A B} `{OType A} `{OType B}
   : A -o> B -o> A * B :=
   {| ofun_app := fun a => {| ofun_app := fun b => (a,b) |} |}.
