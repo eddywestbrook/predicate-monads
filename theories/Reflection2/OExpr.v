@@ -610,6 +610,7 @@ Proof.
 Qed.
 
 (* Quote pairs as applications of opair *)
+(*
 Instance QuotesTo_pair {ctx A} {RA:OType A} {B} {RB:OType B}
          (a: CtxElem ctx -> A) (b: CtxElem ctx -> B)
          (e1: OExpr ctx A) (e2: OExpr ctx B)
@@ -618,6 +619,7 @@ Instance QuotesTo_pair {ctx A} {RA:OType A} {B} {RB:OType B}
 Proof.
   intro. simpl. rewrite (q1 c). rewrite (q2 c). reflexivity.
 Qed.
+*)
 
 (* Quote applications of fst as applications of ofst *)
 (*
