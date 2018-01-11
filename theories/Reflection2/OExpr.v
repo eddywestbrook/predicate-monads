@@ -496,15 +496,15 @@ Hint Rewrite OExpr_inl_elim OExpr_inr_elim
 Definition celem_head {ctx A RA}
            (celem: CtxElem (@CtxCons A RA ctx)) : A :=
   let (_,head) := celem in head.
-Definition celem_rest {ctx A RA}
+Definition celem_tail {ctx A RA}
            (celem: CtxElem (@CtxCons A RA ctx)) : CtxElem ctx :=
   let (rest,_) := celem in rest.
 
 Arguments celem_head {_ _ _} _ : simpl never.
-Arguments celem_rest {_ _ _} _ : simpl never.
+Arguments celem_tail {_ _ _} _ : simpl never.
 
 (* Typeclass for incrementally quoting functions into OExpr variables, by
-peeling off the celem_rest projections one at a time and adding them as OVar_S
+peeling off the celem_tail projections one at a time and adding them as OVar_S
 constructors to the input variable to build the output variable *)
 Class QuotesToVar {ctx1 ctx2 A} {RA:OType A}
       (f: CtxElem ctx1 -> CtxElem ctx2)
@@ -521,7 +521,7 @@ Qed.
 Instance QuotesToVar_Step {ctx1 ctx2 A} {RA:OType A} {B} {RB:OType B}
          (f: CtxElem ctx1 -> CtxElem (@CtxCons B RB ctx2)) vin vout
          (q: @QuotesToVar _ _ A RA f (OVar_S vin) vout) :
-  QuotesToVar (fun c => celem_rest (f c)) vin vout.
+  QuotesToVar (fun c => celem_tail (f c)) vin vout.
 Proof.
   intro. apply q.
 Qed.
@@ -539,7 +539,7 @@ Class QuotesToAtomic {ctx A RA} (f: CtxElem ctx -> A) (e: @OExpr ctx A RA) :=
 (* Quote any term of functional type to a lambda *)
 Instance QuotesTo_Lam {ctx A RA B RB} (f: CtxElem ctx -> A -o> B)
          (e: @OExpr (@CtxCons A RA ctx) B RB)
-         (q: QuotesTo (fun c => f (celem_rest c) @o@ (celem_head c)) e) :
+         (q: QuotesTo (fun c => f (celem_tail c) @o@ (celem_head c)) e) :
   QuotesTo f (Lam e) | 2.
 Proof.
   intros; split; intro; intros; simpl; rewrite H;
@@ -549,7 +549,7 @@ Qed.
 (* Special case: quote ofuns as lambdas, destructuring the ofun *)
 Instance QuotesTo_Lam_ofun {ctx A RA B RB} (f: CtxElem ctx -> A -> B) prp
          (e: @OExpr (@CtxCons A RA ctx) B RB)
-         (q: QuotesTo (fun c => f (celem_rest c) (celem_head c)) e) :
+         (q: QuotesTo (fun c => f (celem_tail c) (celem_head c)) e) :
   QuotesTo (fun c => mk_ofun (f c) (prp:=prp c)) (Lam e) | 1.
 Proof.
   apply QuotesTo_Lam. assumption.
@@ -595,7 +595,7 @@ Qed.
 Instance QuotesToAtomic_ofun {ctx A} {RA:OType A} {B} {RB:OType B}
          (f: CtxElem ctx -> A -> B) prp
          (e: OExpr (CtxCons A ctx) B)
-         (q: QuotesTo (fun c => f (celem_rest c) (celem_head c)) e) :
+         (q: QuotesTo (fun c => f (celem_tail c) (celem_head c)) e) :
   QuotesToAtomic (fun c => mk_ofun (f c) (prp:=(fun z => prp z c))) (Lam e) | 1.
 Proof.
   apply QuotesTo_Lam. assumption.
