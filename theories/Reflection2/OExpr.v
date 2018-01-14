@@ -861,8 +861,10 @@ Lemma beta_product_test2 A `{OType A} B `{OType B} :
   (ofun a => ofun b => (ofun p => (osnd @o@ p ,o, ofst @o@ p)) @o@ (b ,o, a))
   =o= opair.
   (* osimpl *)
-  (* NOTE: we write this out to see how long each step takes... *)
-  oquote. oexpr_simpl. reflexivity.
+  (* NOTE: we write this out to see each step *)
+  apply oquote_eq.
+  oexpr_simpl.
+  reflexivity.
 Qed.
 
 End OQuoteTest.

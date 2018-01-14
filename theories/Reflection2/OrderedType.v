@@ -946,11 +946,12 @@ Definition ex1 : Prop -o> Prop := ofun p => p.
 (* Eval compute in (ofun_app ex1 : Prop -> Prop). *)
 
 Definition ex2 {A} `{OType A} : A -o> A := ofun p => p.
-(* Eval simpl in (fun A `{OType A} => ofun_app (@ex2 A _ _) : A -> A). *)
+(* Eval simpl in (fun A `{OType A} => ofun_app (@ex2 A _) : A -> A). *)
 
 Definition ex3 {A} `{OType A} : A -o> A -o> A :=
   ofun p1 => ofun p2 => p1.
-(* Eval simpl in (fun (A:OType) x => ofun_app (ofun_app (@ex3 A) x)). *)
+(* Eval simpl in (fun A `{OType A} x =>
+                 ofun_app (ofun_app (@ex3 A _) x)). *)
 
 Definition ex4 {A B} `{OType A} `{OType B} : (A * B -o> A) :=
   ofun p => ofst @o@ p.
@@ -964,6 +965,8 @@ Definition ex5 {A B} `{OType A} `{OType B} : A * B -o> B * A :=
 
 Definition ex6 {A B C} `{OType A} `{OType B} `{OType C} : A * B * C -o> C * A :=
   ofun triple => (osnd @o@ triple ,o, ofst @o@ (ofst @o@ triple)).
+(* Eval simpl in (fun {A B} `{OType A} `{OType B} =>
+                 ofun_app ex5 : A * B -> B * A). *)
 
 Definition ex7 {A B C} `{OType A} `{OType B} `{OType C}
   : (A * B -o> C) -o> C -o> A -o> B -o> C :=
