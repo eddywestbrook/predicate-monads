@@ -1,5 +1,9 @@
 -Q theories PredMonad
 
+./theories/CtxFuns/OrderedType.v
+./theories/CtxFuns/OFuns.v
+./theories/CtxFuns/OExpr.v
+
 ./theories/Reflection2/OrderedType.v
 ./theories/Reflection2/OrderedContext.v
 ./theories/Reflection2/OExpr.v
