@@ -3,6 +3,8 @@
 ./theories/CtxFuns/OrderedType.v
 ./theories/CtxFuns/OFuns.v
 ./theories/CtxFuns/OExpr.v
+./theories/CtxFuns/Monad.v
+./theories/CtxFuns/MonadFix.v
 
 ./theories/Reflection2/OrderedType.v
 ./theories/Reflection2/OrderedContext.v
