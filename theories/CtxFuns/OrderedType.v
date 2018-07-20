@@ -225,10 +225,8 @@ Arguments ofun_Proper [_ _ _ _] _ _ _ _.
 Notation "A '-o>' B" :=
   (OFun A B) (right associativity, at level 99).
 
-(*
-Notation "x @o@ y" :=
+Notation "x @@ y" :=
   (ofun_app x y) (left associativity, at level 20).
-*)
 
 (* The non-dependent function ordered type *)
 Instance OTarrow A B `{OType A} `{OType B} : OType (A -o> B) :=
@@ -338,11 +336,11 @@ first [ apply ProperPair_ofun_app
  ***)
 
 (* Typeclass version of OTypeF1Fun *)
-Class OTypeF1 (F:forall A {RA:OType A}, Type) : Type :=
-  otypeF1 : forall A {RA:OType A}, OType (F A).
+Class OTypeF (F:forall A {RA:OType A}, Type) : Type :=
+  otypeF : forall A {RA:OType A}, OType (F A).
 
 (* Get out the OType from applying a unary functor *)
-Instance OType_OTypeF1 F (RF:OTypeF1 F) A (RA:OType A) :
+Instance OType_OTypeF F (RF:OTypeF F) A (RA:OType A) :
   OType (F A _) | 5 := RF A _.
 
-Typeclasses Transparent OType_OTypeF1.
+Typeclasses Transparent OType_OTypeF.

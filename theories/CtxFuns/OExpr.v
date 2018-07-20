@@ -57,12 +57,8 @@ Definition OExpr ctx A `{OType A} : Type := CtxElem ctx -o> A.
 
 Arguments OExpr ctx A {_} : simpl never.
 
-(* Application *)
-Notation "x @o@ y" :=
-  (ofun_apply x y) (left associativity, at level 20).
-
 (* Low-level lambda (we use "ofun", below, to give a nice high-level lambda) *)
-Notation "'olambda' e" := (ofun_curry e) (at level 99, right associativity).
+(* Notation "'olambda' e" := (ofun_curry e) (at level 99, right associativity). *)
 
 Inductive OVar : Ctx -> forall A `{OType A}, Type :=
 | OVar_0 {ctx A} `{OType A} : OVar (ctx :> A) A
@@ -285,22 +281,45 @@ Admitted.
 
 
 (***
+ *** Notation for Application
+ ***)
+
+(* FIXME: weaken both sides to a join of their respective contexts! *)
+Definition oexpr_apply {ctx A B} `{OType A} `{OType B}
+           (f: OExpr ctx (A -o> B)) (g: OExpr ctx A) : OExpr ctx B :=
+  ofun_apply f g.
+
+(* Application *)
+Notation "x @o@ y" :=
+  (oexpr_apply x y) (left associativity, at level 20).
+
+
+(***
  *** Notation for Lambdas
  ***)
 
+Definition ovar {ctx A} `{OType A} {ctx'} `{w:WeakensTo ctx ctx'}
+           (e:OExpr ctx A) : OExpr ctx' A := weakenExpr e.
+
 (* Helper function to build lambdas *)
+(*
 Definition mkLam {ctx A B} `{OType A} `{OType B}
            (body : (forall {ctx'} `{WeakensTo (ctx :> A) ctx'}, OVar ctx' A) ->
                    OExpr (ctx :> A) B) :
   OExpr ctx (A -o> B) :=
   ofun_curry (body (fun _ _ => weakenVar OVar_0)).
+ *)
+
+Definition mkLam {ctx A B} `{OType A} `{OType B}
+           (body : OVar (ctx :> A) A -> OExpr (ctx :> A) B) :
+  OExpr ctx (A -o> B) := ofun_curry (body OVar_0).
 
 Notation "'ofun' x => e" :=
-  (mkLam (fun (x : forall {ctx'} `{WeakensTo _ ctx'}, OVar ctx' _) => e))
+  (mkLam (fun x => e))
     (right associativity, at level 99).
 
 Notation "'ofun' ( x : A ) => e" :=
-  (mkLam (fun (x : forall {ctx'} `{WeakensTo _ ctx'}, OVar ctx' A) => e))
+  (mkLam (fun (x : OVar _ A) => e))
     (right associativity, at level 99, x at level 0).
 
 
